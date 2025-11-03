@@ -1,4 +1,4 @@
-PROMPT_TEMPLATE = """Rôle: Convertir une analyse de marché BRUTE en UN SEUL JSON VALIDE.
+PROMPT_TEMPLATE_RAW = """Rôle: Convertir une analyse de marché BRUTE en UN SEUL JSON VALIDE.
 Retourne UNIQUEMENT du JSON. Aucune explication, aucun code fence.
 
 Schéma attendu:
@@ -95,7 +95,12 @@ Inputs:
 
 Analyse brute:
 {raw_text}
-
-Flags d'activation reçus:
-{requested_outputs_json}
 """
+
+PROMPT_TEMPLATE = (
+    PROMPT_TEMPLATE_RAW
+    .replace("{raw_text}", "<<RAW_TEXT>>")
+    .replace("{", "{{")
+    .replace("}", "}}")
+    .replace("<<RAW_TEXT>>", "{raw_text}")
+)

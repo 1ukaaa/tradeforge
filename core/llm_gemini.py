@@ -50,25 +50,30 @@ def _extract_json(text: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         pass
 
+    # Certaines réponses listent simplement les clés top-level sans accolade ouvrante.
+    if not stripped.startswith("{"):
+        patched = stripped
+        if not patched.startswith(("\"", "'")):
+            patched = patched.lstrip()
+        patched = "{" + patched
+        if not stripped.rstrip().endswith("}"):
+            patched = patched.rstrip().rstrip(",") + "}"
+        try:
+            return decoder.decode(patched)
+        except json.JSONDecodeError:
+            pass
+
     start = stripped.find("{")
     while start != -1:
         candidate = _find_json_block(stripped, start)
         if candidate:
             try:
-                return decoder.decode(candidate)
+                result = decoder.decode(candidate)
+                if isinstance(result, dict) and "meta" in result:
+                    return result
             except json.JSONDecodeError:
                 pass
         start = stripped.find("{", start + 1)
-
-    # Certains modèles répondent sans accolades externes; on essaie de les ajouter.
-    if not stripped.startswith("{"):
-        patched = "{" + stripped
-        if not stripped.rstrip().endswith("}"):
-            patched += "}"
-        try:
-            return decoder.decode(patched)
-        except json.JSONDecodeError:
-            pass
 
     raise json.JSONDecodeError("Aucun JSON valide trouvé dans la réponse du modèle.", stripped, 0)
 
