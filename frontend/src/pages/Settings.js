@@ -1,18 +1,30 @@
+import SettingsSuggestIcon from "@mui/icons-material/SettingsSuggest";
 import {
+  Box,
   Button,
-  Grid,
+  Chip,
+  Divider,
   MenuItem,
   Paper,
   Stack,
   Switch,
+  Tab,
+  Tabs,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import SettingsSuggestIcon from "@mui/icons-material/SettingsSuggest";
 import { useEffect, useState } from "react";
-import { fetchSettings, fetchStructuredTemplates, saveSettings, saveStructuredTemplate } from "../services/settingsClient";
+import {
+  deletePromptVariant,
+  fetchPromptVariants,
+  fetchSettings,
+  fetchStructuredTemplates,
+  savePromptVariant,
+  saveSettings,
+  saveStructuredTemplate,
+} from "../services/settingsClient";
 
 const STRUCTURED_VARIANTS = [
   {
@@ -99,9 +111,6 @@ const Settings = () => {
   const [structuredVariant, setStructuredVariant] = useState("detailed");
   const [analysisVariantActive, setAnalysisVariantActive] = useState("default");
   const [tradeVariantActive, setTradeVariantActive] = useState("default");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState({ text: "", severity: "success" });
   const [templates, setTemplates] = useState({});
   const [templateText, setTemplateText] = useState(DEFAULT_TEMPLATES.detailed);
   const [templateSaving, setTemplateSaving] = useState(false);
@@ -113,6 +122,8 @@ const Settings = () => {
   const [variantPromptText, setVariantPromptText] = useState(DEFAULT_PROMPT_TEMPLATES.analysis);
   const [variantSaving, setVariantSaving] = useState(false);
   const [variantFeedback, setVariantFeedback] = useState({ text: "", severity: "success" });
+  const [variantDeleting, setVariantDeleting] = useState(false);
+  const [activeTab, setActiveTab] = useState("prefs");
 
   useEffect(() => {
     let cancelled = false;
@@ -139,8 +150,6 @@ const Settings = () => {
         );
       } catch (err) {
         console.warn("Impossible de charger les paramètres :", err);
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     };
     load();
@@ -183,10 +192,20 @@ const Settings = () => {
     setTemplateText(selection?.prompt || fallback);
   }, [structuredVariant, templates]);
 
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      const container = document.getElementById("settings-tabs");
+      container?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [activeTab]);
+
+  const handleTabChange = (_, newValue) => {
+    setActiveTab(newValue);
+  };
+
   const handleVariantChange = (_, value) => {
     if (!value) return;
     setStructuredVariant(value);
-    setFeedback({ text: "", severity: "success" });
   };
 
   const handleTemplateChange = (event) => {
@@ -288,38 +307,54 @@ const Settings = () => {
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    setFeedback({ text: "", severity: "success" });
-    try {
-      const result = await saveSettings({
-        structuredVariant,
-        analysisVariant: analysisVariantActive,
-        tradeVariant: tradeVariantActive,
+  const handleVariantDelete = async () => {
+    if (!variantNameInput) {
+      setVariantFeedback({ text: "Le nom de la variante est requis.", severity: "error" });
+      return;
+    }
+    if (variantNameInput === "default") {
+      setVariantFeedback({
+        text: "La variante default est système et ne peut pas être supprimée.",
+        severity: "error",
       });
-      if (result.structuredVariant) {
-        setStructuredVariant(result.structuredVariant);
+      return;
+    }
+    setVariantDeleting(true);
+    setVariantFeedback({ text: "", severity: "success" });
+    const currentList = promptVariants[selectedPromptType] || [];
+    const filteredVariants = currentList.filter((variant) => variant.variant !== variantNameInput);
+    const activeVariant =
+      selectedPromptType === "analysis" ? analysisVariantActive : tradeVariantActive;
+    const cleanedActive = activeVariant !== variantNameInput ? activeVariant : null;
+    const nextVariant = filteredVariants[0]?.variant || cleanedActive || "default";
+
+    try {
+      await deletePromptVariant(selectedPromptType, variantNameInput);
+      setPromptVariants((prev) => ({
+        ...prev,
+        [selectedPromptType]: filteredVariants,
+      }));
+      if (selectedPromptType === "analysis" && analysisVariantActive === variantNameInput) {
+        setAnalysisVariantActive("default");
       }
-      if (result.analysisVariant) {
-        setAnalysisVariantActive(result.analysisVariant);
+      if (selectedPromptType === "trade" && tradeVariantActive === variantNameInput) {
+        setTradeVariantActive("default");
       }
-      if (result.tradeVariant) {
-        setTradeVariantActive(result.tradeVariant);
-      }
-      setFeedback({ text: "Paramètre enregistré", severity: "success" });
+      setSelectedPromptVariant(nextVariant);
+      setVariantNameInput(nextVariant);
+      setVariantFeedback({ text: "Variante supprimée", severity: "success" });
     } catch (err) {
-      setFeedback({
-        text: err.message || "Impossible d’enregistrer le paramètre.",
+      setVariantFeedback({
+        text: err.message || "Impossible de supprimer la variante.",
         severity: "error",
       });
     } finally {
-      setSaving(false);
+      setVariantDeleting(false);
     }
   };
 
   const activeVariant = STRUCTURED_VARIANTS.find((variant) => variant.value === structuredVariant);
-  const selectedPromptDetail =
-    promptVariants[selectedPromptType]?.find((variant) => variant.variant === selectedPromptVariant);
+  const isDefaultVariantName = variantNameInput === "default";
 
   return (
     <Stack spacing={4}>
@@ -334,155 +369,165 @@ const Settings = () => {
         Les intégrations et exports seront bientôt disponibles.
       </Typography>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+      <Box id="settings-tabs" sx={{ width: "100%" }}>
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          aria-label="Sections paramètres"
+          variant="fullWidth"
+          textColor="primary"
+          indicatorColor="primary"
+          sx={{ borderBottom: 1, borderColor: "divider" }}
+        >
+          <Tab label="Préférences IA" value="prefs" />
+          <Tab label="Prompt structuré" value="prompt" />
+          <Tab label="Variantes Gemini" value="variants" />
+        </Tabs>
+      </Box>
+      <Divider />
+      <Stack spacing={3}>
+        {activeTab === "prefs" && (
           <Paper sx={{ p: 4 }} elevation={0}>
-            <Typography variant="h6" mb={2}>
-              IA & format
+            <Typography variant="h6" mb={1}>
+              IA locale et notifications
             </Typography>
-            <Stack spacing={2}>
-              <TextField label="Langue principale" value="Français" InputProps={{ readOnly: true }} />
+            <Stack spacing={3}>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+                <Paper elevation={0} sx={{ p: 3, flex: 1, border: "1px solid rgba(22,33,79,0.12)" }}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    IA & format
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" mb={1}>
+                    Ces paramètres restent immuables pour garder la cohérence des fiches.
+                  </Typography>
+                  <TextField label="Langue principale" value="Français" InputProps={{ readOnly: true }} fullWidth />
+                  <TextField
+                    label="Style de synthèse"
+                    value="Plan d’action orienté résultats"
+                    InputProps={{ readOnly: true }}
+                    fullWidth
+                    sx={{ mt: 1 }}
+                  />
+                </Paper>
+                <Paper elevation={0} sx={{ p: 3, flex: 1, border: "1px solid rgba(22,33,79,0.12)" }}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Notifications
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" mb={1}>
+                    Active les alertes que tu veux recevoir.
+                  </Typography>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Switch defaultChecked />
+                    <Typography>Alertes de discipline</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Switch defaultChecked />
+                    <Typography>Résumé hebdomadaire</Typography>
+                  </Stack>
+                </Paper>
+              </Stack>
+            </Stack>
+          </Paper>
+        )}
+        {activeTab === "prompt" && (
+          <Paper sx={{ p: 4 }} elevation={0}>
+            <Stack spacing={3}>
+              <Stack spacing={1}>
+                <Typography variant="h6" mb={1}>
+                  Prompt structuré ({structuredVariant === "detailed" ? "détaillé" : "synthétique"})
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Modifie la structure envoyée à Gemini en combinant les placeholders listés ci-dessous.
+                </Typography>
+              </Stack>
+              <Paper elevation={0} sx={{ p: 3, border: "1px solid rgba(22,33,79,0.12)", borderRadius: 1 }}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Variante d’analyse active
+                </Typography>
+                <Typography variant="body2" color="text.secondary" mb={1}>
+                  Détermine si Gemini produit une analyse détaillée ou synthétique.
+                </Typography>
+                <ToggleButtonGroup
+                  value={structuredVariant}
+                  exclusive
+                  onChange={handleVariantChange}
+                  aria-label="Analyse structurée"
+                  size="small"
+                >
+                  {STRUCTURED_VARIANTS.map((variant) => (
+                    <ToggleButton key={variant.value} value={variant.value}>
+                      {variant.label}
+                    </ToggleButton>
+                  ))}
+                </ToggleButtonGroup>
+                <Typography variant="caption" color="text.secondary" mt={1} display="block">
+                  {activeVariant?.description}
+                </Typography>
+                {templates[structuredVariant]?.updatedAt && (
+                  <Typography variant="caption" color="text.secondary">
+                    Dernière version : {formatTimestamp(templates[structuredVariant]?.updatedAt)}
+                  </Typography>
+                )}
+              </Paper>
+              <Stack direction="row" spacing={1} flexWrap="wrap">
+                {["{{entryType}}", "{{plan}}", "{{rawText}}", "{{variantTitle}}", "{{instruction}}"].map(
+                  (token) => (
+                    <Button key={token} size="small" variant="outlined" color="inherit">
+                      {token}
+                    </Button>
+                  )
+                )}
+              </Stack>
               <TextField
-                label="Style de synthèse"
-                value="Plan d’action orienté résultats"
-                InputProps={{ readOnly: true }}
+                label="Prompt structuré"
+                value={templateText}
+                onChange={handleTemplateChange}
+                multiline
+                minRows={6}
+                fullWidth
               />
+              <Stack direction="row" spacing={2} alignItems="center" mt={2}>
+                <Button variant="contained" onClick={handleTemplateSave} disabled={templateSaving || !templateText}>
+                  {templateSaving ? "Sauvegarde…" : "Sauvegarder le prompt structuré"}
+                </Button>
+                {templateFeedback.text && (
+                  <Typography
+                    variant="body2"
+                    color={templateFeedback.severity === "error" ? "error.main" : "success.main"}
+                  >
+                    {templateFeedback.text}
+                  </Typography>
+                )}
+              </Stack>
             </Stack>
           </Paper>
-        </Grid>
-        <Grid item xs={12} md={6}>
+        )}
+        {activeTab === "variants" && (
           <Paper sx={{ p: 4 }} elevation={0}>
             <Typography variant="h6" mb={2}>
-              Notifications
+              Variantes de prompt Gemini
             </Typography>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Switch defaultChecked />
-              <Typography>Alertes de discipline</Typography>
-            </Stack>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Switch defaultChecked />
-              <Typography>Résumé hebdomadaire</Typography>
-            </Stack>
-          </Paper>
-        </Grid>
-        <Grid item xs={12}>
-          <Paper sx={{ p: 4 }} elevation={0}>
-            <Typography variant="h6" mb={2}>
-              Analyse structurée
+            <Typography variant="body2" color="text.secondary" mb={1}>
+              Crée, sélectionne ou active une variante différente pour chaque type de prompt.
             </Typography>
-            <Typography variant="body2" color="text.secondary" mb={2}>
-              Choisis le niveau de détail que Gemini doit produire lorsque tu demandes une analyse structurée.
-              Le choix est stocké en base afin que toutes les captures futures utilisent ce réglage.
-            </Typography>
-            <ToggleButtonGroup
-              value={structuredVariant}
-              exclusive
-              onChange={handleVariantChange}
-              aria-label="Analyse structurée"
-              size="small"
-              sx={{ mb: 2 }}
-            >
-              {STRUCTURED_VARIANTS.map((variant) => (
-                <ToggleButton key={variant.value} value={variant.value}>
-                  {variant.label}
-                </ToggleButton>
-              ))}
-            </ToggleButtonGroup>
-            <Typography variant="body2" color="text.secondary">
-              {activeVariant?.description}
-            </Typography>
-            {templates[structuredVariant]?.updatedAt && (
-              <Typography variant="caption" color="text.secondary">
-                Dernière version : {formatTimestamp(templates[structuredVariant]?.updatedAt)}
-              </Typography>
-            )}
-            <Typography variant="body2" color="text.secondary" mt={2}>
-              Personnalise le prompt envoyé à Gemini pour cette variante. Tu peux utiliser les placeholders suivants :
-            </Typography>
-            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1 }}>
-              {['{{entryType}}', '{{plan}}', '{{rawText}}', '{{variantTitle}}', '{{instruction}}'].map(
-                (token) => (
-                  <Button key={token} size="small" variant="outlined" color="inherit">
-                    {token}
-                  </Button>
-                )
-              )}
-            </Stack>
-            <TextField
-              label="Prompt structuré"
-              value={templateText}
-              onChange={handleTemplateChange}
-              multiline
-              minRows={6}
-              fullWidth
-              size="small"
-              sx={{ mt: 1 }}
-            />
-            <Stack direction="row" spacing={2} alignItems="center" mt={2}>
-              <Button variant="contained" onClick={handleSave} disabled={saving || loading}>
-                {saving ? "Enregistrement…" : "Enregistrer l’analyse structurée"}
-              </Button>
-              {feedback.text && (
-                <Typography
-                  variant="body2"
-                  color={feedback.severity === "error" ? "error.main" : "success.main"}
-                >
-                  {feedback.text}
-                </Typography>
-              )}
-            </Stack>
-            <Stack direction="row" spacing={2} alignItems="center" mt={2}>
-              <Button
-                variant="contained"
-                color="secondary"
-                onClick={handleTemplateSave}
-                disabled={templateSaving || !templateText}
+            <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
+              <ToggleButtonGroup
+                value={selectedPromptType}
+                exclusive
+                onChange={handleVariantTypeChange}
+                aria-label="Type de prompt"
+                size="small"
               >
-                {templateSaving ? "Sauvegarde…" : "Sauvegarder le template"}
-              </Button>
-              {templateFeedback.text && (
-                <Typography
-                  variant="body2"
-                  color={templateFeedback.severity === "error" ? "error.main" : "success.main"}
-                >
-                  {templateFeedback.text}
-                </Typography>
-              )}
-            </Stack>
-          </Paper>
-        </Grid>
-        <Grid item xs={12}>
-          <Paper sx={{ p: 4 }} elevation={0}>
-            <Typography variant="h6" mb={2}>
-              Variantes des prompts Gemini
-            </Typography>
-            <Typography variant="body2" color="text.secondary" mb={2}>
-              Gère plusieurs versions des prompts `analysis.v1` et `trade.v1`. Tu peux éditer
-              chaque variante, en créer de nouvelles et indiquer laquelle doit être utilisée.
-            </Typography>
-            <ToggleButtonGroup
-              value={selectedPromptType}
-              exclusive
-              onChange={handleVariantTypeChange}
-              aria-label="Type de prompt"
-              size="small"
-              sx={{ mb: 2 }}
-            >
-              <ToggleButton value="analysis">Analyse</ToggleButton>
-              <ToggleButton value="trade">Trade</ToggleButton>
-            </ToggleButtonGroup>
-            <Typography variant="body2" color="text.secondary">
-              Variante active :{" "}
-              {selectedPromptType === "analysis" ? analysisVariantActive : tradeVariantActive}
-            </Typography>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={2} mt={2}>
+                <ToggleButton value="analysis">Analyse</ToggleButton>
+                <ToggleButton value="trade">Trade</ToggleButton>
+              </ToggleButtonGroup>
               <TextField
                 select
                 label="Variantes existantes"
                 value={selectedPromptVariant}
                 onChange={handleVariantSelectionChange}
                 size="small"
-                fullWidth
+                sx={{ minWidth: 200 }}
               >
                 {(promptVariants[selectedPromptType] || []).map((variant) => (
                   <MenuItem key={variant.variant} value={variant.variant}>
@@ -495,14 +540,25 @@ const Settings = () => {
                 value={variantNameInput}
                 onChange={handleVariantNameChange}
                 size="small"
-                fullWidth
-                helperText="Nom unique identifiant cette variante."
+                sx={{ minWidth: 200 }}
+                helperText={
+                  isDefaultVariantName
+                    ? "La variante default est système et ne peut pas être supprimée."
+                    : "Nom unique identifiant la variante."
+                }
               />
             </Stack>
-            <Typography variant="caption" color="text.secondary">
-              Dernière mise à jour :{" "}
-              {selectedPromptDetail ? formatTimestamp(selectedPromptDetail.updatedAt) : "Aucune"}
-            </Typography>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="caption" color="text.secondary">
+                Variante active :
+              </Typography>
+              <Chip
+                size="small"
+                label={selectedPromptType === "analysis" ? analysisVariantActive : tradeVariantActive}
+                variant="outlined"
+                color="primary"
+              />
+            </Stack>
             <TextField
               label="Prompt complet"
               value={variantPromptText}
@@ -523,6 +579,14 @@ const Settings = () => {
               >
                 Définir comme variante active
               </Button>
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={handleVariantDelete}
+                disabled={variantDeleting || !variantNameInput || isDefaultVariantName}
+              >
+                {variantDeleting ? "Suppression…" : "Supprimer la variante"}
+              </Button>
               {variantFeedback.text && (
                 <Typography
                   variant="body2"
@@ -533,8 +597,8 @@ const Settings = () => {
               )}
             </Stack>
           </Paper>
-        </Grid>
-      </Grid>
+        )}
+      </Stack>
     </Stack>
   );
 };

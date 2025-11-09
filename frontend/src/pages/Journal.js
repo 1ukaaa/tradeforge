@@ -1,12 +1,14 @@
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import HourglassBottomIcon from "@mui/icons-material/HourglassBottom";
 import PhotoCameraFrontIcon from "@mui/icons-material/PhotoCameraFront";
 import QueryStatsIcon from "@mui/icons-material/QueryStats";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -24,6 +26,7 @@ import {
   OutlinedInput,
   Paper,
   Select,
+  Snackbar,
   Stack,
   Tab,
   Tabs,
@@ -113,6 +116,13 @@ const calendarPulseKeyframes = {
     "0%": { transform: "scale(1)", opacity: 0.5 },
     "50%": { transform: "scale(1.35)", opacity: 0.2 },
     "100%": { transform: "scale(1)", opacity: 0.5 },
+  },
+};
+const successPulseKeyframes = {
+  "@keyframes successPulse": {
+    "0%": { transform: "scale(0.92)", opacity: 0.6 },
+    "60%": { transform: "scale(1.12)", opacity: 1 },
+    "100%": { transform: "scale(1)", opacity: 0.9 },
   },
 };
 
@@ -349,13 +359,20 @@ const Journal = () => {
   });
   const [selectedImage, setSelectedImage] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
+  const [successPulse, setSuccessPulse] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterSymbol, setFilterSymbol] = useState("");
+  const [filterType, setFilterType] = useState("all");
+  const [filterResults, setFilterResults] = useState([]);
+  const [filterTags, setFilterTags] = useState([]);
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate, setFilterEndDate] = useState("");
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
   const planRef = useRef(null);
   const dissectionRef = useRef(null);
   const stepsRef = useRef(null);
   const capturesRef = useRef(null);
-  const [statusMessage, setStatusMessage] = useState("");
-  const [loadingMessage, setLoadingMessage] = useState("");
 
   const resetEditingFields = useCallback((entry) => {
     const planSource = entry?.plan || entry?.metadata?.planSummary || "";
@@ -390,7 +407,7 @@ const Journal = () => {
     };
   }, []);
 
-  const filteredEntries = useMemo(() => {
+  const tabFilteredEntries = useMemo(() => {
     if (activeTab === "all") return entries;
     if (activeTab === "trade") return entries.filter((entry) => entry.type === "trade");
     if (activeTab === "analyse") return entries.filter((entry) => entry.type === "analyse");
@@ -410,6 +427,77 @@ const Journal = () => {
     });
     return map;
   }, [tradeEntries]);
+
+  const symbolOptions = useMemo(() => {
+    const options = new Set();
+    entries.forEach((entry) => {
+      const symbol = entry.metadata?.symbol;
+      if (symbol) {
+        symbol.split(",").forEach((part) => options.add(part.trim()));
+      }
+    });
+    return Array.from(options).filter(Boolean);
+  }, [entries]);
+
+  const tagOptions = useMemo(() => {
+    const tags = new Set();
+    entries.forEach((entry) => {
+      (entry.metadata?.tags || []).forEach((tag) => tags.add(tag));
+    });
+    return Array.from(tags);
+  }, [entries]);
+
+  const filteredEntries = useMemo(() => {
+    let result = tabFilteredEntries;
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    if (normalizedSearch) {
+      result = result.filter((entry) => {
+        const title = entry.metadata?.title || "";
+        const symbol = entry.metadata?.symbol || "";
+        const content = entry.content || "";
+        return [title, symbol, content]
+          .some((value) => value.toLowerCase().includes(normalizedSearch));
+      });
+    }
+    if (filterSymbol) {
+      const normalizedSymbol = filterSymbol.trim().toLowerCase();
+      result = result.filter((entry) => (entry.metadata?.symbol || "").toLowerCase().includes(normalizedSymbol));
+    }
+    if (filterType !== "all") {
+      result = result.filter((entry) => entry.type === filterType);
+    }
+    if (filterResults.length) {
+      const lowered = filterResults.map((resultItem) => resultItem.toLowerCase());
+      result = result.filter((entry) => lowered.includes((entry.metadata?.result || "").toLowerCase()));
+    }
+    if (filterTags.length) {
+      result = result.filter((entry) => {
+        const entryTags = (entry.metadata?.tags || []).map((tag) => tag.toLowerCase());
+        return filterTags.every((tag) => entryTags.includes(tag.toLowerCase()));
+      });
+    }
+    const start = filterStartDate ? new Date(filterStartDate) : null;
+    const end = filterEndDate ? new Date(filterEndDate) : null;
+    if (start || end) {
+      result = result.filter((entry) => {
+        const entryDate = new Date(entry.metadata?.date || entry.createdAt);
+        if (!isValidDate(entryDate)) return false;
+        if (start && entryDate < start) return false;
+        if (end && entryDate > end) return false;
+        return true;
+      });
+    }
+    return result;
+  }, [
+    tabFilteredEntries,
+    searchQuery,
+    filterSymbol,
+    filterType,
+    filterResults,
+    filterTags,
+    filterStartDate,
+    filterEndDate,
+  ]);
 
   const tradesThisMonth = useMemo(() => {
     const startOfMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
@@ -544,6 +632,34 @@ const Journal = () => {
   const handleNavigate = useCallback((ref) => {
     ref?.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
+
+  const handleResetFilters = useCallback(() => {
+    setSearchQuery("");
+    setFilterSymbol("");
+    setFilterType("all");
+    setFilterResults([]);
+    setFilterTags([]);
+    setFilterStartDate("");
+    setFilterEndDate("");
+  }, []);
+
+  const handleSnackbarClose = useCallback(() => {
+    setSnackbarOpen(false);
+    setSuccessPulse(false);
+    setStatusMessage("");
+  }, []);
+
+  useEffect(() => {
+    if (!statusMessage) return undefined;
+    setSuccessPulse(true);
+    setSnackbarOpen(true);
+    const timer = setTimeout(() => {
+      setSuccessPulse(false);
+      setSnackbarOpen(false);
+      setStatusMessage("");
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [statusMessage]);
 
   const navSections = useMemo(
     () => [
@@ -696,6 +812,120 @@ const Journal = () => {
         <Tab value="calendar" label="Calendrier" />
       </Tabs>
 
+      <Paper elevation={0} sx={{ borderRadius: 3, border: "1px solid rgba(15,76,129,0.12)", p: 2, mb: 2 }}>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="flex-end" flexWrap="wrap">
+          <TextField
+            label="Recherche"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            size="small"
+            placeholder="Titre, contenu ou symbole"
+            sx={{ minWidth: 240, flex: 1 }}
+          />
+          <TextField
+            label="Paire / Symbole"
+            value={filterSymbol}
+            onChange={(event) => setFilterSymbol(event.target.value)}
+            size="small"
+            placeholder="EUR/USD"
+            sx={{ minWidth: 200 }}
+          />
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel id="filter-type-label">Type</InputLabel>
+            <Select
+              labelId="filter-type-label"
+              label="Type"
+              value={filterType}
+              onChange={(event) => setFilterType(event.target.value)}
+            >
+              <MenuItem value="all">Tous</MenuItem>
+              <MenuItem value="trade">Trades</MenuItem>
+              <MenuItem value="analyse">Analyses</MenuItem>
+            </Select>
+          </FormControl>
+          <Autocomplete
+            multiple
+            size="small"
+            options={RESULT_OPTIONS}
+            value={filterResults}
+            onChange={(_, value) => setFilterResults(value)}
+            renderInput={(params) => (
+              <TextField {...params} label="Résultat" placeholder="Target, Break Even..." />
+            )}
+            sx={{ minWidth: 200 }}
+          />
+          <Autocomplete
+            multiple
+            size="small"
+            options={tagOptions}
+            value={filterTags}
+            onChange={(_, value) => setFilterTags(value)}
+            renderInput={(params) => (
+              <TextField {...params} label="Tags" placeholder="Haussier, Breakout..." />
+            )}
+            sx={{ minWidth: 220 }}
+          />
+          <Stack direction="row" spacing={1}>
+            <TextField
+              label="Début"
+              type="date"
+              value={filterStartDate}
+              onChange={(event) => setFilterStartDate(event.target.value)}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+            />
+            <TextField
+              label="Fin"
+              type="date"
+              value={filterEndDate}
+              onChange={(event) => setFilterEndDate(event.target.value)}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+            />
+          </Stack>
+          <Button variant="outlined" onClick={handleResetFilters} size="small">
+            Réinitialiser
+          </Button>
+        </Stack>
+      </Paper>
+
+      <Snackbar
+        open={snackbarOpen}
+        onClose={handleSnackbarClose}
+        autoHideDuration={4000}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleSnackbarClose}
+          severity="success"
+          sx={{
+            borderRadius: 3,
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            animation: successPulse ? "successPulse 0.8s ease" : undefined,
+            ...(successPulse ? successPulseKeyframes : {}),
+          }}
+          icon={
+            <Box
+              sx={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                bgcolor: "success.light",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <CheckCircleOutlineIcon fontSize="small" />
+            </Box>
+          }
+        >
+          {statusMessage}
+        </Alert>
+      </Snackbar>
+
       {loading && (
         <>
           <LinearProgress sx={{ height: 4, borderRadius: 999 }} />
@@ -714,11 +944,6 @@ const Journal = () => {
         <Typography variant="body2" color="text.secondary">
           Revue des trades disponible.
         </Typography>
-      )}
-      {statusMessage && !loading && (
-        <Alert severity="success" sx={{ borderRadius: 3 }}>
-          {statusMessage}
-        </Alert>
       )}
 
       {activeTab === "calendar" ? (
@@ -1269,6 +1494,7 @@ const Journal = () => {
                 </Stack>
               )}
             </SectionCard>
+            </Box>
             {editError && (
               <Alert severity="error" sx={{ borderRadius: 3 }}>
                 {editError}

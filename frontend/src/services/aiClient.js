@@ -19,3 +19,19 @@ export const requestAnalysis = async ({ rawText, template = "analysis.v1", plan 
   }
   return data.result;
 };
+
+export const requestStructuredAnalysis = async ({ rawText, entryType = "analyse", plan, variant }) => {
+  const body = JSON.stringify({ rawText, entryType, plan, variant });
+  const response = await fetch(`${GEMINI_ENDPOINT}/structured`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+  });
+  if (!response.ok) {
+    const message = `Erreur serveur (structure ${response.status})`;
+    throw new Error(message);
+  }
+
+  const data = await response.json();
+  return data.structured || null;
+};
