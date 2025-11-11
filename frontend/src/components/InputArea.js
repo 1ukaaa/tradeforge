@@ -15,7 +15,6 @@ import { requestAnalysis, requestStructuredAnalysis } from "../services/aiClient
 import { saveJournalEntry } from "../services/journalClient";
 import { fetchPlan, savePlan } from "../services/planClient";
 import { fetchSettings } from "../services/settingsClient";
-import { structureGeminiResult } from "../utils/journalMetadata";
 
 const inferContentType = (text) => {
   const match = text.match(/Type\s*:?\s*(Trade|Analyse)/i);
@@ -281,61 +280,63 @@ const InputArea = () => {
     }
   };
 
-  const handleJournalSave = async (content) => {
+const handleJournalSave = async (content) => {
     setJournalSaving(true);
     setJournalError("");
     setJournalSuccess("");
-    const textForStructure = content || aiResult || transcript;
-    let structuredData = null;
-    if (textForStructure) {
-      try {
-        structuredData = await requestStructuredAnalysis({
-          rawText: textForStructure,
-          entryType,
-          plan: planDescription,
-          variant: structuredVariant,
-        });
-      } catch (err) {
-        console.warn("Structured analysis failed:", err);
-      }
+
+    // Le 'content' est le texte final (édité ou non) de la carte AiResponseCard.
+    // C'est la SEULE source de vérité pour la structuration.
+    const textForStructure = content || aiResult;
+
+    if (!textForStructure) {
+      setJournalError("Impossible d'enregistrer : contenu IA manquant.");
+      setJournalSaving(false);
+      return;
     }
 
+    let structuredData = null;
     try {
-      const fallback = structureGeminiResult(textForStructure || "", entryType, planDescription);
-      const structuredMetadata = structuredData?.metadata || {};
-      const structuredOverrides = Object.entries(structuredMetadata).reduce(
-        (acc, [key, value]) => {
-          if (Array.isArray(value)) {
-            if (value.length) acc[key] = value;
-            return acc;
-          }
-          if (value !== undefined && value !== null && value !== "") {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {}
-      );
-      const mergedMetadata = {
-        ...fallback.metadata,
-        ...structuredOverrides,
-        tags:
-          structuredOverrides.tags?.length > 0
-            ? structuredOverrides.tags
-            : fallback.metadata.tags,
-      };
-      const journalContent = content || aiResult || transcript;
-      const journalType = structuredData?.entryType || entryType;
+      // --- MODIFICATION ICI ---
+      // Étape 1: Obtenir les métadonnées structurées. C'est obligatoire.
+      // Il n'y a plus de fallback. Si cette étape échoue, on arrête tout.
+      structuredData = await requestStructuredAnalysis({
+        rawText: textForStructure,
+        entryType, // Le type (trade/analyse) déterminé par le toggle
+        plan: planDescription,
+        variant: structuredVariant,
+      });
+
+      if (!structuredData || !structuredData.metadata) {
+        throw new Error("L'analyse structurée de l'IA a échoué. Réponse invalide.");
+      }
+
+    } catch (err) {
+      // Si l'IA structurée échoue, on arrête TOUT. Pas de fallback.
+      console.error("Structured analysis failed:", err);
+      setJournalError(`Échec de l'analyse structurée : ${err.message}`);
+      setJournalSaving(false);
+      return;
+    }
+
+    // Si on arrive ici, structuredData est GARANTI d'être valide.
+    try {
+      // Étape 2: Enregistrer dans le journal en utilisant les données 100% fiables.
+      const journalType = structuredData.entryType || entryType;
+      
       await saveJournalEntry({
         type: journalType,
-        content: journalContent,
+        content: textForStructure, // Le texte brut de l'IA (édité ou non)
         plan: planDescription,
-        transcript,
-        metadata: mergedMetadata,
+        transcript, // Le transcript vocal/texte original de l'utilisateur
+        metadata: structuredData.metadata, // Les métadonnées pures de l'IA
       });
+      
       setJournalSuccess(
         `Entrée ${journalType === "trade" ? "trade" : "analyse"} enregistrée dans le journal.`
       );
+      // --- FIN DE LA MODIFICATION ---
+
     } catch (err) {
       setJournalError(err.message || "Impossible d'enregistrer l'entrée dans le journal.");
     } finally {

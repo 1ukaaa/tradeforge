@@ -603,21 +603,43 @@ app.post('/api/gemini/structured', async (req, res) => {
       DEFAULT_STRUCTURED_VARIANT;
     const prompt = buildStructuredPrompt(rawText, entryType, plan, configuredVariant);
 
+    // --- MODIFICATION ICI ---
+    // 1. On crée un payload complet pour l'API Gemini
+    const payload = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        // 2. On force l'API à répondre en JSON.
+        // Fini le parsing fragile, Gemini garantit un JSON valide.
+        response_mime_type: "application/json",
+      },
+    };
+
     const response = await axios.post(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + process.env.GEMINI_API_KEY,
-      {
-        contents: [{ parts: [{ text: prompt }] }]
-      }
+      payload // 3. On envoie le nouveau payload
     );
 
-    const result =
+    // 4. La réponse TEXTE est maintenant le JSON lui-même, sans "Voici le JSON..."
+    const resultText =
       response.data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "Aucune réponse complète de Gemini.";
-    const parsed = extractJsonObject(result);
-    res.json({ raw: result, structured: parsed });
+      null;
+
+    if (!resultText) {
+      throw new Error("Aucune réponse complète de Gemini.");
+    }
+
+    // 5. On peut parser directement. Plus besoin de 'extractJsonObject'.
+    const parsed = JSON.parse(resultText);
+    
+    // 6. On renvoie l'objet structuré que le frontend attend.
+    res.json({ structured: parsed });
+    // --- FIN DE LA MODIFICATION ---
+
   } catch (err) {
     console.error("Erreur Gemini structuré :", err?.response?.data || err.message);
-    res.status(500).json({ error: "Erreur Gemini structurée." });
+    // On renvoie un message d'erreur plus clair au frontend
+    const apiError = err?.response?.data?.error?.message || err.message;
+    res.status(500).json({ error: `Erreur Gemini structurée: ${apiError}` });
   }
 });
 
