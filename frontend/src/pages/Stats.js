@@ -1,9 +1,9 @@
-import { Box, Button, Stack, Typography } from "@mui/material";
-import QueryStatsIcon from "@mui/icons-material/QueryStats";
 import InsightsIcon from "@mui/icons-material/Insights";
 import PercentIcon from "@mui/icons-material/Percent";
+import QueryStatsIcon from "@mui/icons-material/QueryStats";
+import { Box, Button, Stack, Typography } from "@mui/material";
 import EmptyState from "../components/EmptyState";
-import { ForgeCard, MetricBadge, PageHero, SectionHeading } from "../components/ForgeUI";
+import { ForgeCard, MetricBadge, PageHero } from "../components/ForgeUI";
 
 const metricCards = [
   { label: "Win rate", value: "62%", icon: <PercentIcon color="primary" /> },
@@ -53,6 +53,7 @@ const Stats = () => {
           sx={{
             borderRadius: 4,
             minHeight: 260,
+            width: "100%",
             background: "radial-gradient(circle at 10% 10%, rgba(116,246,214,0.25), transparent 45%), rgba(255,255,255,0.02)",
             border: "1px dashed rgba(255,255,255,0.2)",
             display: "flex",

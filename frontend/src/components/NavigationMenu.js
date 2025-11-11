@@ -2,32 +2,36 @@ import {
   Box,
   Button,
   Divider,
-  IconButton,
-  Stack,
-  Tooltip,
-  Typography,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  ListSubheader,
   alpha,
-  styled,
-  useTheme,
+  useTheme
 } from "@mui/material";
 import { NavLink, useLocation } from "react-router-dom";
 import BrandLogo from "./BrandLogo";
 
-// Icônes pour la nouvelle navigation
+// Icônes
 import DashboardCustomizeRoundedIcon from "@mui/icons-material/DashboardCustomizeRounded";
-import HelpOutlineRoundedIcon from "@mui/icons-material/HelpOutlineRounded";
 import InsightsRoundedIcon from "@mui/icons-material/InsightsRounded";
 import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
+// [MODIFICATION] Importer le hook du thème
+import { useThemeMode } from "../context/ThemeModeContext";
 
-// Définition claire des liens de navigation
-const NAV_ITEMS = [
+// Listes d'items séparées par groupes
+const MAIN_NAV = [
   {
     to: "/",
-    label: "Boîte noire IA",
+    label: "TradeForge AI",
     icon: <TaskAltRoundedIcon />,
   },
+];
+
+const WORKSPACE_NAV = [
   {
     to: "/journal",
     label: "Journal",
@@ -38,160 +42,193 @@ const NAV_ITEMS = [
     label: "Dashboard",
     icon: <InsightsRoundedIcon />,
   },
-  {
-    to: "/settings",
-    label: "Atelier prompts",
-    icon: <SettingsRoundedIcon />,
-  },
 ];
 
-// Création d'un composant de lien stylisé (NavLink)
-// C'est le cœur du nouveau design : un bouton, pas une carte.
-const StyledNavLink = styled(NavLink)(({ theme }) => ({
-  ...theme.typography.button,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "flex-start",
-  gap: theme.spacing(1.5),
-  textDecoration: "none",
-  padding: theme.spacing(1.2, 2),
-  borderRadius: theme.shape.borderRadius / 1.5, // 12px
-  color: theme.palette.text.secondary,
-  border: "1px solid transparent",
-  transition: "all 0.2s ease",
-  fontWeight: 600,
-  fontSize: "0.9rem",
+const SETTINGS_ITEM = {
+  to: "/settings",
+  label: "Atelier",
+  icon: <SettingsRoundedIcon />,
+};
 
-  "& .MuiSvgIcon-root": {
-    fontSize: "1.25rem",
-    opacity: 0.7,
-    transition: "all 0.2s ease",
-  },
+// Composant de lien stylisé
+const StyledNavItem = ({ to, label, icon }) => {
+  const location = useLocation();
+  const theme = useTheme();
+  // [MODIFICATION] Récupérer le mode pour le hover
+  const { mode } = useThemeMode();
+  const isDark = mode === "dark";
 
-  "&:hover": {
-    color: theme.palette.text.primary,
-    background: alpha(theme.palette.primary.main, 0.08),
-    "& .MuiSvgIcon-root": {
-      opacity: 1,
-    },
-  },
+  const isActive =
+    (to === "/" && location.pathname === "/") ||
+    (to !== "/" && location.pathname.startsWith(to));
 
-  // Le style "actif" est le plus important
-  "&.active": {
-    color: theme.palette.primary.main,
-    background: alpha(theme.palette.primary.main, 0.12),
-    border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
-    boxShadow: `0 0 15px ${alpha(theme.palette.primary.main, 0.2)}`, // Utilise le "glow" du thème
-    "& .MuiSvgIcon-root": {
-      opacity: 1,
-      color: theme.palette.primary.main,
-    },
-  },
-}));
+  return (
+    <ListItem disablePadding sx={{ px: 1.5, py: 0.5 }}>
+      <ListItemButton
+        component={NavLink}
+        to={to}
+        // [MODIFICATION] 'end' est crucial pour le lien "/"
+        end={to === "/"}
+        selected={isActive}
+        sx={{
+          borderRadius: 2,
+          "&.Mui-selected": {
+            backgroundColor: alpha(theme.palette.primary.main, 0.12),
+            color: isDark
+              ? theme.palette.primary.main
+              : theme.palette.primary.dark, // Couleur plus foncée en mode clair
+            "& .MuiListItemIcon-root": {
+              color: isDark
+                ? theme.palette.primary.main
+                : theme.palette.primary.dark,
+            },
+          },
+          "&.Mui-selected:hover": {
+            backgroundColor: alpha(theme.palette.primary.main, 0.2),
+          },
+          // [MODIFICATION] Correction du hover pour le mode clair
+          "&:hover": {
+            backgroundColor: alpha(
+              isDark ? theme.palette.common.white : theme.palette.common.black,
+              0.05
+            ),
+          },
+          "& .MuiListItemIcon-root": {
+            minWidth: 40,
+            color: theme.palette.text.secondary,
+          },
+          "& .MuiListItemText-primary": {
+            fontWeight: 600,
+            color: isActive ? undefined : theme.palette.text.primary,
+          },
+        }}
+      >
+        {icon}
+        <ListItemText primary={label} />
+      </ListItemButton>
+    </ListItem>
+  );
+};
 
-// Le composant de menu principal
 const NavigationMenu = () => {
   const theme = useTheme();
-  const location = useLocation();
-  const isDark = theme.palette.mode === "dark";
+  // [MODIFICATION] Récupérer le mode pour le style de la Box
+  const { mode } = useThemeMode();
+  const isDark = mode === "dark";
 
   return (
     <Box
+      component="aside" // Sémantiquement, c'est une barre latérale
       sx={{
-        width: { xs: "100%", lg: 300 }, // Légèrement affiné
+        width: { xs: "100%", lg: 280 }, // Largeur fixe sur desktop
         flexShrink: 0,
-        position: { lg: "sticky" },
-        top: { lg: 32 }, // Aligné avec le padding de la page
-        alignSelf: "flex-start",
-        maxHeight: { lg: "calc(100vh - 64px)" }, // Marge en bas
+        // [MODIFICATION] Suppression de 'position', 'top', 'alignSelf'
+        // position: { lg: "sticky" },
+        // top: { lg: 32 },
+        // alignSelf: "flex-start",
+
+        // [MODIFICATION] Prend toute la hauteur sur desktop
+        height: { xs: "auto", lg: "100vh" },
+        // maxHeight: { lg: "calc(100vh - 64px)" }, // Supprimé
+
         display: "flex",
         flexDirection: "column",
-        p: { xs: 2, lg: 2.5 },
-        borderRadius: 4, // 18px de votre thème
-        border: `1px solid ${alpha(isDark ? "#FFFFFF" : "#0F1729", 0.08)}`,
+        p: { xs: 2, lg: 2 },
+        // borderRadius: 4, // [MODIFICATION] Supprimé pour un look fixe
+
+        // [MODIFICATION] Fond conditionnel pour le mode clair/sombre
         background: isDark
           ? "linear-gradient(150deg, rgba(4,10,24,0.95), rgba(12,18,36,0.9))"
-          : "linear-gradient(150deg, rgba(255,255,255,0.96), rgba(237,241,255,0.95))",
-        boxShadow: isDark ? "0 55px 95px rgba(0,0,0,0.65)" : "0 35px 70px rgba(15,23,42,0.18)",
+          : theme.palette.background.paper, // Utilise le fond papier en mode clair
+
+        // [MODIFICATION] Remplacement de 'border' par 'borderRight'
+        borderRight: { lg: `1px solid ${theme.palette.divider}` },
+        // border: `1px solid ${alpha("#FFFFFF", 0.08)}`, // Supprimé
+        // boxShadow: "0 55px 95px rgba(0,0,0,0.65)", // [MODIFICATION] Supprimé pour un look fixe
+        boxShadow: isDark
+          ? "0 55px 95px rgba(0,0,0,0.65)"
+          : { lg: "0 20px 50px rgba(15,23,42,0.1)" }, // Garde une ombre en mode clair
       }}
     >
-      {/* 1. Le Logo */}
-      <Box sx={{ px: 1, mb: 2 }}>
-        <BrandLogo glyphSize={44} />
+      <Box sx={{ px: 1.5, mb: 2 }}>
+        <BrandLogo glyphSize={40} />
       </Box>
 
-      {/* 2. Le Bouton d'Action Principal */}
-      <Button
-        component={NavLink}
-        to="/"
-        variant="contained"
-        color="primary"
-        startIcon={<RocketLaunchRoundedIcon />}
-        sx={{
-          mb: 2.5,
-          py: 1.5,
-          fontSize: "1rem",
-          // Utilisation du "glow" de votre thème pour le bouton principal
-          boxShadow: (theme) => `0 10px 30px ${alpha(theme.palette.primary.main, 0.35)}`,
-        }}
-      >
-        Nouvelle Séance
-      </Button>
-
-      {/* 3. La Navigation Principale */}
-      <Stack component="nav" spacing={1} sx={{ flexGrow: 1 }}>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ letterSpacing: "0.2em", pl: 2, mb: 0.5 }}
+      <Box sx={{ px: 1.5, mb: 2 }}>
+        <Button
+          component={NavLink}
+          to="/"
+          variant="contained"
+          color="primary"
+          startIcon={<RocketLaunchRoundedIcon />}
+          fullWidth
+          sx={{
+            py: 1.2,
+            fontSize: "0.95rem",
+            // [MODIFICATION] Ombre conditionnelle
+            boxShadow: (theme) =>
+              isDark
+                ? `0 10px 30px ${alpha(theme.palette.primary.main, 0.35)}`
+                : `0 10px 25px ${alpha(theme.palette.primary.main, 0.25)}`,
+          }}
         >
-          ATELIERS
-        </Typography>
-        {NAV_ITEMS.map((item) => (
-          <StyledNavLink
-            key={item.label}
-            to={item.to}
-            // 'end' est crucial pour que le lien "/" ne soit pas actif tout le temps
-            end={item.to === "/"}
-            className={
-              (item.to === "/" && location.pathname === "/") || (item.to !== "/" && location.pathname.startsWith(item.to))
-                ? "active"
-                : ""
-            }
-          >
-            {item.icon}
-            {item.label}
-          </StyledNavLink>
-        ))}
-      </Stack>
+          Nouvelle Séance
+        </Button>
+      </Box>
 
-      {/* 4. Le Pied de Page (Aide) */}
-      <Divider sx={{ my: 2, borderColor: alpha(isDark ? "#FFFFFF" : "#0F1729", 0.08) }} />
-      <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-        <Stack spacing={0}>
-          <Typography variant="subtitle2">Besoin d’aide ?</Typography>
-          <Typography variant="caption" color="text.secondary">
-            Accès concierge & support.
-          </Typography>
-        </Stack>
-        <Tooltip title="Contact support TradeForge">
-          <IconButton
-            component="a"
-            href="mailto:support@tradeforge.app"
-            sx={{
-              borderRadius: 3,
-              bgcolor: alpha(isDark ? "#FFFFFF" : "#0F1729", 0.08),
-              color: "text.secondary",
-              border: `1px solid ${alpha(isDark ? "#FFFFFF" : "#0F1729", 0.12)}`,
-              "&:hover": {
-                color: "primary.main",
-              },
-            }}
-          >
-            <HelpOutlineRoundedIcon />
-          </IconButton>
-        </Tooltip>
-      </Stack>
+      {/* 3. Navigation avec Groupes */}
+      <Box sx={{ flexGrow: 1, overflowY: "auto" }}>
+        <List component="nav" sx={{ px: 0 }}>
+          {MAIN_NAV.map((item) => (
+            <StyledNavItem
+              key={item.label}
+              to={item.to}
+              label={item.label}
+              icon={item.icon}
+            />
+          ))}
+        </List>
+
+        <List
+          component="nav"
+          sx={{ px: 0 }}
+          subheader={
+            <ListSubheader
+              sx={{
+                bgcolor: "transparent",
+                color: theme.palette.text.secondary,
+                fontSize: "0.7rem",
+                fontWeight: 700,
+                letterSpacing: "0.1em",
+                lineHeight: 2.5,
+              }}
+            >
+              ESPACE DE TRAVAIL
+            </ListSubheader>
+          }
+        >
+          {WORKSPACE_NAV.map((item) => (
+            <StyledNavItem
+              key={item.label}
+              to={item.to}
+              label={item.label}
+              icon={item.icon}
+            />
+          ))}
+        </List>
+      </Box>
+
+      {/* 4. Le Pied de Page (Settings) */}
+      <Box>
+        <Divider sx={{ mx: 2, my: 1 }} />
+        <List component="nav" sx={{ px: 0 }}>
+          <StyledNavItem
+            to={SETTINGS_ITEM.to}
+            label={SETTINGS_ITEM.label}
+            icon={SETTINGS_ITEM.icon}
+          />
+        </List>
+      </Box>
     </Box>
   );
 };
