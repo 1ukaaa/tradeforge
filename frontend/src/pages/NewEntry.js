@@ -1,8 +1,9 @@
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import InsightsIcon from "@mui/icons-material/Insights";
 import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
-import { Box, Chip, Stack, Typography } from "@mui/material";
+import { Box, Button, Chip, Stack, Typography } from "@mui/material";
 import InputArea from "../components/InputArea";
+import { ForgeCard, MetricBadge, PageHero } from "../components/ForgeUI";
 
 const badges = [
   { icon: <AutoAwesomeIcon fontSize="small" />, label: "Analyse IA instantanée" },
@@ -12,37 +13,56 @@ const badges = [
 
 const NewEntry = () => {
   return (
-    <Stack spacing={6} alignItems="stretch">
-      <Stack
-        spacing={3}
-        sx={{
-          flex: 1,
-          maxWidth: { lg: 780 },
-        }}
-      >
-        <Box>
-          <Typography variant="h3" color="primary">
-            Nouvelle analyse / Trade
-          </Typography>
-          <Typography variant="body1" color="text.secondary" maxWidth={640} sx={{ mt: 2 }}>
-            Capture ta réflexion, structure ton plan et laisse TradeForge générer une fiche claire pour ton journal.
-            L’assistant détecte le type de contenu, hiérarchise les informations clés et prépare ta revue post-trade.
-          </Typography>
-        </Box>
+    <Stack spacing={5}>
+      <PageHero
+        eyebrow="MODE CRÉATION"
+        title="Forge ta prochaine analyse"
+        description="Déverse tes notes brutes, valide le contexte et laisse TradeForge composer une fiche exploitable pour ton journal."
+        actions={
+          <Button variant="contained" size="large">
+            Démarrer une session
+          </Button>
+        }
+        meta={[
+          { label: "IA ACTIVE", value: "Prompt Forge v3" },
+          { label: "Temps moyen", value: "2 min 40s" },
+          { label: "Sessions cette semaine", value: "12" },
+        ]}
+      />
 
-        <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+      <ForgeCard
+        subtitle="SIGNATURE"
+        title="Ce que l’assistant prend en charge"
+        helper="Chaque brief déclenche une structuration automatique en 3 temps."
+      >
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
           {badges.map(({ icon, label }) => (
             <Chip
               key={label}
               icon={icon}
               label={label}
-              sx={{ bgcolor: "rgba(39, 58, 150, 0.08)", fontWeight: 600 }}
+              sx={{ flex: 1, bgcolor: "rgba(116,246,214,0.12)", fontWeight: 600 }}
             />
           ))}
         </Stack>
-      </Stack>
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          spacing={2}
+          sx={{ mt: 3 }}
+        >
+          <MetricBadge label="Structuration" value="Plan IA validé" tone="positive" />
+          <MetricBadge label="Risque moyen" value="1.2R" />
+          <MetricBadge label="Discipline" value="82%" />
+        </Stack>
+      </ForgeCard>
 
-      <InputArea />
+      <ForgeCard
+        subtitle="ASSISTANT"
+        title="Brief & capture"
+        helper="Colle tes notes, charge des captures ou dicte ton plan : l’assistant détecte automatiquement s’il s’agit d’un trade ou d’une analyse."
+      >
+        <InputArea />
+      </ForgeCard>
     </Stack>
   );
 };

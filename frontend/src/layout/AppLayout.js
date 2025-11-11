@@ -7,7 +7,7 @@ const AppLayout = () => {
     <Box
       sx={{
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #f2f5ff 0%, #f9f4ff 100%)",
+        background: (theme) => theme.forge.gradients.hero,
         display: "flex",
       }}
     >
@@ -28,6 +28,7 @@ const AppLayout = () => {
             flex: 1,
             maxWidth: { lg: 980, xl: 1080 },
             minHeight: { xs: "auto", md: "calc(100vh - 160px)" },
+            background: "transparent",
             pb: { xs: 4, md: 6 },
           }}
         >

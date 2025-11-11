@@ -1,6 +1,5 @@
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
-import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import CloseIcon from "@mui/icons-material/Close";
 import HourglassBottomIcon from "@mui/icons-material/HourglassBottom";
@@ -28,8 +27,6 @@ import {
   Select,
   Snackbar,
   Stack,
-  Tab,
-  Tabs,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -38,6 +35,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import EmptyState from "../components/EmptyState";
+import { ForgeCard, MetricBadge, PageHero, SectionHeading } from "../components/ForgeUI";
 import { deleteJournalEntry, fetchJournalEntries, updateJournalEntry } from "../services/journalClient";
 
 const typeLabel = {
@@ -80,6 +78,12 @@ const buildMetadataForm = (entry) => {
 const WEEK_DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const RESULT_OPTIONS = ["Break Even", "Stop Loss", "Target"];
 const TIMEFRAME_OPTIONS = ["M5", "M15", "H1", "H4", "D", "W"];
+const TAB_MODES = [
+  { value: "all", label: "Flux global", helper: "Toutes les entrées" },
+  { value: "trade", label: "Trades", helper: "Exécutions & revues" },
+  { value: "analyse", label: "Analyses", helper: "Plans et scénarios" },
+  { value: "calendar", label: "Calendrier", helper: "Vue chrono" },
+];
 
 const isValidDate = (value) => value instanceof Date && !Number.isNaN(value.getTime());
 
@@ -137,94 +141,64 @@ const resultTone = (result) => {
 const TradeDayCard = ({ trade, onView }) => {
   const title = trade.metadata?.title || trade.metadata?.symbol || "Trade";
   const dateLabel = formatDate(trade.metadata?.date || trade.createdAt);
+  const resultLabel = trade.metadata?.result || "En attente";
+  const timeframe = trade.metadata?.timeframe || "—";
   return (
-    <Paper
-      elevation={1}
-      sx={{
-        p: 2,
-        borderRadius: 3,
-        border: "1px solid rgba(39,58,150,0.12)",
-        background: "linear-gradient(180deg, rgba(247,249,255,0.95), rgba(233,237,255,0.9))",
-      }}
+    <ForgeCard
+      subtitle="FOCUS JOUR"
+      title={title}
+      helper={dateLabel}
+      actions={
+        <Button variant="outlined" size="small" onClick={() => onView(trade)}>
+          Ouvrir
+        </Button>
+      }
+      sx={{ gap: 1.5, p: { xs: 2, md: 2.5 } }}
     >
-      <Stack spacing={1.25}>
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-          <Stack spacing={0.4}>
-            <Typography variant="subtitle1" fontWeight={700}>
-              {title}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {trade.metadata?.symbol || "Actif inconnu"}
-            </Typography>
-          </Stack>
-          <Typography variant="caption" color="text.secondary">
-            {dateLabel}
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="flex-start">
+        <Stack spacing={0.5} flex={1}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "JetBrains Mono, monospace" }}>
+            {trade.metadata?.symbol || "Actif inconnu"}
           </Typography>
-        </Stack>
-        <Stack direction="row" spacing={1} flexWrap="wrap">
-          {trade.metadata?.timeframe && (
-            <Chip label={trade.metadata.timeframe} size="small" variant="outlined" />
+          {trade.metadata?.outcome && (
+            <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.4 }}>
+              {trade.metadata.outcome.split("\n")[0]}
+            </Typography>
           )}
-          <Chip
-            label={`Résultat : ${trade.metadata?.result || "En attente"}`}
-            size="small"
-            color={resultTone(trade.metadata?.result)}
-            variant="filled"
-          />
-        </Stack>
-        {trade.metadata?.outcome && (
-          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.4 }}>
-            {trade.metadata.outcome.split("\n")[0]}
-          </Typography>
-        )}
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Typography variant="caption" color="text.secondary">
-            {trade.metadata?.nextSteps ? `Prochaine étape : ${trade.metadata.nextSteps}` : "Pas de prochaine étape précisée"}
+            {trade.metadata?.nextSteps ? `Next : ${trade.metadata.nextSteps}` : "Aucune prochaine étape"}
           </Typography>
-          <Button variant="text" size="small" sx={{ textTransform: "none" }} onClick={() => onView(trade)}>
-            Voir la fiche
-          </Button>
+        </Stack>
+        <Stack spacing={1} alignItems="flex-end">
+          <Chip label={timeframe} size="small" />
+          <Chip label={resultLabel} size="small" color={resultTone(resultLabel)} />
         </Stack>
       </Stack>
-      </Paper>
+    </ForgeCard>
   );
 };
 
 const SectionCard = ({ title, helper, children, sx }) => (
-  <Paper
-    elevation={0}
+  <ForgeCard
+    subtitle="SECTION"
+    title={title}
+    helper={helper}
     sx={{
-      p: { xs: 2, md: 2.5 },
-      borderRadius: 3,
-      border: "1px solid rgba(15,76,129,0.15)",
-      background: "rgba(255,255,255,0.95)",
-      boxShadow: "0 12px 30px rgba(15,76,129,0.08)",
+      gap: 1,
       ...sx,
     }}
   >
-    <Stack spacing={1}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Typography variant="subtitle2" color="text.secondary">
-          {title}
-        </Typography>
-        {helper && (
-          <Typography variant="caption" color="text.secondary">
-            {helper}
-          </Typography>
-        )}
-      </Stack>
-      {children}
-    </Stack>
-  </Paper>
+    {children}
+  </ForgeCard>
 );
 
 const JournalEntryCard = ({ entry, onView }) => {
   const meta = entry.metadata || {};
   const title = meta.title || `${entry.type === "trade" ? "Trade" : "Analyse"} enregistrée`;
-  const dateLabel = meta.date || formatDate(entry.createdAt);
+  const dateLabel = meta.date ? formatDate(meta.date) : formatDate(entry.createdAt);
   const planSummary = meta.planSummary || entry.plan || "Plan non renseigné.";
   const outcome = meta.outcome || entry.content?.split("\n").slice(0, 2).join(" ") || "Synthèse en cours.";
-  const planAdherence = Math.min(100, Math.max(0, meta.planAdherence ?? (entry.type === "trade" ? 80 : 40)));
+  const planAdherence = Math.min(100, Math.max(0, meta.planAdherence ?? (entry.type === "trade" ? 82 : 56)));
   const tags = meta.tags && meta.tags.length ? meta.tags : [entry.type === "trade" ? "Trade" : "Analyse", "IA"];
   const result = meta.result || (entry.type === "trade" ? "Trade" : "Analyse");
   const grade = meta.grade || "À valider";
@@ -232,61 +206,86 @@ const JournalEntryCard = ({ entry, onView }) => {
   const symbol = meta.symbol || "Actif non défini";
   const nextSteps = meta.nextSteps || "Relire la fiche plus tard.";
   const risk = meta.risk || "Risque à qualifier";
+  const toneColor = entry.type === "trade" ? "error.light" : "secondary.light";
 
   return (
-    <Paper
-      elevation={0}
+    <ForgeCard
+      subtitle={entry.type === "trade" ? "TRADE" : "ANALYSE"}
+      title={title}
+      helper={dateLabel}
+      actions={
+        <Stack direction="row" spacing={1}>
+          <Button variant="text" onClick={() => onView(entry)}>
+            Lire
+          </Button>
+          <Button variant="contained" size="small" onClick={() => onView(entry)}>
+            Focus
+          </Button>
+        </Stack>
+      }
       sx={{
-        p: { xs: 3, md: 4 },
-        borderRadius: 3,
-        border: "1px solid rgba(39,58,150,0.08)",
-        background: "linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(232,239,255,0.85) 100%)",
+        position: "relative",
+        overflow: "hidden",
+        "&:before": {
+          content: '""',
+          position: "absolute",
+          top: -80,
+          right: -40,
+          width: 220,
+          height: 220,
+          borderRadius: "50%",
+          background: (theme) => (entry.type === "trade" ? theme.forge.gradients.warning : theme.forge.gradients.chip),
+          opacity: 0.15,
+        },
       }}
     >
       <Stack spacing={2}>
-        <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems="flex-start">
-          <Stack spacing={0.5}>
-            <Typography variant="subtitle2" color="text.secondary">
-              {dateLabel}
-            </Typography>
-            <Typography variant="h5" fontWeight={700}>
-              {title}
-            </Typography>
-          </Stack>
-          <Chip label={typeLabel[entry.type]?.chip} sx={{ fontWeight: 600, bgcolor: typeLabel[entry.type]?.color, color: "#fff" }} />
-        </Stack>
-
-        <Stack direction="row" spacing={2} flexWrap="wrap" alignItems="center">
-          <Chip label={symbol} variant="outlined" size="small" />
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <Chip label={symbol} size="small" />
           <Stack direction="row" spacing={1} alignItems="center">
-            <QueryStatsIcon color="primary" fontSize="small" />
+            <QueryStatsIcon fontSize="small" color="primary" />
             <Typography variant="body2" color="text.secondary">
               {timeframe}
             </Typography>
           </Stack>
           <Stack direction="row" spacing={1} alignItems="center">
-            <HourglassBottomIcon fontSize="small" />
+            <HourglassBottomIcon fontSize="small" color="secondary" />
             <Typography variant="body2" color="text.secondary">
               {result}
             </Typography>
           </Stack>
+          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "JetBrains Mono, monospace" }}>
+            {grade}
+          </Typography>
         </Stack>
-
-        <Divider />
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
           <Stack spacing={1} flex={1}>
             <Typography variant="subtitle2" color="text.secondary">
               Plan initial
             </Typography>
-            <Typography variant="body2">{planSummary}</Typography>
-            <LinearProgress
-              variant="determinate"
-              value={planAdherence}
-              sx={{ borderRadius: 999, height: 6, bgcolor: "rgba(39,58,150,0.12)" }}
-            />
+            <Typography variant="body2" color="text.primary">
+              {planSummary}
+            </Typography>
+            <Box
+              sx={{
+                height: 6,
+                borderRadius: 999,
+                background: "rgba(255,255,255,0.08)",
+                overflow: "hidden",
+              }}
+            >
+              <Box
+                sx={{
+                  height: "100%",
+                  width: `${planAdherence}%`,
+                  background: (theme) => (entry.type === "trade" ? theme.forge.gradients.warning : theme.forge.gradients.chip),
+                  transition: "width 0.4s ease",
+                }}
+              />
+            </Box>
             <Typography variant="caption" color="text.secondary">
-              Adhérence au plan : {planAdherence}%
+              Discipline : {planAdherence}%
             </Typography>
           </Stack>
           <Stack spacing={1} flex={1}>
@@ -294,43 +293,32 @@ const JournalEntryCard = ({ entry, onView }) => {
               Dissection
             </Typography>
             <Typography variant="body2">{outcome}</Typography>
-            <Typography variant="body2" fontWeight={600} color="text.primary">
+            <Typography variant="body2" fontWeight={600} sx={{ color: toneColor }}>
               {grade}
             </Typography>
           </Stack>
         </Stack>
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <SectionHeading label="PROCHAINES ÉTAPES" />
+          <Typography variant="body2" flex={1}>
+            {nextSteps}
+          </Typography>
+        </Stack>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <SectionHeading label="RISQUE CRITIQUE" />
+          <Typography variant="body2" flex={1}>
+            {risk}
+          </Typography>
+        </Stack>
+
+        <Stack direction="row" spacing={1} flexWrap="wrap">
           {tags.map((tag) => (
             <Chip key={tag} label={tag} size="small" />
           ))}
         </Stack>
-
-        <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
-          <Box flex={1}>
-            <Typography variant="subtitle2" color="text.secondary">
-              Prochaines étapes
-            </Typography>
-            <Typography variant="body2">{nextSteps}</Typography>
-          </Box>
-          <Box flex={1}>
-            <Typography variant="subtitle2" color="text.secondary">
-              Risque critique
-            </Typography>
-            <Typography variant="body2">{risk}</Typography>
-          </Box>
-        </Stack>
-
-        <Stack direction={{ xs: "column", md: "row" }} spacing={2} justifyContent="space-between" alignItems="center">
-          <Button variant="text" onClick={() => onView(entry)}>
-            Voir la fiche complète
-          </Button>
-          <Button variant="outlined" size="small">
-            Exporter
-          </Button>
-        </Stack>
       </Stack>
-    </Paper>
+    </ForgeCard>
   );
 };
 
@@ -649,6 +637,56 @@ const Journal = () => {
     setStatusMessage("");
   }, []);
 
+  const tabCounts = useMemo(() => {
+    const tradeCount = entries.filter((entry) => entry.type === "trade").length;
+    const analyseCount = entries.filter((entry) => entry.type === "analyse").length;
+    return {
+      all: entries.length,
+      trade: tradeCount,
+      analyse: analyseCount,
+      calendar: tradeCount,
+    };
+  }, [entries]);
+
+  const aggregateSnapshot = useMemo(() => {
+    if (!entries.length) {
+      return {
+        totalEntries: 0,
+        tradeCount: 0,
+        analyseCount: 0,
+        planScore: 0,
+        winRate: 0,
+        lastEntryLabel: "Aucune entrée",
+      };
+    }
+    const tradeCount = entries.filter((entry) => entry.type === "trade").length;
+    const analyseCount = entries.filter((entry) => entry.type === "analyse").length;
+    const planValues = entries.map((entry) => entry.metadata?.planAdherence ?? (entry.type === "trade" ? 82 : 56));
+    const planScore = planValues.length
+      ? Math.round(planValues.reduce((acc, value) => acc + value, 0) / planValues.length)
+      : 0;
+    const winningTrades = entries
+      .filter((entry) => entry.type === "trade")
+      .filter((entry) => {
+        const resultText = entry.metadata?.result || entry.metadata?.outcome || "";
+        return /(target|gain|tp|win)/i.test(resultText);
+      }).length;
+    const winRate = tradeCount ? Math.round((winningTrades / tradeCount) * 100) : 0;
+    const lastEntry = [...entries].sort(
+      (a, b) => new Date(b.metadata?.date || b.createdAt) - new Date(a.metadata?.date || a.createdAt)
+    )[0];
+    const lastEntryLabel = lastEntry ? formatDate(lastEntry.metadata?.date || lastEntry.createdAt) : "Aucune entrée";
+
+    return {
+      totalEntries: entries.length,
+      tradeCount,
+      analyseCount,
+      planScore,
+      winRate,
+      lastEntryLabel,
+    };
+  }, [entries]);
+
   useEffect(() => {
     if (!statusMessage) return undefined;
     setSuccessPulse(true);
@@ -787,38 +825,55 @@ const Journal = () => {
   };
 
   return (
-    <Stack spacing={4}>
-      <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-        <Stack direction="row" spacing={1} alignItems="center">
-          <AutoStoriesIcon color="primary" fontSize="large" />
-          <Stack>
-            <Typography variant="h3" color="primary">
-              Journal
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Trades exécutés et analyses stratégiques journalisés pour suivre l’évolution de ta discipline.
-            </Typography>
-          </Stack>
-        </Stack>
-        <Button component={Link} to="/" variant="contained" color="primary">
-          Ajouter une entrée
-        </Button>
-      </Stack>
+    <Stack spacing={4} pb={6}>
+      <PageHero
+        eyebrow="COMMAND CENTER"
+        title="Journal TradeForge"
+        description="Incarne ta discipline : consolide chaque trade, chaque analyse et laisse la forge donner une signature claire à ton process."
+        actions={
+          <>
+            <Button component={Link} to="/" variant="contained">
+              Lancer une séance
+            </Button>
+            <Button component={Link} to="/stats" variant="outlined" color="secondary">
+              Ouvrir les stats
+            </Button>
+          </>
+        }
+        meta={[
+          {
+            label: "Entrées actives",
+            value: aggregateSnapshot.totalEntries || "—",
+            trend: aggregateSnapshot.lastEntryLabel,
+          },
+          {
+            label: "Win rate",
+            value: aggregateSnapshot.tradeCount ? `${aggregateSnapshot.winRate}%` : "—",
+            trend: `${aggregateSnapshot.tradeCount} trade${aggregateSnapshot.tradeCount > 1 ? "s" : ""}`,
+          },
+          {
+            label: "Discipline",
+            value: aggregateSnapshot.planScore ? `${aggregateSnapshot.planScore}%` : "—",
+            trend: `${aggregateSnapshot.analyseCount} analyse${aggregateSnapshot.analyseCount > 1 ? "s" : ""}`,
+          },
+        ]}
+      />
 
-      <Tabs value={activeTab} onChange={(_, value) => value && setActiveTab(value)} sx={{ borderBottom: 1, borderColor: "divider" }}>
-        <Tab value="all" label="Tout" />
-        <Tab value="trade" label="Trades" />
-        <Tab value="analyse" label="Analyses" />
-        <Tab value="calendar" label="Calendrier" />
-      </Tabs>
-
-      <Paper elevation={0} sx={{ borderRadius: 3, border: "1px solid rgba(15,76,129,0.12)", p: 2, mb: 2 }}>
+      <ForgeCard
+        subtitle="FILTRES ACTIFS"
+        title="Affiner le flux"
+        helper={`${filteredEntries.length} entrée${filteredEntries.length > 1 ? "s" : ""} visibles`}
+        actions={
+          <Button variant="text" size="small" onClick={handleResetFilters}>
+            Réinitialiser
+          </Button>
+        }
+      >
         <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="flex-end" flexWrap="wrap">
           <TextField
-            label="Recherche"
+            label="Recherche globale"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            size="small"
             placeholder="Titre, contenu ou symbole"
             sx={{ minWidth: 240, flex: 1 }}
           />
@@ -826,11 +881,10 @@ const Journal = () => {
             label="Paire / Symbole"
             value={filterSymbol}
             onChange={(event) => setFilterSymbol(event.target.value)}
-            size="small"
             placeholder="EUR/USD"
             sx={{ minWidth: 200 }}
           />
-          <FormControl size="small" sx={{ minWidth: 150 }}>
+          <FormControl sx={{ minWidth: 150 }}>
             <InputLabel id="filter-type-label">Type</InputLabel>
             <Select
               labelId="filter-type-label"
@@ -843,51 +897,107 @@ const Journal = () => {
               <MenuItem value="analyse">Analyses</MenuItem>
             </Select>
           </FormControl>
-          <Autocomplete
-            multiple
-            size="small"
-            options={RESULT_OPTIONS}
-            value={filterResults}
-            onChange={(_, value) => setFilterResults(value)}
-            renderInput={(params) => (
-              <TextField {...params} label="Résultat" placeholder="Target, Break Even..." />
-            )}
-            sx={{ minWidth: 200 }}
-          />
-          <Autocomplete
-            multiple
-            size="small"
-            options={tagOptions}
-            value={filterTags}
-            onChange={(_, value) => setFilterTags(value)}
-            renderInput={(params) => (
-              <TextField {...params} label="Tags" placeholder="Haussier, Breakout..." />
-            )}
-            sx={{ minWidth: 220 }}
-          />
-          <Stack direction="row" spacing={1}>
-            <TextField
-              label="Début"
-              type="date"
-              value={filterStartDate}
-              onChange={(event) => setFilterStartDate(event.target.value)}
-              InputLabelProps={{ shrink: true }}
-              size="small"
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ width: "100%" }}>
+            <Autocomplete
+              multiple
+              options={RESULT_OPTIONS}
+              value={filterResults}
+              onChange={(_, value) => setFilterResults(value)}
+              renderInput={(params) => (
+                <TextField {...params} label="Résultat" placeholder="Target, Break Even..." />
+              )}
+              sx={{ flex: 1, minWidth: 200 }}
             />
-            <TextField
-              label="Fin"
-              type="date"
-              value={filterEndDate}
-              onChange={(event) => setFilterEndDate(event.target.value)}
-              InputLabelProps={{ shrink: true }}
-              size="small"
+            <Autocomplete
+              multiple
+              options={tagOptions}
+              value={filterTags}
+              onChange={(_, value) => setFilterTags(value)}
+              renderInput={(params) => (
+                <TextField {...params} label="Tags" placeholder="Haussier, Breakout..." />
+              )}
+              sx={{ flex: 1, minWidth: 220 }}
             />
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ minWidth: 200 }}>
+              <TextField
+                label="Début"
+                type="date"
+                value={filterStartDate}
+                onChange={(event) => setFilterStartDate(event.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                label="Fin"
+                type="date"
+                value={filterEndDate}
+                onChange={(event) => setFilterEndDate(event.target.value)}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Stack>
           </Stack>
-          <Button variant="outlined" onClick={handleResetFilters} size="small">
-            Réinitialiser
-          </Button>
         </Stack>
-      </Paper>
+      </ForgeCard>
+
+      <ForgeCard
+        subtitle="VUES"
+        title="Choisis ton angle"
+        helper="Bascule entre flux global, focus trades, analyses ou timeline."
+        sx={{ gap: 3 }}
+      >
+        <Stack direction={{ xs: "column", xl: "row" }} spacing={3} alignItems="stretch">
+          <ToggleButtonGroup
+            value={activeTab}
+            exclusive
+            onChange={(_, value) => value && setActiveTab(value)}
+            sx={{
+              flex: 1,
+              flexWrap: "wrap",
+              gap: 1,
+              "& .MuiToggleButtonGroup-grouped": {
+                flex: { xs: "1 1 45%", md: "1 1 calc(25% - 8px)" },
+                justifyContent: "flex-start",
+                borderRadius: 3,
+                border: "1px solid rgba(255,255,255,0.08)",
+                px: 2,
+                py: 1.5,
+              },
+              "& .MuiToggleButtonGroup-grouped.Mui-selected": {
+                color: "text.primary",
+                backgroundColor: "rgba(116,246,214,0.14)",
+                borderColor: "rgba(116,246,214,0.4)",
+              },
+            }}
+          >
+            {TAB_MODES.map((mode) => (
+              <ToggleButton key={mode.value} value={mode.value} disableRipple>
+                <Stack spacing={0.5} alignItems="flex-start">
+                  <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                    {mode.label}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {mode.helper}
+                  </Typography>
+                  <Typography variant="caption" color="primary.main" sx={{ fontFamily: "JetBrains Mono, monospace" }}>
+                    {tabCounts[mode.value] ?? 0} entrées
+                  </Typography>
+                </Stack>
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <MetricBadge
+              label="WIN RATE"
+              value={aggregateSnapshot.tradeCount ? `${aggregateSnapshot.winRate}%` : "—"}
+              tone="positive"
+            />
+            <MetricBadge
+              label="DISCIPLINE"
+              value={aggregateSnapshot.planScore ? `${aggregateSnapshot.planScore}%` : "—"}
+            />
+            <MetricBadge label="ANALYSES" value={aggregateSnapshot.analyseCount || 0} />
+          </Stack>
+        </Stack>
+      </ForgeCard>
 
       <Snackbar
         open={snackbarOpen}
@@ -899,20 +1009,25 @@ const Journal = () => {
           onClose={handleSnackbarClose}
           severity="success"
           sx={{
-            borderRadius: 3,
+            borderRadius: 999,
             display: "flex",
             alignItems: "center",
             gap: 1,
+            px: 3,
+            py: 1.5,
+            bgcolor: "rgba(116,246,214,0.15)",
+            border: "1px solid rgba(116,246,214,0.4)",
+            boxShadow: successPulse ? "0 0 30px rgba(116,246,214,0.35)" : "none",
             animation: successPulse ? "successPulse 0.8s ease" : undefined,
             ...(successPulse ? successPulseKeyframes : {}),
           }}
           icon={
             <Box
               sx={{
-                width: 32,
-                height: 32,
+                width: 34,
+                height: 34,
                 borderRadius: "50%",
-                bgcolor: "success.light",
+                bgcolor: "rgba(116,246,214,0.25)",
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
@@ -926,244 +1041,168 @@ const Journal = () => {
         </Alert>
       </Snackbar>
 
-      {loading && (
-        <>
-          <LinearProgress sx={{ height: 4, borderRadius: 999 }} />
-          <Typography variant="body2" color="text.secondary">
+      {fetchError && <Alert severity="error">{fetchError}</Alert>}
+
+      {loading ? (
+        <ForgeCard subtitle="SYNCHRO" title="Chargement du journal" helper="Nous consolidons les dernières entrées.">
+          <LinearProgress sx={{ height: 6, borderRadius: 999 }} />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             {loadingMessage || "Analyse en cours..."}
           </Typography>
-        </>
-      )}
-      {fetchError && <Alert severity="error">{fetchError}</Alert>}
-      {!loading && activeTab === "analyse" && (
-        <Typography variant="body2" color="text.secondary">
-          Analyse en cours...
-        </Typography>
-      )}
-      {!loading && activeTab === "trade" && (
-        <Typography variant="body2" color="text.secondary">
-          Revue des trades disponible.
-        </Typography>
-      )}
-
-      {activeTab === "calendar" ? (
-        <Stack spacing={2} sx={{ pb: 4 }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Typography variant="h6" fontWeight={600}>
-              {monthLabel}
-            </Typography>
-            <Stack direction="row" spacing={1}>
-              <IconButton size="small" onClick={handlePrevMonth} aria-label="Mois précédent">
-                <ArrowBackIosNewIcon fontSize="small" />
-              </IconButton>
-              <IconButton size="small" onClick={handleNextMonth} aria-label="Mois suivant">
-                <ArrowForwardIosIcon fontSize="small" />
-              </IconButton>
-            </Stack>
-          </Stack>
-
-          <Typography variant="body2" color="text.secondary">
-            Ne sont affichés que les trades et leurs métadonnées sur le mois sélectionné.
-          </Typography>
-
-          <Stack direction="row" spacing={1} sx={{ width: "100%" }}>
-            {WEEK_DAYS.map((label) => (
-              <Typography key={label} variant="caption" align="center" sx={{ flex: 1, fontWeight: 600 }}>
-                {label}
-              </Typography>
-            ))}
-          </Stack>
-
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2,
-              borderRadius: 3,
-              border: "1px solid rgba(39,58,150,0.12)",
-              background: "rgba(255,255,255,0.95)",
-              boxShadow: "0 20px 40px rgba(15,76,129,0.08)",
-            }}
-          >
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-                gap: 1,
-              }}
-            >
-              {calendarCells.map((cell, index) => {
-                const cellKey = `${toDateKey(cell.date)}-${index}`;
-                const baseKey = toDateKey(cell.date);
-                const dayTrades = cell.current ? tradesByDate[baseKey] || [] : [];
-                const highlightTrades = dayTrades.slice(0, 2);
-                const moreCount = Math.max(0, dayTrades.length - highlightTrades.length);
-                const hasTrades = dayTrades.length > 0;
-                const isSelected = cell.current && selectedDateKey === baseKey;
-
-                return (
-                <Box
-                  key={cellKey}
-                  onClick={() => {
-                    if (!cell.current) return;
-                    setSelectedDateKey(baseKey);
-                  }}
-                  sx={{
-                    borderRadius: 2,
-                    minHeight: 120,
-                    p: 1,
-                    border: 1,
-                    borderColor: isSelected ? "primary.dark" : hasTrades ? "primary.main" : "divider",
-                    bgcolor: isSelected
-                      ? "rgba(39,58,150,0.08)"
-                      : hasTrades
-                      ? "rgba(15,76,129,0.04)"
-                      : cell.current
-                      ? "background.paper"
-                      : "action.hover",
-                    cursor: cell.current ? "pointer" : "default",
-                    transition: "border-color 0.2s, background-color 0.2s, box-shadow 0.2s",
-                    boxShadow: isSelected ? "0 12px 30px rgba(15,76,129,0.15)" : "none",
-                    position: "relative",
-                    overflow: "hidden",
-                    ...calendarPulseKeyframes,
-                    "&:hover": {
-                      transform: cell.current ? "translateY(-3px)" : "none",
-                    },
-                  }}
-                >
-                  {hasTrades && (
-                    <Box
-                      sx={{
-                        position: "absolute",
-                        inset: 6,
-                        borderRadius: 2,
-                        border: "1px solid rgba(39,58,150,0.08)",
-                        pointerEvents: "none",
-                        animation: isSelected ? "dayPulse 1.6s infinite" : "none",
-                      }}
-                    />
-                  )}
-                  <Stack spacing={1}>
-                    <Stack direction="row" alignItems="center" justifyContent="space-between">
-                      <Typography
-                        variant="subtitle2"
-                        color={cell.current ? "text.primary" : "text.secondary"}
-                      >
-                        {cell.date.getDate()}
-                      </Typography>
-                      {hasTrades && (
-                        <Chip
-                          label={`${dayTrades.length} trade${dayTrades.length > 1 ? "s" : ""}`}
-                          size="small"
-                          color="info"
-                          sx={{ fontSize: "0.6rem", px: 1 }}
-                        />
-                      )}
-                    </Stack>
-                    <Stack spacing={0.5}>
-                      {highlightTrades.map((trade) => (
-                        <Stack
-                          key={trade.id}
-                          direction="row"
-                          justifyContent="space-between"
-                          alignItems="center"
-                          sx={{
-                            bgcolor: "rgba(15,76,129,0.08)",
-                            borderRadius: 1.5,
-                            px: 1,
-                            py: 0.4,
-                            transition: "background-color 0.2s",
-                            "&:hover": {
-                              bgcolor: "rgba(15,76,129,0.15)",
-                            },
-                          }}
-                        >
-                          <Typography variant="caption" fontWeight={600}>
-                            {trade.metadata?.symbol || trade.metadata?.title || "Trade"}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {trade.metadata?.result || "En attente"}
-                          </Typography>
-                        </Stack>
-                      ))}
-                      {moreCount > 0 && (
-                        <Typography variant="caption" color="text.secondary">
-                          +{moreCount} autres
-                        </Typography>
-                      )}
-                    </Stack>
-                  </Stack>
-                </Box>
-              );
-            })}
-            </Box>
-          </Paper>
-
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2.5,
-              borderRadius: 3,
-              border: "1px solid rgba(39,58,150,0.12)",
-              background: "rgba(247,249,255,0.95)",
-              boxShadow: "0 14px 30px rgba(15,76,129,0.08)",
-            }}
-          >
-            <Stack spacing={1.5}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Stack spacing={0.4}>
-                  <Typography variant="subtitle1" fontWeight={600}>
-                    {selectedDateLabel ? `Trades du ${selectedDateLabel}` : "Sélectionne une journée"}
-                  </Typography>
-                  {selectedDayTrades.length > 0 && (
-                    <Typography variant="caption" color="text.secondary">
-                      {selectedDayTrades.length} trade{selectedDayTrades.length > 1 ? "s" : ""} journalisé
-                      {selectedDayTrades.length > 1 ? "s" : ""}
-                    </Typography>
-                  )}
-                </Stack>
-                <Chip
-                  label={selectedDayTrades.length ? "Focus" : "À venir"}
-                  size="small"
-                  color="primary"
-                  variant="outlined"
-                />
+        </ForgeCard>
+      ) : activeTab === "calendar" ? (
+        <Stack spacing={3}>
+          <ForgeCard
+            subtitle="TIMELINE"
+            title={`Cycle ${monthLabel}`}
+            helper={`${tradesThisMonth.length} trade${tradesThisMonth.length > 1 ? "s" : ""} journalisé${
+              tradesThisMonth.length > 1 ? "s" : ""
+            }`}
+            actions={
+              <Stack direction="row" spacing={1}>
+                <IconButton size="small" onClick={handlePrevMonth} aria-label="Mois précédent">
+                  <ArrowBackIosNewIcon fontSize="small" />
+                </IconButton>
+                <IconButton size="small" onClick={handleNextMonth} aria-label="Mois suivant">
+                  <ArrowForwardIosIcon fontSize="small" />
+                </IconButton>
               </Stack>
-              {selectedDayTrades.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  {selectedDateLabel
-                    ? "Aucun trade enregistré pour cette journée."
-                    : "Clique sur une case pour voir les trades associés."}
-                </Typography>
-              ) : (
-                <Stack spacing={2}>
-                  {selectedDayTrades.map((trade, index) => (
-                    <Grow
-                      in
-                      key={trade.id}
-                      style={{ transformOrigin: "top center" }}
-                      timeout={250 + index * 50}
+            }
+          >
+            <Stack spacing={2}>
+              <Typography variant="body2" color="text.secondary">
+                Seuls les trades journalisés sur le mois sélectionné apparaissent dans la timeline.
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                {WEEK_DAYS.map((label) => (
+                  <Typography key={label} variant="caption" align="center" sx={{ flex: 1, letterSpacing: "0.2em" }}>
+                    {label}
+                  </Typography>
+                ))}
+              </Stack>
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                  gap: 1,
+                }}
+              >
+                {calendarCells.map((cell, index) => {
+                  const cellKey = `${toDateKey(cell.date)}-${index}`;
+                  const baseKey = toDateKey(cell.date);
+                  const dayTrades = cell.current ? tradesByDate[baseKey] || [] : [];
+                  const highlightTrades = dayTrades.slice(0, 2);
+                  const moreCount = Math.max(0, dayTrades.length - highlightTrades.length);
+                  const hasTrades = dayTrades.length > 0;
+                  const isSelected = cell.current && selectedDateKey === baseKey;
+                  return (
+                    <Box
+                      key={cellKey}
+                      onClick={() => cell.current && setSelectedDateKey(baseKey)}
+                      sx={{
+                        minHeight: 110,
+                        borderRadius: 3,
+                        p: 1.2,
+                        border: "1px solid rgba(255,255,255,0.06)",
+                        background: cell.current
+                          ? isSelected
+                            ? "linear-gradient(135deg, rgba(116,246,214,0.16), rgba(74,201,255,0.08))"
+                            : "rgba(255,255,255,0.02)"
+                          : "rgba(255,255,255,0.01)",
+                        cursor: cell.current ? "pointer" : "not-allowed",
+                        opacity: cell.current ? 1 : 0.3,
+                        transition: "transform 0.2s, border-color 0.2s",
+                        transform: isSelected ? "translateY(-2px)" : "none",
+                        boxShadow: hasTrades ? "0 12px 24px rgba(0,0,0,0.35)" : "none",
+                      }}
                     >
-                      <Box>
-                        <TradeDayCard trade={trade} onView={setDetailEntry} />
-                      </Box>
-                    </Grow>
-                  ))}
-                </Stack>
-              )}
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                          <Typography variant="subtitle2">{cell.current ? cell.date.getDate() : ""}</Typography>
+                          {hasTrades && (
+                            <Chip
+                              label={dayTrades.length}
+                              size="small"
+                              sx={{
+                                bgcolor: "rgba(116,246,214,0.12)",
+                                color: "primary.main",
+                                borderColor: "rgba(116,246,214,0.4)",
+                              }}
+                            />
+                          )}
+                        </Stack>
+                        {highlightTrades.map((trade) => (
+                          <Stack
+                            key={trade.id}
+                            spacing={0.2}
+                            sx={{
+                              borderRadius: 2,
+                              bgcolor: "rgba(255,255,255,0.04)",
+                              px: 1,
+                              py: 0.4,
+                            }}
+                          >
+                            <Typography variant="caption" fontWeight={600}>
+                              {trade.metadata?.symbol || trade.metadata?.title || "Trade"}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {trade.metadata?.result || "En attente"}
+                            </Typography>
+                          </Stack>
+                        ))}
+                        {moreCount > 0 && (
+                          <Typography variant="caption" color="text.secondary">
+                            +{moreCount} autres
+                          </Typography>
+                        )}
+                      </Stack>
+                    </Box>
+                  );
+                })}
+              </Box>
             </Stack>
-          </Paper>
+          </ForgeCard>
+
+          <ForgeCard
+            subtitle="JOUR"
+            title={selectedDateLabel ? `Focus ${selectedDateLabel}` : "Sélectionne une journée"}
+            helper={selectedDayTrades.length ? `${selectedDayTrades.length} trade(s)` : "Aucun trade enregistré"}
+            glow
+          >
+            {selectedDayTrades.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                {selectedDateLabel
+                  ? "Aucun trade enregistré pour cette journée."
+                  : "Clique sur une case du calendrier pour faire apparaître la liste correspondante."}
+              </Typography>
+            ) : (
+              <Stack spacing={2}>
+                {selectedDayTrades.map((trade, index) => (
+                  <Grow
+                    in
+                    key={trade.id}
+                    style={{ transformOrigin: "top center" }}
+                    timeout={250 + index * 50}
+                  >
+                    <Box>
+                      <TradeDayCard trade={trade} onView={setDetailEntry} />
+                    </Box>
+                  </Grow>
+                ))}
+              </Stack>
+            )}
+          </ForgeCard>
 
           {tradesThisMonth.length === 0 && (
             <Typography variant="body2" color="text.secondary">
-              Aucun trade journalisé pour {monthLabel}. Enregistre un trade pour le visualiser ici.
+              Aucun trade journalisé pour {monthLabel}. Alimente ton journal pour activer cette vue.
             </Typography>
           )}
         </Stack>
       ) : !loading && filteredEntries.length === 0 ? (
         <EmptyState
-          title="Aucune entrée journalisée pour le moment"
-          description="Enregistre une analyse ou un trade depuis l’assistant pour voir la fiche s’ajouter ici."
+          title="Rien à afficher pour ces filtres"
+          description="Allège les filtres ou lance une nouvelle analyse avec l’assistant TradeForge."
           actionLabel="Créer une entrée"
           onAction={() => (window.location.href = "/")}
         />
@@ -1201,9 +1240,14 @@ const Journal = () => {
               sx={{
                 p: 2.5,
                 borderRadius: 3,
-                border: "1px solid rgba(39,58,150,0.12)",
-                background: "rgba(255,255,255,0.96)",
-                boxShadow: "0 12px 30px rgba(15,76,129,0.08)",
+                border: (theme) =>
+                  `1px solid ${theme.palette.mode === "dark" ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.12)"}`,
+                background: (theme) =>
+                  theme.palette.mode === "dark"
+                    ? "linear-gradient(155deg, rgba(6,10,21,0.95), rgba(10,17,34,0.9))"
+                    : "linear-gradient(155deg, rgba(255,255,255,0.95), rgba(240,244,255,0.9))",
+                boxShadow: (theme) =>
+                  theme.palette.mode === "dark" ? "0 30px 60px rgba(0,0,0,0.55)" : "0 25px 45px rgba(15,23,42,0.15)",
               }}
             >
               <Stack spacing={2}>

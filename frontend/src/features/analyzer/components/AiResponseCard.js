@@ -89,8 +89,9 @@ const AiResponseCard = ({
       sx={{
         mt: 4,
         p: { xs: 3, md: 4 },
-        border: "1px solid rgba(39,58,150,0.12)",
-        background: "linear-gradient(180deg,rgba(255,255,255,0.98) 0%,rgba(235,241,255,0.7) 100%)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        background: "linear-gradient(165deg, rgba(8,13,28,0.95) 0%, rgba(5,8,18,0.85) 100%)",
+        boxShadow: "0 35px 70px rgba(0,0,0,0.55)",
       }}
     >
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="flex-start">
@@ -173,13 +174,17 @@ const AiResponseCard = ({
         variant="filled"
         sx={{
           mt: 3,
-          bgcolor: "rgba(15,27,61,0.04)",
           borderRadius: 3,
           "& .MuiFilledInput-root": {
             borderRadius: 3,
+            backgroundColor: "rgba(255,255,255,0.03)",
             fontFamily: `"JetBrains Mono","Fira Code",monospace`,
             fontSize: 16,
             lineHeight: 1.8,
+            color: "text.primary",
+          },
+          "& .MuiFilledInput-root:before, & .MuiFilledInput-root:after": {
+            borderBottom: "none",
           },
         }}
         helperText={helperText}

@@ -350,9 +350,9 @@ const InputArea = () => {
         sx={{
           p: { xs: 3, md: 4 },
           borderRadius: { xs: 3, md: 3.5 },
-          border: "1px solid rgba(24,38,88,0.08)",
-          background: "linear-gradient(150deg, rgba(255,255,255,0.95) 0%, rgba(232,237,255,0.9) 100%)",
-          boxShadow: "0 28px 68px rgba(14,32,76,0.12)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          background: "linear-gradient(160deg, rgba(8,13,28,0.96) 0%, rgba(5,8,18,0.9) 100%)",
+          boxShadow: "0 40px 80px rgba(0,0,0,0.55)",
         }}
       >
         <Stack spacing={{ xs: 3, md: 4 }}>
@@ -420,14 +420,14 @@ const InputArea = () => {
                 </Stack>
               </Stack>
 
-              <Divider sx={{ borderColor: "rgba(39,58,150,0.12)" }} />
+              <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
 
               <Box
                 sx={{
                   borderRadius: { xs: 2.5, md: 3 },
-                  border: "1px solid rgba(37,56,124,0.08)",
-                  backgroundColor: "rgba(255,255,255,0.92)",
-                  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.4)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  backgroundColor: "rgba(255,255,255,0.03)",
+                  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.04)",
                   p: { xs: 1.5, md: 2 },
                 }}
               >
@@ -498,8 +498,8 @@ const InputArea = () => {
                   sx={{
                     flex: 1,
                     borderRadius: 3,
-                    border: "1px solid rgba(24,38,88,0.12)",
-                    background: "rgba(255,255,255,0.92)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(255,255,255,0.03)",
                     p: { xs: 2, md: 3 },
                   }}
                 >
@@ -623,8 +623,8 @@ const InputArea = () => {
                   sx={{
                     flex: 1,
                     borderRadius: 3,
-                    border: "1px dashed rgba(39,58,150,0.3)",
-                    background: "rgba(15,27,61,0.05)",
+                    border: "1px dashed rgba(255,255,255,0.2)",
+                    background: "rgba(255,255,255,0.02)",
                     p: { xs: 2, md: 3 },
                   }}
                 >
@@ -640,7 +640,7 @@ const InputArea = () => {
                       sx={{
                         whiteSpace: "pre-wrap",
                         fontFamily: `'JetBrains Mono','Fira Code',monospace`,
-                        bgcolor: "rgba(255,255,255,0.8)",
+                        bgcolor: "rgba(255,255,255,0.04)",
                         borderRadius: 2,
                         p: 2,
                         mb: 1,

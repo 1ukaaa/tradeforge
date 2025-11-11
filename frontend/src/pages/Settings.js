@@ -3,9 +3,7 @@ import {
   Box,
   Button,
   Chip,
-  Divider,
   MenuItem,
-  Paper,
   Stack,
   Switch,
   Tab,
@@ -25,6 +23,8 @@ import {
   saveSettings,
   saveStructuredTemplate,
 } from "../services/settingsClient";
+import { ForgeCard, PageHero } from "../components/ForgeUI";
+import { useThemeMode } from "../context/ThemeModeContext";
 
 const STRUCTURED_VARIANTS = [
   {
@@ -124,6 +124,7 @@ const Settings = () => {
   const [variantFeedback, setVariantFeedback] = useState({ text: "", severity: "success" });
   const [variantDeleting, setVariantDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState("prefs");
+  const { mode: themeMode, toggleMode } = useThemeMode();
 
   useEffect(() => {
     let cancelled = false;
@@ -353,21 +354,35 @@ const Settings = () => {
     }
   };
 
+  const miniCardSx = {
+    flex: 1,
+    p: 3,
+    borderRadius: 3,
+    border: "1px solid rgba(255,255,255,0.08)",
+    background: "rgba(255,255,255,0.02)",
+  };
+
   const activeVariant = STRUCTURED_VARIANTS.find((variant) => variant.value === structuredVariant);
   const isDefaultVariantName = variantNameInput === "default";
 
   return (
-    <Stack spacing={4}>
-      <Stack direction="row" spacing={1} alignItems="center">
-        <SettingsSuggestIcon color="primary" fontSize="large" />
-        <Typography variant="h3" color="primary">
-          Paramètres
-        </Typography>
-      </Stack>
-      <Typography variant="body1" color="text.secondary" maxWidth={580}>
-        Configure les préférences IA, la structure des fiches et la synchronisation avec ton journal.
-        Les intégrations et exports seront bientôt disponibles.
-      </Typography>
+    <Stack spacing={4} pb={6}>
+      <PageHero
+        eyebrow="RÉGLAGES"
+        title="Paramètres IA & Workflow"
+        description="Adapte la parole de TradeForge, garde le contrôle sur tes templates et pilote les variantes Gemini qui alimentent tes fiches."
+        illustration={<SettingsSuggestIcon sx={{ fontSize: 180 }} />}
+        actions={
+          <Button variant="outlined" color="secondary">
+            Exporter la configuration
+          </Button>
+        }
+        meta={[
+          { label: "Dernière mise à jour", value: "il y a 12 min" },
+          { label: "Variantes actives", value: "2" },
+          { label: "Template courant", value: structuredVariant },
+        ]}
+      />
 
       <Box id="settings-tabs" sx={{ width: "100%" }}>
         <Tabs
@@ -377,23 +392,27 @@ const Settings = () => {
           variant="fullWidth"
           textColor="primary"
           indicatorColor="primary"
-          sx={{ borderBottom: 1, borderColor: "divider" }}
+          sx={{
+            borderRadius: 3,
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(255,255,255,0.02)",
+          }}
         >
           <Tab label="Préférences IA" value="prefs" />
           <Tab label="Prompt structuré" value="prompt" />
           <Tab label="Variantes Gemini" value="variants" />
         </Tabs>
       </Box>
-      <Divider />
       <Stack spacing={3}>
         {activeTab === "prefs" && (
-          <Paper sx={{ p: 4 }} elevation={0}>
-            <Typography variant="h6" mb={1}>
-              IA locale et notifications
-            </Typography>
+          <ForgeCard
+            subtitle="PRÉFÉRENCES"
+            title="IA locale et notifications"
+            helper="Ces paramètres assurent une cohérence totale entre tes fiches et ton workflow."
+          >
             <Stack spacing={3}>
-              <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-                <Paper elevation={0} sx={{ p: 3, flex: 1, border: "1px solid rgba(22,33,79,0.12)" }}>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ flexWrap: "wrap" }}>
+                <Box sx={miniCardSx}>
                   <Typography variant="subtitle2" color="text.secondary">
                     IA & format
                   </Typography>
@@ -408,8 +427,8 @@ const Settings = () => {
                     fullWidth
                     sx={{ mt: 1 }}
                   />
-                </Paper>
-                <Paper elevation={0} sx={{ p: 3, flex: 1, border: "1px solid rgba(22,33,79,0.12)" }}>
+                </Box>
+                <Box sx={miniCardSx}>
                   <Typography variant="subtitle2" color="text.secondary">
                     Notifications
                   </Typography>
@@ -424,23 +443,45 @@ const Settings = () => {
                     <Switch defaultChecked />
                     <Typography>Résumé hebdomadaire</Typography>
                   </Stack>
-                </Paper>
+                </Box>
               </Stack>
+              <Box sx={miniCardSx}>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="center" justifyContent="space-between">
+                  <Box>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Mode d’affichage
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Choisis entre l’ambiance “Forge nuit” et la version claire pour tes revues de jour.
+                    </Typography>
+                  </Box>
+                  <Chip
+                    label={themeMode === "dark" ? "Mode sombre" : "Mode clair"}
+                    size="small"
+                    sx={{ bgcolor: "rgba(116,246,214,0.15)", color: "primary.main" }}
+                  />
+                </Stack>
+                <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end" mt={2}>
+                  <Typography variant="caption" color="text.secondary">
+                    Clair
+                  </Typography>
+                  <Switch checked={themeMode === "dark"} onChange={toggleMode} />
+                  <Typography variant="caption" color="text.secondary">
+                    Sombre
+                  </Typography>
+                </Stack>
+              </Box>
             </Stack>
-          </Paper>
+          </ForgeCard>
         )}
         {activeTab === "prompt" && (
-          <Paper sx={{ p: 4 }} elevation={0}>
+          <ForgeCard
+            subtitle="PROMPT STRUCTURÉ"
+            title={`Mode ${structuredVariant === "detailed" ? "détaillé" : "synthétique"}`}
+            helper="Modifie la structure envoyée à Gemini en combinant les placeholders listés ci-dessous."
+          >
             <Stack spacing={3}>
-              <Stack spacing={1}>
-                <Typography variant="h6" mb={1}>
-                  Prompt structuré ({structuredVariant === "detailed" ? "détaillé" : "synthétique"})
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Modifie la structure envoyée à Gemini en combinant les placeholders listés ci-dessous.
-                </Typography>
-              </Stack>
-              <Paper elevation={0} sx={{ p: 3, border: "1px solid rgba(22,33,79,0.12)", borderRadius: 1 }}>
+              <Box sx={miniCardSx}>
                 <Typography variant="subtitle2" color="text.secondary">
                   Variante d’analyse active
                 </Typography>
@@ -468,7 +509,7 @@ const Settings = () => {
                     Dernière version : {formatTimestamp(templates[structuredVariant]?.updatedAt)}
                   </Typography>
                 )}
-              </Paper>
+              </Box>
               <Stack direction="row" spacing={1} flexWrap="wrap">
                 {["{{entryType}}", "{{plan}}", "{{rawText}}", "{{variantTitle}}", "{{instruction}}"].map(
                   (token) => (
@@ -500,16 +541,14 @@ const Settings = () => {
                 )}
               </Stack>
             </Stack>
-          </Paper>
+          </ForgeCard>
         )}
         {activeTab === "variants" && (
-          <Paper sx={{ p: 4 }} elevation={0}>
-            <Typography variant="h6" mb={2}>
-              Variantes de prompt Gemini
-            </Typography>
-            <Typography variant="body2" color="text.secondary" mb={1}>
-              Crée, sélectionne ou active une variante différente pour chaque type de prompt.
-            </Typography>
+          <ForgeCard
+            subtitle="VARIANTES"
+            title="Prompts Gemini"
+            helper="Crée, sélectionne ou active une variante différente pour chaque type de prompt."
+          >
             <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
               <ToggleButtonGroup
                 value={selectedPromptType}
@@ -596,7 +635,7 @@ const Settings = () => {
                 </Typography>
               )}
             </Stack>
-          </Paper>
+          </ForgeCard>
         )}
       </Stack>
     </Stack>

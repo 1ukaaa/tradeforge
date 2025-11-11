@@ -1,31 +1,29 @@
-import { Box, Button, Paper, Stack, Typography } from "@mui/material";
+import { Box, Button, Stack, Typography } from "@mui/material";
+import { ForgeCard } from "./ForgeUI";
 
 const EmptyState = ({ title, description, actionLabel, onAction }) => {
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 4, md: 6 },
-        textAlign: "center",
-        background: "linear-gradient(180deg,rgba(255,255,255,0.9) 0%,rgba(239,243,255,0.6) 100%)",
-        border: "1px solid rgba(39,58,150,0.08)",
-        boxShadow: "0 26px 60px rgba(24, 39, 76, 0.12)",
-      }}
+    <ForgeCard
+      subtitle="EN VEILLE"
+      title={title}
+      helper="TradeForge n’a pas encore forgé cette zone."
+      glow
+      sx={{ textAlign: "center", alignItems: "center" }}
     >
       <Stack spacing={3} alignItems="center">
         <Box
           sx={{
-            px: 3,
+            px: 3.5,
             py: 0.5,
-            borderRadius: 99,
-            bgcolor: "rgba(39,58,150,0.08)",
+            borderRadius: 999,
+            bgcolor: "rgba(116,246,214,0.12)",
             color: "primary.main",
             fontWeight: 600,
+            letterSpacing: "0.25em",
           }}
         >
-          À venir
+          À VENIR
         </Box>
-        <Typography variant="h4">{title}</Typography>
         <Typography variant="body1" color="text.secondary" maxWidth={420}>
           {description}
         </Typography>
@@ -35,7 +33,7 @@ const EmptyState = ({ title, description, actionLabel, onAction }) => {
           </Button>
         )}
       </Stack>
-    </Paper>
+    </ForgeCard>
   );
 };
 
