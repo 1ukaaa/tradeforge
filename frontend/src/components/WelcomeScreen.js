@@ -1,4 +1,6 @@
 import { Box, Chip, Stack, Typography, alpha } from "@mui/material";
+// Importer 'keyframes' de MUI
+import { keyframes } from "@mui/material/styles";
 import BrandLogo from "./BrandLogo";
 
 // Suggestions de prompts pour guider l'utilisateur
@@ -7,6 +9,19 @@ const suggestions = [
   "Revue de ma session de Londres...",
   "Quels étaient mes biais sur le NAS100 ce matin ?",
 ];
+
+// Définir l'animation de flottement
+const floatAnimation = keyframes`
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+`;
 
 /**
  * Affiche l'état vide de la page de chat, inspiré de l'image de "Prodify AI".
@@ -25,7 +40,21 @@ const WelcomeScreen = ({ onSuggestionClick }) => {
         height: "100%",
       }}
     >
-      <BrandLogo glyphSize={60} showText={false} />
+      {/* Appliquer l'animation via la prop 'sx' */}
+      <BrandLogo
+        glyphSize={60}
+        showText={false}
+        sx={{
+          animation: `${floatAnimation} 3.5s ease-in-out infinite`,
+          
+          // BONUS: Respecte l'accessibilité si l'utilisateur préfère
+          // ne pas avoir de mouvement.
+          '@media (prefers-reduced-motion: reduce)': {
+            animation: 'none',
+          },
+        }}
+      />
+      
       <Typography
         variant="h4"
         sx={{

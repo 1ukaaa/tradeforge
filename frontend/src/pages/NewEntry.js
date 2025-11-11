@@ -1,16 +1,16 @@
 import { Alert, alpha, Box, CircularProgress, Paper, Stack, Typography } from "@mui/material";
+// 'useState' est déjà importé
 import { useEffect, useRef, useState } from "react";
 import ChatInputBar from "../components/ChatInputBar";
-import WelcomeScreen from "../components/WelcomeScreen";
-// [CHANGEMENT] Importer le nouveau composant
 import EditableAnalysis from "../components/EditableAnalysis";
+import WelcomeScreen from "../components/WelcomeScreen";
 import { requestAnalysis, requestStructuredAnalysis } from "../services/aiClient";
 import { saveJournalEntry } from "../services/journalClient";
 import { fetchPlan } from "../services/planClient";
 import { fetchSettings } from "../services/settingsClient";
 import { buildPlanDescription } from "../utils/planUtils";
 
-// Un conteneur pour le 'transcript' de l'utilisateur
+// Le composant UserPrompt (inchangé)
 const UserPrompt = ({ text }) => (
   <Stack direction="row" spacing={2} sx={{ width: "100%", justifyContent: "flex-end" }}>
     <Paper
@@ -18,7 +18,7 @@ const UserPrompt = ({ text }) => (
         p: { xs: 2, md: 3 },
         maxWidth: "80%",
         borderRadius: 4,
-        borderBottomRightRadius: 0, // Style "bulle"
+        borderBottomRightRadius: 0,
         bgcolor: (theme) => alpha(theme.palette.primary.main, 0.15),
         border: (theme) => `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
       }}
@@ -43,7 +43,6 @@ const NewEntry = () => {
   // États du "chat"
   const [userTranscript, setUserTranscript] = useState("");
   const [aiAnalysis, setAiAnalysis] = useState("");
-  // [NOUVEAU] État pour les métadonnées structurées
   const [structuredMetadata, setStructuredMetadata] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -52,6 +51,10 @@ const NewEntry = () => {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState("");
+
+  // NOUVEL ÉTAT : Gère l'outil sélectionné dans la barre d'input
+  // On met "analyse" par défaut.
+  const [activeTool, setActiveTool] = useState("analyse");
 
   const suggestionClickCallback = useRef(null);
   const scrollRef = useRef(null);
@@ -81,7 +84,7 @@ const NewEntry = () => {
     }
   }, [userTranscript, aiAnalysis, loading]);
 
-  // 2. Logique de soumission (modifiée pour gérer les 2 appels)
+  // 2. Logique de soumission (MODIFIÉE)
   const handleSend = async (rawText) => {
     setLoading(true);
     setError("");
@@ -89,25 +92,27 @@ const NewEntry = () => {
     setSaveSuccess("");
     setUserTranscript(rawText);
     setAiAnalysis("");
-    setStructuredMetadata(null); // Réinitialiser les métadonnées
+    setStructuredMetadata(null);
 
-    const isTrade = rawText.toLowerCase().includes("trade");
-    const entryType = isTrade ? "trade" : "analyse";
-    const template = isTrade ? tradeVariant : analysisVariant;
+    // [MODIFICATION]
+    // Au lieu de deviner ("isTrade"), on utilise l'état 'activeTool'
+    // qui est contrôlé par le nouveau menu.
+    const entryType = activeTool; // C'est soit "analyse", soit "trade"
+    const template = entryType === "trade" ? tradeVariant : analysisVariant;
+    // [FIN MODIFICATION]
 
     try {
-      // [CHANGEMENT] Nous lançons les deux appels en parallèle
       const [analysisResult, structuredData] = await Promise.all([
         // Appel 1: Obtenir le texte brut de l'analyse
         requestAnalysis({
           rawText,
-          template,
+          template, // 'template' est maintenant 'tradeVariant' ou 'analysisVariant'
           plan: planDescription,
         }),
         // Appel 2: Obtenir les métadonnées JSON
         requestStructuredAnalysis({
           rawText,
-          entryType,
+          entryType, // 'entryType' est explicitement "trade" ou "analyse"
           plan: planDescription,
           variant: structuredVariant,
         })
@@ -129,7 +134,7 @@ const NewEntry = () => {
     }
   };
 
-  // 3. Logique de Sauvegarde (modifiée pour recevoir les métadonnées éditées)
+  // 3. Logique de Sauvegarde (MODIFIÉE)
   const handleSave = async (finalContent, finalMetadata) => {
     if (!finalContent || !userTranscript) {
       setSaveError("Aucune analyse à sauvegarder.");
@@ -141,21 +146,23 @@ const NewEntry = () => {
     setSaveSuccess("");
 
     try {
-      // Les données sont déjà structurées et éditées !
-      const entryType = finalMetadata.entryType || (userTranscript.toLowerCase().includes("trade") ? "trade" : "analyse");
+      // [MODIFICATION]
+      // On utilise 'activeTool' comme source de vérité pour le type,
+      // au lieu de le redétecter.
+      const entryType = finalMetadata.entryType || activeTool;
+      // [FIN MODIFICATION]
 
       // Sauvegarder au journal
       await saveJournalEntry({
         type: entryType,
         content: finalContent,
         plan: planDescription,
-        transcript: userTranscript, // Le prompt original
-        metadata: finalMetadata, // Les métadonnées éditées
+        transcript: userTranscript,
+        metadata: finalMetadata,
       });
       
       setSaveSuccess("Analyse enregistrée au journal !");
       
-      // Optionnel : réinitialiser le chat après sauvegarde
       setTimeout(() => {
         setUserTranscript("");
         setAiAnalysis("");
@@ -229,11 +236,11 @@ const NewEntry = () => {
              </Stack>
           )}
 
-          {/* [CHANGEMENT] Afficher la nouvelle bulle éditable */}
+          {/* Bulle éditable */}
           {aiAnalysis && structuredMetadata && (
             <EditableAnalysis
               content={aiAnalysis}
-              initialMetadata={structuredMetadata} // Passer les métadonnées
+              initialMetadata={structuredMetadata}
               onSave={handleSave}
               saving={saving}
               saveError={saveError}
@@ -248,11 +255,14 @@ const NewEntry = () => {
         </Stack>
       </Box>
 
-      {/* Barre d'input fixe (inchangée) */}
+      {/* Barre d'input fixe (MODIFIÉE) */}
       <ChatInputBar
         onSend={handleSend}
         loading={loading}
         onSuggestionClick={suggestionClickCallback}
+        // Props ajoutées pour lier l'état au composant
+        activeTool={activeTool}
+        onToolChange={setActiveTool}
       />
     </Stack>
   );

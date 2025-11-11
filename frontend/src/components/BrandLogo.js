@@ -49,8 +49,10 @@ export const LogoGlyph = ({ size = 44 }) => (
   </svg>
 );
 
-const BrandLogo = ({ glyphSize = 44, showText = true }) => (
-  <Stack direction="row" spacing={2} alignItems="center">
+// 1. Accepter '...props' en argument (il contiendra notre prop 'sx')
+const BrandLogo = ({ glyphSize = 44, showText = true, ...props }) => (
+  // 2. Appliquer ces props directement sur le composant Stack racine
+  <Stack direction="row" spacing={2} alignItems="center" {...props}>
     <LogoGlyph size={glyphSize} />
     {showText && (
       <Stack spacing={0.2}>
