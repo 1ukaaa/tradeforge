@@ -67,3 +67,36 @@ export const getEntryImage = (entry) => {
 export const getEntryTitle = (entry) => {
   return entry?.metadata?.title || "Entrée sans titre";
 };
+
+/**
+ * Tente de deviner la direction (Buy/Sell) d'un trade.
+ * @param {object} entry - L'objet entrée.
+ * @returns {'buy' | 'sell' | 'neutral'}
+ */
+export const getEntryDirection = (entry) => {
+  if (entry.type !== 'trade') return 'neutral';
+  
+  const meta = entry.metadata || {};
+  const content = entry.content || "";
+  const title = meta.title || "";
+  // On vérifie aussi dans les tags
+  const tags = (meta.tags || []).join(' ').toLowerCase();
+
+  // Mots-clés pour Achat/Long
+  const buyTerms = ['long', 'buy', 'achat', 'bullish', 'hausse'];
+  // Mots-clés pour Vente/Short
+  const sellTerms = ['short', 'sell', 'vente', 'bearish', 'baisse'];
+
+  const textToSearch = `${title.toLowerCase()} ${content.toLowerCase()} ${tags}`;
+
+  // Si on trouve un terme "sell"
+  if (sellTerms.some(term => textToSearch.includes(term))) {
+    return 'sell';
+  }
+  // Si on trouve un terme "buy"
+  if (buyTerms.some(term => textToSearch.includes(term))) {
+    return 'buy';
+  }
+  
+  return 'neutral'; // Par défaut (on affichera un 'buy' par exemple)
+};
