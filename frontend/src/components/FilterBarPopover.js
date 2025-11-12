@@ -4,6 +4,7 @@ import ViewListIcon from "@mui/icons-material/ViewList";
 import ViewModuleIcon from "@mui/icons-material/ViewModule";
 import ViewQuiltIcon from "@mui/icons-material/ViewQuilt";
 import ViewStreamIcon from "@mui/icons-material/ViewStream";
+// Nouveaux imports en haut des 3 fichiers de filtres
 import { Button, Divider, IconButton, Paper, Popover, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import { useState } from "react";
 
@@ -31,12 +32,20 @@ const FilterBarPopover = ({ filters, onFilterChange, onViewChange, onReset }) =>
         <IconButton onClick={handleOpen} color={filters.startDate || filters.endDate || filters.filterType !== 'all' ? 'primary' : 'default'}>
           <FilterListIcon />
         </IconButton>
-        <ToggleButtonGroup value={filters.viewMode} exclusive size="small" onChange={onViewChange}>
+        <ToggleButtonGroup
+          value={filters.viewMode}
+          exclusive
+          size="small"
+          onChange={onViewChange}
+          sx={{ flexWrap: 'wrap' }} // Ajout de flexWrap
+        >
+          {/* Les 4 originaux */}
           <ToggleButton value="inspector" title="Vue Inspecteur"><ViewListIcon /></ToggleButton>
           <ToggleButton value="focus" title="Vue Focus"><ViewStreamIcon /></ToggleButton>
           <ToggleButton value="overlay" title="Vue Superposée"><ViewQuiltIcon /></ToggleButton>
           <ToggleButton value="polaroid" title="Vue Grille"><ViewModuleIcon /></ToggleButton>
-        </ToggleButtonGroup>
+
+</ToggleButtonGroup>
       </Paper>
       <Popover
         open={open} anchorEl={anchorEl} onClose={handleClose}

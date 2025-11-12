@@ -1,15 +1,10 @@
 // frontend/src/pages/Journal.js
-// (Version Corrigée)
+// (Version OPTIMISÉE, utilise JournalEntryModal)
 
 import {
   Alert,
   Box,
-  Button,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Grid,
   Paper,
   Stack,
@@ -18,38 +13,31 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { fetchJournalEntries } from "../services/journalClient";
 
-// --- Importation des utilitaires ---
-// --- CORRECTION ICI ---
-import {
-  formatDate,
-  getEntryImage,
-  getEntryTitle,
-  isValidDate,
-} from "../utils/journalUtils";
+import { isValidDate } from "../utils/journalUtils";
 
-// --- Importation des 4 variantes de Cartes ---
 import FocusEntryCard from "../components/FocusEntryCard";
 import InspectorEntryCard from "../components/InspectorEntryCard";
 import OverlayEntryCard from "../components/OverlayEntryCard";
 import PolaroidEntryCard from "../components/PolaroidEntryCard";
 
+import FilterBarPopover from "../components/FilterBarPopover";
 import JournalHeroMinimal from "../components/JournalHeroMinimal";
 
- import FilterBarPopover from "../components/FilterBarPopover";
+// --- AJOUT : Import de la nouvelle modale ---
+import JournalEntryModal from "../components/JournalEntryModal";
 
 const Journal = () => {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [detailEntry, setDetailEntry] = useState(null); // Pour le modal
+  const [detailEntry, setDetailEntry] = useState(null); // Gère l'ouverture de la modale
 
-  // État unifié pour tous les filtres
   const [filters, setFilters] = useState({
     searchQuery: "",
     filterType: "all",
     startDate: "",
     endDate: "",
-    viewMode: "inspector", // 'inspector', 'polaroid', 'overlay', 'focus'
+    viewMode: "inspector",
   });
 
   useEffect(() => {
@@ -60,15 +48,11 @@ const Journal = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  // Filtre les entrées en fonction de l'état des filtres
   const filteredEntries = useMemo(() => {
     return entries
       .filter((entry) => {
-        // Filtre Type
         if (filters.filterType !== "all" && entry.type !== filters.filterType)
           return false;
-
-        // Filtre Recherche
         if (filters.searchQuery) {
           const query = filters.searchQuery.toLowerCase();
           const title = (entry.metadata?.title || "").toLowerCase();
@@ -82,22 +66,16 @@ const Journal = () => {
             return false;
           }
         }
-
-        // Filtre Date
         const entryDate = new Date(entry.metadata?.date || entry.createdAt);
-        if (!isValidDate(entryDate)) return true; // Ne pas filtrer si date invalide
-
+        if (!isValidDate(entryDate)) return true;
         if (filters.startDate) {
-          // new Date() ajuste au fuseau horaire, ce qui peut causer des problèmes.
-          // Créer la date en UTC pour être sûr.
-          const start = new Date(filters.startDate + 'T00:00:00Z');
+          const start = new Date(filters.startDate + "T00:00:00Z");
           if (entryDate < start) return false;
         }
         if (filters.endDate) {
-          const end = new Date(filters.endDate + 'T23:59:59Z');
+          const end = new Date(filters.endDate + "T23:59:59Z");
           if (entryDate > end) return false;
         }
-
         return true;
       })
       .sort(
@@ -110,12 +88,10 @@ const Journal = () => {
   const handleOpenModal = (entry) => setDetailEntry(entry);
   const handleCloseModal = () => setDetailEntry(null);
 
-  // Handler pour le sélecteur de vue
   const handleViewChange = (_, newMode) => {
     if (newMode) setFilters((f) => ({ ...f, viewMode: newMode }));
   };
 
-  // Handler pour la réinitialisation
   const handleResetFilters = () => {
     setFilters((f) => ({
       ...f,
@@ -125,8 +101,23 @@ const Journal = () => {
       endDate: "",
     }));
   };
+  
+  // --- AJOUT : Logique de mise à jour/suppression (remontée de la modale) ---
+  const handleUpdateInList = (updatedEntry) => {
+     setEntries((prevEntries) =>
+        prevEntries.map((e) => (e.id === updatedEntry.id ? updatedEntry : e))
+      );
+     // Met aussi à jour l'entrée dans la modale
+     setDetailEntry(updatedEntry);
+  };
+  
+  const handleDeleteFromList = (deletedId) => {
+    setEntries((prevEntries) =>
+        prevEntries.filter((e) => e.id !== deletedId)
+      );
+  };
+  // --- FIN AJOUT ---
 
-  // Fonction pour afficher la bonne carte en fonction du mode
   const renderEntryCard = (entry) => {
     switch (filters.viewMode) {
       case "polaroid":
@@ -169,7 +160,6 @@ const Journal = () => {
     }
   };
 
-  // Détermine si le conteneur doit être une Grille ou un Stack
   const listContainerProps =
     filters.viewMode === "inspector"
       ? { container: false, spacing: 2.5, component: Stack }
@@ -184,9 +174,8 @@ const Journal = () => {
         onFilterChange={setFilters}
         onViewChange={handleViewChange}
         onReset={handleResetFilters}
-      /> 
+      />
 
-      {/* === 3. ZONE DE RENDU (gérée par le sélecteur de vue) === */}
       {loading && <CircularProgress sx={{ alignSelf: "center" }} />}
       {error && <Alert severity="error">{error}</Alert>}
 
@@ -209,70 +198,14 @@ const Journal = () => {
         </Box>
       )}
 
-      {/* === MODAL DE DÉTAIL (utilise getEntryTitle) === */}
-      <Dialog
-        fullWidth
-        maxWidth="md"
+      {/* --- MODIFIÉ : Appel de la modale externe --- */}
+      <JournalEntryModal
+        entry={detailEntry}
         open={Boolean(detailEntry)}
         onClose={handleCloseModal}
-      >
-        <DialogTitle>
-          {getEntryTitle(detailEntry)} 
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="caption" color="text.secondary">
-            {formatDate(detailEntry?.metadata?.date || detailEntry?.createdAt, {
-              dateStyle: "full",
-              timeStyle: "short",
-            })}
-          </Typography>
-
-          {getEntryImage(detailEntry) && (
-            <Box
-              component="img"
-              src={getEntryImage(detailEntry)}
-              alt="Capture d'écran"
-              sx={{
-                width: "100%",
-                borderRadius: 2,
-                mt: 2,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
-            />
-          )}
-
-          <Typography
-            variant="body1"
-            sx={{
-              whiteSpace: "pre-wrap",
-              mt: 2,
-              fontFamily: "monospace",
-              fontSize: "0.9rem",
-            }}
-          >
-            {detailEntry?.content}
-          </Typography>
-          <Box
-            component="pre"
-            sx={{
-              fontSize: "0.8rem",
-              opacity: 0.7,
-              maxHeight: 200,
-              overflowY: "auto",
-              bgcolor: "action.hover",
-              p: 1,
-              borderRadius: 1,
-              mt: 2,
-            }}
-          >
-            {JSON.stringify(detailEntry?.metadata, null, 2)}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseModal}>Fermer</Button>
-        </DialogActions>
-      </Dialog>
+        onUpdate={handleUpdateInList}
+        onDelete={handleDeleteFromList}
+      />
     </Stack>
   );
 };
