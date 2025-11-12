@@ -1,23 +1,58 @@
 // frontend/src/components/EditEntryForm.js
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
 import {
-    Autocomplete,
-    Chip,
-    Stack,
-    TextField,
-    ToggleButton,
-    ToggleButtonGroup,
-    Typography,
+  Autocomplete,
+  Box,
+  Button,
+  Chip,
+  Grid,
+  Paper,
+  Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
 } from "@mui/material";
 
-// Options fixes pour le sélecteur de Timeframe
-const TIMEFRAME_OPTIONS = ["W1", "D1", "H4", "H1", "M15", "M5"];
+// --- Constantes ---
 
-const EditEntryForm = ({ entry, onDataChange }) => {
+const TIMEFRAME_OPTIONS = ["W1", "D1", "H4", "H1", "M15", "M5"];
+const RESULT_OPTIONS = [
+  { value: "TP", label: "TP" },
+  { value: "SL", label: "SL" },
+  { value: "BE", label: "BE" },
+  { value: "N/A", label: "N/A" },
+];
+const SYMBOL_SUGGESTIONS = ["EURUSD", "NAS100", "US30", "DAX", "UKOIL", "BTCUSD", "ETHUSD"];
+
+// --- Composant Principal ---
+
+const EditEntryForm = ({ entry, onDataChange, onImageDelete, onImageClick, onSetMainImage }) => {
+  
+  // --- Handlers ---
+
   const handleMetaChange = (field) => (event) => {
     onDataChange({
       ...entry,
       metadata: { ...entry.metadata, [field]: event.target.value },
     });
+  };
+  
+  const handleSymbolChange = (event, newValue) => {
+     onDataChange({
+      ...entry,
+      metadata: { ...entry.metadata, symbol: newValue || "" },
+    });
+  };
+  
+  const handleResultChange = (event, newValue) => {
+    if (newValue) { 
+      onDataChange({
+        ...entry,
+        metadata: { ...entry.metadata, result: newValue },
+      });
+    }
   };
 
   const handleContentChange = (event) => {
@@ -43,6 +78,10 @@ const EditEntryForm = ({ entry, onDataChange }) => {
     });
   };
 
+  const images = entry.metadata.images || [];
+
+  // --- Rendu ---
+
   return (
     <Stack spacing={2.5}>
       <TextField
@@ -53,26 +92,58 @@ const EditEntryForm = ({ entry, onDataChange }) => {
         value={entry.metadata.title || ""}
         onChange={handleMetaChange("title")}
       />
+
+      <TextField
+        label="Date de l'entrée"
+        type="datetime-local"
+        size="small"
+        value={entry.metadata.date || ""}
+        onChange={handleMetaChange("date")}
+        InputLabelProps={{
+          shrink: true,
+        }}
+      />
+      
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-        <TextField
-          label="Symbole(s)"
-          variant="outlined"
-          size="small"
+        
+        <Autocomplete
+          freeSolo
+          options={SYMBOL_SUGGESTIONS}
           value={entry.metadata.symbol || ""}
-          onChange={handleMetaChange("symbol")}
-          sx={{ flex: 1 }}
-        />
-        {/* Champs conditionnels pour les trades */}
-        {entry.type === "trade" && (
-          <>
+          onInputChange={(e, val) => handleSymbolChange(e, val)}
+          onChange={handleSymbolChange}
+          renderInput={(params) => (
             <TextField
-              label="Résultat (ex: TP, SL, BE)"
+              {...params}
+              label="Symbole"
               variant="outlined"
               size="small"
-              value={entry.metadata.result || ""}
-              onChange={handleMetaChange("result")}
-              sx={{ flex: 1 }}
             />
+          )}
+          sx={{ flex: 1 }}
+        />
+        
+        {entry.type === "trade" && (
+          <>
+            <Stack spacing={1} sx={{flex: 1}}>
+              <Typography variant="body2" color="text.secondary" sx={{fontSize: '0.75rem', ml: '2px'}}>
+                Résultat
+              </Typography>
+              <ToggleButtonGroup
+                value={entry.metadata.result || "N/A"}
+                exclusive
+                onChange={handleResultChange}
+                size="small"
+                fullWidth
+              >
+                {RESULT_OPTIONS.map((opt) => (
+                  <ToggleButton key={opt.value} value={opt.value} sx={{flex: 1}}>
+                    {opt.label}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Stack>
+
             <TextField
               label="Note / Verdict (ex: +1.5R, Erreur)"
               variant="outlined"
@@ -90,7 +161,7 @@ const EditEntryForm = ({ entry, onDataChange }) => {
           Timeframe(s)
         </Typography>
         <ToggleButtonGroup
-          value={entry.metadata.timeframe || []} // Reçoit déjà un tableau
+          value={entry.metadata.timeframe || []} 
           onChange={handleTimeframeChange}
           size="small"
           sx={{ flexWrap: "wrap" }}
@@ -101,6 +172,121 @@ const EditEntryForm = ({ entry, onDataChange }) => {
             </ToggleButton>
           ))}
         </ToggleButtonGroup>
+      </Stack>
+      
+      <Stack spacing={1}>
+        <Typography variant="body2" color="text.secondary" sx={{fontSize: '0.75rem', ml: '2px'}}>
+          Images (la première est l'image principale)
+        </Typography>
+        
+        <Grid container spacing={1.5} wrap="nowrap" sx={{ overflowX: 'auto', pb: 1.5, pt: 0.5 }}>
+          {images.map((image, index) => (
+            <Grid item key={index} sx={{ flexShrink: 0, minWidth: 140 }}>
+              <Paper
+                variant="outlined"
+                sx={{
+                  position: 'relative',
+                  overflow: 'hidden',
+                  height: 120,
+                  bgcolor: index === 0 ? 'action.selected' : 'action.hover',
+                  borderWidth: 2,
+                  borderColor: index === 0 ? 'primary.main' : 'divider',
+                }}
+              >
+                <Box
+                  component="img"
+                  src={image.src}
+                  alt={`Aperçu ${index + 1}`}
+                  onClick={() => onImageClick(image.src)}
+                  sx={{
+                    maxHeight: "100%",
+                    width: "auto",
+                    maxWidth: "100%",
+                    objectFit: "contain",
+                    cursor: 'zoom-in',
+                    display: 'block',
+                    margin: '0 auto',
+                    height: '100%',
+                  }}
+                />
+                
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="error"
+                  onClick={(e) => { e.stopPropagation(); onImageDelete(index); }}
+                  sx={{ 
+                    position: 'absolute', 
+                    top: 4, 
+                    right: 4, 
+                    minWidth: 0, 
+                    width: 24, 
+                    height: 24, 
+                    p: 0,
+                    lineHeight: 0,
+                    fontSize: '1.1rem',
+                  }}
+                >
+                  &times;
+                </Button>
+                
+                {index > 0 && (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    title="Mettre en image principale"
+                    color="primary"
+                    onClick={(e) => { e.stopPropagation(); onSetMainImage(index); }}
+                    sx={{ 
+                      position: 'absolute', 
+                      bottom: 4, 
+                      left: 4,
+                      minWidth: 0, 
+                      width: 24, 
+                      height: 24, 
+                      p: 0,
+                    }}
+                  >
+                    <StarBorderIcon sx={{ fontSize: 16 }} />
+                  </Button>
+                )}
+                
+                {index === 0 && (
+                  <Box
+                    title="Image principale"
+                    sx={{
+                      position: 'absolute',
+                      bottom: 4,
+                      left: 4,
+                      color: 'primary.main',
+                      bgcolor: 'rgba(255,255,255,0.8)',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      p: 0.25
+                    }}
+                  >
+                    <StarIcon sx={{ fontSize: 16 }} />
+                  </Box>
+                )}
+              </Paper>
+            </Grid>
+          ))}
+        </Grid>
+
+        <Paper
+          variant="outlined"
+          sx={{
+            p: images.length > 0 ? 2 : 4,
+            textAlign: 'center',
+            borderStyle: 'dashed',
+            borderColor: 'divider',
+            bgcolor: 'action.hover'
+          }}
+        >
+          <Typography color="text.secondary">
+            Collez vos images (Ctrl+V) n'importe où dans cette fenêtre.
+          </Typography>
+        </Paper>
       </Stack>
 
       <Autocomplete

@@ -1,14 +1,12 @@
 // frontend/src/components/JournalEntryModal.js
-import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
-import EditIcon from "@mui/icons-material/Edit";
-// --- AJOUTS : Icônes pour la nouvelle vue ---
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
+import EditIcon from "@mui/icons-material/Edit";
 import LabelIcon from "@mui/icons-material/Label";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import TimerIcon from "@mui/icons-material/Timer";
-// --- FIN AJOUTS ---
 import {
   Alert,
   Box,
@@ -24,8 +22,8 @@ import {
   Paper,
   Stack,
   Switch,
-  Typography, // --- AJOUT ---
-  alpha, // --- AJOUT ---
+  Typography,
+  alpha,
 } from "@mui/material";
 import { useEffect, useState } from "react";
 import {
@@ -33,15 +31,16 @@ import {
   updateJournalEntry,
 } from "../services/journalClient";
 import {
-  formatDate,
-  getEntryImage,
+  formatDate, // Récupère la 1ère image (qui sera l'image principale)
   getEntryTitle,
+  isValidDate,
   resultTone,
-  typeLabel,
+  typeLabel
 } from "../utils/journalUtils";
 import EditEntryForm from "./EditEntryForm";
 
-// ... (Les fonctions de conversion de timeframe restent inchangées) ...
+// --- Fonctions Utilitaires ---
+
 const timeframesStringToArray = (tfString) => {
   if (!tfString) return [];
   if (Array.isArray(tfString)) return tfString;
@@ -53,7 +52,6 @@ const timeframesArrayToString = (tfArray) => {
   return tfArray.join(" / ");
 };
 
-// --- AJOUT : Composant utilitaire pour la grille de métadonnées ---
 const MetaItem = ({ icon, label, children }) => (
   <Grid item xs={12} sm={6}>
     <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minHeight: 40 }}>
@@ -67,7 +65,25 @@ const MetaItem = ({ icon, label, children }) => (
     </Stack>
   </Grid>
 );
-// --- FIN AJOUT ---
+
+const toInputDateTime = (dateString) => {
+  if (!dateString) return "";
+  try {
+    const date = new Date(dateString);
+    if (!isValidDate(date)) {
+      console.warn("Date invalide dans les métadonnées:", dateString);
+      return "";
+    }
+    const offset = date.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    return localISOTime;
+    
+  } catch (e) {
+    return "";
+  }
+};
+
+// --- Composant Principal ---
 
 const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
   const [isMinimalView, setIsMinimalView] = useState(true);
@@ -79,14 +95,19 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
     error: "",
   });
 
+  const [previewImageSrc, setPreviewImageSrc] = useState(null);
+
   useEffect(() => {
     if (entry) {
       const safeMetadata = entry.metadata || {};
+      const displayDate = safeMetadata.date || entry.createdAt;
+
       setEditedEntry({
         ...JSON.parse(JSON.stringify(entry)),
         metadata: {
           ...safeMetadata,
           timeframe: timeframesStringToArray(safeMetadata.timeframe),
+          date: toInputDateTime(displayDate)
         },
       });
     } else {
@@ -102,16 +123,21 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
   };
 
   const handleUpdate = async () => {
-    // ... (Logique de handleUpdate inchangée) ...
     if (!editedEntry) return;
     setMutationState({ loading: true, error: "" });
+
+    const localDate = new Date(editedEntry.metadata.date);
+    const isoDate = isValidDate(localDate) ? localDate.toISOString() : new Date().toISOString();
+
     const entryToSave = {
       ...editedEntry,
       metadata: {
         ...editedEntry.metadata,
         timeframe: timeframesArrayToString(editedEntry.metadata.timeframe),
+        date: isoDate,
       },
     };
+    
     try {
       const updated = await updateJournalEntry(entryToSave);
       onUpdate(updated);
@@ -123,7 +149,6 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
   };
 
   const handleDelete = async () => {
-    // ... (Logique de handleDelete inchangée) ...
     if (!entry) return;
     setMutationState({ loading: true, error: "" });
     try {
@@ -137,6 +162,73 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
     }
   };
 
+  const handleImageDelete = (indexToDelete) => {
+    setEditedEntry(prev => ({
+      ...prev,
+      metadata: {
+        ...prev.metadata,
+        images: (prev.metadata.images || []).filter((_, index) => index !== indexToDelete)
+      }
+    }));
+  };
+  
+  // Handler pour définir une image comme principale (en la déplaçant à l'index 0)
+  const handleSetMainImage = (indexToMakeMain) => {
+    setEditedEntry(prev => {
+      const images = [...(prev.metadata.images || [])];
+      if (indexToMakeMain < 0 || indexToMakeMain >= images.length) {
+        return prev; // Index invalide
+      }
+      // 1. Retire l'image de sa position actuelle
+      const [imageToMove] = images.splice(indexToMakeMain, 1);
+      // 2. Insère l'image au début
+      images.unshift(imageToMove);
+      return {
+        ...prev,
+        metadata: {
+          ...prev.metadata,
+          images: images
+        }
+      };
+    });
+  };
+
+
+  const handlePaste = (event) => {
+    if (!isEditing) return;
+
+    const items = event.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (!file) continue;
+
+        setMutationState({ loading: true, error: "Traitement de l'image..." });
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const src = e.target.result;
+          setEditedEntry(prev => ({
+            ...prev,
+            metadata: {
+              ...prev.metadata,
+              images: [...(prev.metadata.images || []), { src }]
+            }
+          }));
+          setMutationState({ loading: false, error: "" });
+        };
+        reader.onerror = () => {
+           setMutationState({ loading: false, error: "Impossible de lire l'image." });
+        };
+        reader.readAsDataURL(file);
+        
+        event.preventDefault();
+        break; 
+      }
+    }
+  };
+
+
   if (!entry) return null;
   if (isEditing && !editedEntry) {
     return (
@@ -147,12 +239,22 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
       </Dialog>
     );
   }
+  
+  const displayEntry = isEditing ? editedEntry : entry;
+  const displayImages = displayEntry.metadata?.images || [];
+  const mainImage = displayImages[0]?.src || null;
 
   return (
     <>
-      <Dialog fullWidth maxWidth="md" open={open} onClose={handleClose}>
+      <Dialog 
+        fullWidth 
+        maxWidth="md" 
+        open={open} 
+        onClose={handleClose}
+        onPaste={handlePaste}
+      >
         <DialogTitle sx={{ pr: { xs: 8, md: 8 } }}>
-          {isEditing ? "Modifier l'analyse" : getEntryTitle(entry)}
+          {isEditing ? "Modifier l'analyse" : getEntryTitle(displayEntry)}
         </DialogTitle>
 
         <DialogContent dividers sx={{ p: { xs: 2, md: 3 } }}>
@@ -161,24 +263,26 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
               {mutationState.error}
             </Alert>
           )}
+          {mutationState.loading && mutationState.error === "Traitement de l'image..." && (
+             <Alert severity="info" sx={{ mb: 2 }}>Traitement de l'image...</Alert>
+          )}
 
           {isEditing ? (
             // --- VUE ÉDITION ---
             <EditEntryForm
               entry={editedEntry}
               onDataChange={setEditedEntry}
+              onImageDelete={handleImageDelete}
+              onImageClick={(src) => setPreviewImageSrc(src)}
+              onSetMainImage={handleSetMainImage}
             />
           ) : (
             // --- VUE LECTURE ---
             <>
-              {/* ============================================== */}
-              {/* === NOUVEAU DESIGN "SCORECARD" MINIMAL === */}
-              {/* ============================================== */}
               {isMinimalView ? (
                 <Stack spacing={3}>
-                  {/* 1. Le Verdict / Note (mis en avant) */}
-                  {(entry.metadata?.grade ||
-                    (entry.type === "trade" && entry.metadata?.result)) && (
+                   {(displayEntry.metadata?.grade ||
+                    (displayEntry.type === "trade" && displayEntry.metadata?.result)) && (
                     <Paper
                       variant="outlined"
                       sx={(theme) => ({
@@ -210,37 +314,73 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
                             fontWeight={600}
                             sx={{ lineHeight: 1.4 }}
                           >
-                            {entry.metadata?.grade || entry.metadata?.result}
+                            {displayEntry.metadata?.grade || displayEntry.metadata?.result}
                           </Typography>
                         </Stack>
                       </Stack>
                     </Paper>
                   )}
-
-                  {/* 2. L'image et les Méta-données */}
+                  
                   <Grid container spacing={3}>
-                    {/* L'image (si elle existe) */}
-                    {getEntryImage(entry) && (
+                    {displayImages.length > 0 && (
                       <Grid item xs={12} md={6}>
-                        <Box
-                          component="img"
-                          src={getEntryImage(entry)}
-                          alt="Capture d'écran"
-                          sx={{
-                            width: "100%",
-                            borderRadius: 2,
-                            border: "1px solid",
-                            borderColor: "divider",
-                          }}
-                        />
+                        <Stack spacing={1.5}>
+                          {/* 1. Image Principale (1ère image) */}
+                          <Box
+                            component="img"
+                            src={mainImage}
+                            alt="Capture d'écran principale"
+                            onClick={() => setPreviewImageSrc(mainImage)}
+                            sx={{
+                              width: "100%",
+                              maxHeight: 250, // Hauteur réduite
+                              objectFit: "contain",
+                              borderRadius: 2,
+                              border: "1px solid",
+                              borderColor: "divider",
+                              cursor: 'zoom-in',
+                              bgcolor: 'rgba(0,0,0,0.02)'
+                            }}
+                          />
+                          
+                          {/* 2. Autres images en vignettes horizontales */}
+                          {displayImages.length > 1 && (
+                            <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', pb: 0.5 }}>
+                              {displayImages.slice(1).map((image, index) => (
+                                <Paper
+                                  key={index}
+                                  variant="outlined"
+                                  onClick={() => setPreviewImageSrc(image.src)}
+                                  sx={{
+                                    flexShrink: 0,
+                                    cursor: 'zoom-in',
+                                    overflow: 'hidden',
+                                    width: 80, // Largeur fixe
+                                    height: 60, // Hauteur fixe
+                                    bgcolor: 'action.hover'
+                                  }}
+                                >
+                                  <Box
+                                    component="img"
+                                    src={image.src}
+                                    alt={`Aperçu ${index + 2}`}
+                                    sx={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                    }}
+                                  />
+                                </Paper>
+                              ))}
+                            </Stack>
+                          )}
+                        </Stack>
                       </Grid>
                     )}
-
-                    {/* Les Méta-données */}
                     <Grid
                       item
                       xs={12}
-                      md={getEntryImage(entry) ? 6 : 12}
+                      md={displayImages.length > 0 ? 6 : 12}
                     >
                       <Grid container spacing={2}>
                         <MetaItem
@@ -249,56 +389,52 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
                         >
                           <Chip
                             label={
-                              typeLabel[entry.type]?.chip || entry.type
+                              typeLabel[displayEntry.type]?.chip || displayEntry.type
                             }
                             size="small"
                             color={
-                              typeLabel[entry.type]?.color || "default"
+                              typeLabel[displayEntry.type]?.color || "default"
                             }
                             variant="outlined"
                             sx={{ fontWeight: 600 }}
                           />
                         </MetaItem>
-
-                        {entry.type === "trade" && (
+                        {displayEntry.type === "trade" && (
                           <MetaItem
                             icon={<CheckCircleOutlineIcon fontSize="small" />}
                             label="Résultat"
                           >
                             <Chip
-                              label={entry.metadata?.result || "N/A"}
+                              label={displayEntry.metadata?.result || "N/A"}
                               size="small"
-                              color={resultTone(entry.metadata?.result)}
+                              color={resultTone(displayEntry.metadata?.result)}
                               sx={{ fontWeight: 600 }}
                             />
                           </MetaItem>
                         )}
-
                         <MetaItem
                           icon={<ShowChartIcon fontSize="small" />}
                           label="Symbole(s)"
                         >
                           <Typography variant="body1" fontWeight={600}>
-                            {entry.metadata?.symbol || "N/A"}
+                            {displayEntry.metadata?.symbol || "N/A"}
                           </Typography>
                         </MetaItem>
-
                         <MetaItem
                           icon={<TimerIcon fontSize="small" />}
                           label="Timeframe(s)"
                         >
                           <Typography variant="body1" fontWeight={600}>
-                            {entry.metadata?.timeframe || "N/A"}
+                            {displayEntry.metadata?.timeframe || "N/A"}
                           </Typography>
                         </MetaItem>
-
                         <MetaItem
                           icon={<CalendarTodayIcon fontSize="small" />}
                           label="Date"
                         >
                           <Typography variant="body1" fontWeight={600}>
                             {formatDate(
-                              entry.metadata?.date || entry.createdAt,
+                              displayEntry.metadata?.date || displayEntry.createdAt,
                               { dateStyle: "long", timeStyle: "short" }
                             )}
                           </Typography>
@@ -312,24 +448,31 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
                 <>
                   <Typography variant="caption" color="text.secondary">
                     {formatDate(
-                      entry.metadata?.date || entry.createdAt,
+                      displayEntry.metadata?.date || displayEntry.createdAt,
                       { dateStyle: "full", timeStyle: "short" }
                     )}
                   </Typography>
-                  {getEntryImage(entry) && (
+                  
+                  <Stack direction="row" spacing={1} sx={{mt: 2, flexWrap: 'wrap'}}>
+                  {displayImages.map((img, idx) => (
                     <Box
+                      key={idx}
                       component="img"
-                      src={getEntryImage(entry)}
-                      alt="Capture d'écran"
+                      src={img.src}
+                      alt={`Capture ${idx + 1}`}
+                      onClick={() => setPreviewImageSrc(img.src)}
                       sx={{
-                        width: "100%",
-                        borderRadius: 2,
-                        mt: 2,
+                        height: 100,
+                        width: 'auto',
+                        borderRadius: 1,
                         border: "1px solid",
                         borderColor: "divider",
+                        cursor: 'zoom-in'
                       }}
                     />
-                  )}
+                  ))}
+                  </Stack>
+                  
                   <Typography
                     variant="body1"
                     sx={{
@@ -339,7 +482,7 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
                       fontSize: "0.9rem",
                     }}
                   >
-                    {entry?.content}
+                    {displayEntry?.content}
                   </Typography>
                   <Box
                     component="pre"
@@ -354,7 +497,7 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
                       mt: 2,
                     }}
                   >
-                    {JSON.stringify(entry?.metadata, null, 2)}
+                    {JSON.stringify(displayEntry?.metadata, null, 2)}
                   </Box>
                 </>
               )}
@@ -362,7 +505,6 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
           )}
         </DialogContent>
 
-        {/* --- ACTIONS DE LA MODALE --- */}
         <DialogActions
           sx={{
             justifyContent: "space-between",
@@ -371,7 +513,6 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
           }}
         >
           {isEditing ? (
-            // ... (Actions d'édition inchangées) ...
             <Stack direction="row" spacing={1} justifyContent="space-between" width="100%">
               <Button
                 variant="outlined"
@@ -391,7 +532,6 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
               </Button>
             </Stack>
           ) : (
-            // ... (Actions de lecture inchangées) ...
             <>
               <Stack direction="row" spacing={1} alignItems="center">
                 <FormControlLabel
@@ -429,13 +569,11 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
         </DialogActions>
       </Dialog>
 
-      {/* --- MODALE DE CONFIRMATION SUPPRESSION --- */}
       <Dialog
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         maxWidth="xs"
       >
-        {/* ... (Contenu modale suppression inchangé) ... */}
         <DialogTitle>Confirmer la suppression</DialogTitle>
         <DialogContent>
           <Typography>
@@ -465,6 +603,33 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
             {mutationState.loading ? "Suppression..." : "Supprimer"}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(previewImageSrc)}
+        onClose={() => setPreviewImageSrc(null)}
+        maxWidth="lg"
+        PaperProps={{
+          sx: {
+            bgcolor: 'transparent',
+            boxShadow: 'none',
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <Box
+          component="img"
+          src={previewImageSrc || ""}
+          alt="Aperçu"
+          onClick={() => setPreviewImageSrc(null)}
+          sx={{
+            width: '100%',
+            height: 'auto',
+            maxHeight: '90vh',
+            objectFit: 'contain',
+            cursor: 'zoom-out'
+          }}
+        />
       </Dialog>
     </>
   );
