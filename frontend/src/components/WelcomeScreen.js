@@ -67,7 +67,7 @@ const WelcomeScreen = ({ onSuggestionClick }) => {
           WebkitTextFillColor: "transparent",
         }}
       >
-        Bonjour. Que souhaitez-vous analyser ?
+        Bonjour Luka, Que souhaitez-vous analyser ?
       </Typography>
       <Typography variant="body1" color="text.secondary">
         Commencez par dicter, coller, ou taper votre analyse de trade.
