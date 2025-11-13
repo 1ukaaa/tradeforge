@@ -1,9 +1,11 @@
-import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import AppLayout from "./layout/AppLayout";
-import NewEntry from "./pages/NewEntry";
 import Journal from "./pages/Journal";
-import Stats from "./pages/Stats";
+import NewEntry from "./pages/NewEntry";
 import Settings from "./pages/Settings";
+import Stats from "./pages/Stats";
+// 1. IMPORTER LA NOUVELLE PAGE
+import Calendar from "./pages/Calendar";
 
 const App = () => {
   return (
@@ -14,6 +16,8 @@ const App = () => {
           <Route path="journal" element={<Journal />} />
           <Route path="stats" element={<Stats />} />
           <Route path="settings" element={<Settings />} />
+          {/* 2. AJOUTER LA NOUVELLE ROUTE */}
+          <Route path="calendar" element={<Calendar />} />
         </Route>
       </Routes>
     </Router>

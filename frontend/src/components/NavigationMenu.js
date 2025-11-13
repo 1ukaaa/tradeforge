@@ -19,7 +19,8 @@ import InsightsRoundedIcon from "@mui/icons-material/InsightsRounded";
 import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
-// [MODIFICATION] Importer le hook du thème
+// 1. AJOUTER L'ICÔNE CALENDRIER
+import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
 import { useThemeMode } from "../context/ThemeModeContext";
 
 // Listes d'items séparées par groupes
@@ -42,6 +43,12 @@ const WORKSPACE_NAV = [
     label: "Dashboard",
     icon: <InsightsRoundedIcon />,
   },
+  // 2. AJOUTER LE NOUVEL ITEM
+  {
+    to: "/calendar",
+    label: "Calendrier",
+    icon: <CalendarMonthRoundedIcon />,
+  },
 ];
 
 const SETTINGS_ITEM = {
@@ -50,7 +57,11 @@ const SETTINGS_ITEM = {
   icon: <SettingsRoundedIcon />,
 };
 
-// Composant de lien stylisé
+// ... le reste du fichier (StyledNavItem, NavigationMenu) reste identique ...
+// ...
+// (Le reste du fichier que vous m'avez fourni est inchangé)
+// ...
+
 const StyledNavItem = ({ to, label, icon }) => {
   const location = useLocation();
   const theme = useTheme();
