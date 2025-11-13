@@ -1,12 +1,23 @@
 // backend/src/app.js
 const express = require('express');
 const cors = require('cors');
+const { CORS_ALLOWED_ORIGINS, CORS_ALLOW_ALL } = require('./config/server.config');
 const apiRoutes = require('./routes'); // Importe le routeur principal
 
 const app = express();
 
 // Middlewares globaux
-app.use(cors());
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin || CORS_ALLOW_ALL || CORS_ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(
+      new Error(`Origine ${origin} non autorisée par le serveur (CORS).`)
+    );
+  },
+};
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '15mb' }));
 
 // Route de santé

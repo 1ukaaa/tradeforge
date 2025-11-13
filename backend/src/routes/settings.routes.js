@@ -10,19 +10,21 @@ const {
   updateStructuredTemplate,
 } = require('../controllers/settings.controller');
 
-const router = Router();
+const settingsRouter = Router();
+settingsRouter.get('/', getSettings);
+settingsRouter.put('/', updateSettings);
 
-// /api/settings
-router.get('/', getSettings);
-router.put('/', updateSettings);
+const promptVariantsRouter = Router();
+promptVariantsRouter.get('/', getPromptVariants);
+promptVariantsRouter.put('/', updatePromptVariant);
+promptVariantsRouter.delete('/', deletePromptVariant);
 
-// /api/prompt-variants
-router.get('/prompt-variants', getPromptVariants);
-router.put('/prompt-variants', updatePromptVariant);
-router.delete('/prompt-variants', deletePromptVariant);
+const structuredTemplatesRouter = Router();
+structuredTemplatesRouter.get('/', getStructuredTemplates);
+structuredTemplatesRouter.put('/', updateStructuredTemplate);
 
-// /api/structured-templates
-router.get('/structured-templates', getStructuredTemplates);
-router.put('/structured-templates', updateStructuredTemplate);
-
-module.exports = router;
+module.exports = {
+  settingsRouter,
+  promptVariantsRouter,
+  structuredTemplatesRouter,
+};

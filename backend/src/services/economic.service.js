@@ -1,6 +1,6 @@
 // backend/src/services/economic.service.js
 const axios = require("axios");
-require("dotenv").config();
+const { ECONOMIC_EVENTS_SOURCE_URL } = require("../config/server.config");
 
 // Cache en mémoire simple
 let cache = {
@@ -25,32 +25,49 @@ const mapEvents = (events) => {
 
   return events
     .map((event) => {
-      // *** LOGIQUE MISE À JOUR BASÉE SUR LE JSON FOURNI ***
+      // *** LOGIQUE MISE À JOUR POUR INCLURE TOUS LES IMPACTS ***
       
-      // 1. Lire les champs (basé sur votre JSON)
+      // 1. Lire les champs
       const impact = event.impact ? event.impact.toLowerCase() : "none";
-      const currency = event.country || "???"; // Clé correcte: event.country
-      const title = event.title || "Événement inconnu"; // Clé correcte: event.title
-      const date = event.date; // Clé correcte: event.date
+      const currency = event.country || "???";
+      const title = event.title || "Événement inconnu";
+      const date = event.date;
       
-      // 2. Filtrer les impacts (on ne garde que 'high' et 'medium')
-      const isHighImpact = impact === "high";
-      const isMediumImpact = impact === "medium";
-
-      if (!isHighImpact && !isMediumImpact) {
-        // Cela exclura "Low" et "Holiday"
-        return null; 
+      // 2. Définir les couleurs par impact
+      let color;
+      switch (impact) {
+        case "high":
+          color = "#880e4f"; // Rose foncé
+          break;
+        case "medium":
+          color = "#c66900"; // Orange
+          break;
+        case "low":
+          color = "#0288d1"; // Bleu
+          break;
+        case "holiday":
+          color = "#2e7d32"; // Vert
+          break;
+        default:
+          color = "#5f6368"; // Gris
       }
 
+      // 3. RETOURNER L'OBJET COMPLET
+      // On ne filtre plus ici, le frontend s'en chargera.
       return {
         id: `${date}-${currency}-${title}`, // ID unique
         title: `(${currency}) ${title}`,
         date: date,
-        allDay: false,
-        color: isHighImpact ? "#880e4f" : "#c66900", // Rose pour High, Orange pour Medium
+        allDay: false, // La plupart des annonces ont une heure précise
+        color: color,
+        // PROPRIÉTÉ AJOUTÉE (ESSENTIELLE POUR LES FILTRES)
+        extendedProps: {
+          type: 'economic',
+          impact: impact 
+        }
       };
-    })
-    .filter(Boolean); // Retire tous les 'null' (événements filtrés)
+    });
+  // .filter(Boolean) n'est plus nécessaire car on ne retourne plus 'null'
 };
 
 
@@ -73,10 +90,18 @@ const getEconomicEvents = async () => {
   isFetching = true; // Pose le verrou
 
   // Utilise la variable d'environnement (elle doit pointer vers le .json)
-  const url = process.env.FOREX_FACTORY_URL; 
+  const url = ECONOMIC_EVENTS_SOURCE_URL;
   if (!url) {
     console.warn("URL FOREX_FACTORY_URL non définie dans .env");
     isFetching = false; // Libère le verrou
+    return [];
+  }
+
+  try {
+    new URL(url);
+  } catch {
+    console.warn("URL FOREX_FACTORY_URL invalide:", url);
+    isFetching = false;
     return [];
   }
 
@@ -85,16 +110,16 @@ const getEconomicEvents = async () => {
     const { data: jsonEvents } = await axios.get(url);
 
     // Transforme les données JSON en événements de calendrier
-    const filtered = mapEvents(jsonEvents); // Appel de la fonction corrigée
+    const allEvents = mapEvents(jsonEvents); // Appel de la fonction corrigée
 
     // Met à jour le cache
     cache = {
-      data: filtered,
+      data: allEvents,
       lastFetch: now,
     };
 
-    console.log(`Service éco (JSON) : Cache mis à jour avec ${filtered.length} événements.`);
-    return filtered;
+    console.log(`Service éco (JSON) : Cache mis à jour avec ${allEvents.length} événements.`);
+    return allEvents;
 
   } catch (err) {
     console.error("Erreur lors de la récupération du calendrier JSON:", err.message);
