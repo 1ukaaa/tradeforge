@@ -2,6 +2,7 @@
 import { Box, Stack, Tab, Tabs, Typography } from "@mui/material";
 import { useState } from "react";
 // Importer les nouveaux composants de panneau
+import SettingsAccount from "./settings/SettingsAccount"; // NOUVEL IMPORT
 import SettingsAppearance from "./settings/SettingsAppearance";
 import SettingsPlan from "./settings/SettingsPlan";
 import SettingsPromptVariants from "./settings/SettingsPromptVariants";
@@ -15,7 +16,8 @@ const TabPanel = ({ children, value, index }) => (
 );
 
 const Settings = () => {
-  const [activeTab, setActiveTab] = useState("appearance"); // Démarrer sur "Apparence"
+  // Démarrer sur "Compte" pour voir directement la nouvelle page
+  const [activeTab, setActiveTab] = useState("account"); 
 
   const handleTabChange = (_, newValue) => {
     setActiveTab(newValue);
@@ -42,7 +44,8 @@ const Settings = () => {
           <Tab label="Prompts (JSON)" value="structured" />
           <Tab label="Prompts (Texte)" value="variants" />
           <Tab label="Notifications" value="notifications" disabled />
-          <Tab label="Compte" value="account" disabled />
+          {/* Onglet "Compte" activé */}
+          <Tab label="Compte" value="account" /> 
         </Tabs>
       </Box>
 
@@ -60,7 +63,12 @@ const Settings = () => {
         <TabPanel value={activeTab} index="variants">
           <SettingsPromptVariants />
         </TabPanel>
-        {/* Les panneaux pour "Notifications" et "Compte" peuvent être ajoutés ici */}
+        
+        {/* Nouveau panneau pour "Compte" */}
+        <TabPanel value={activeTab} index="account">
+          <SettingsAccount />
+        </TabPanel>
+
       </Box>
     </Stack>
   );

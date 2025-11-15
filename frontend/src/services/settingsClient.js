@@ -8,10 +8,16 @@ const STRUCTURED_TEMPLATES_ENDPOINT = buildApiUrl("structured-templates");
 export const fetchSettings = async () => {
   const response = await fetch(SETTINGS_ENDPOINT);
   const data = await ensureSuccess(response, "Impossible de récupérer les paramètres.");
+  // Inclure les nouveaux champs
   return {
     structuredVariant: data?.structuredVariant || null,
     analysisVariant: data?.analysisVariant || null,
     tradeVariant: data?.tradeVariant || null,
+    accountName: data?.accountName || "Luka",
+    capitalForex: data?.capitalForex || 0,
+    capitalCrypto: data?.capitalCrypto || 0,
+    capitalForexCurrency: data?.capitalForexCurrency || "EUR", // NOUVEAU
+    capitalCryptoCurrency: data?.capitalCryptoCurrency || "USD", // NOUVEAU
   };
 };
 
@@ -19,13 +25,19 @@ export const saveSettings = async (settings) => {
   const response = await fetch(SETTINGS_ENDPOINT, {
     method: "PUT",
     headers: jsonHeaders,
-    body: JSON.stringify(settings),
+    body: JSON.stringify(settings), // Envoie tous les champs (y compris les nouveaux)
   });
   const data = await ensureSuccess(response, "Impossible d'enregistrer les paramètres.");
+  // Retourner les nouveaux champs
   return {
     structuredVariant: data?.structuredVariant || null,
     analysisVariant: data?.analysisVariant || null,
     tradeVariant: data?.tradeVariant || null,
+    accountName: data?.accountName || "Luka",
+    capitalForex: data?.capitalForex || 0,
+    capitalCrypto: data?.capitalCrypto || 0,
+    capitalForexCurrency: data?.capitalForexCurrency || "EUR", // NOUVEAU
+    capitalCryptoCurrency: data?.capitalCryptoCurrency || "USD", // NOUVEAU
   };
 };
 

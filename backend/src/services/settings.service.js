@@ -76,7 +76,7 @@ const getStructuredTemplates = () => {
 };
 
 
-// --- App Settings (Active Variants) ---
+// --- App Settings (Active Variants & Account) ---
 
 const getSetting = (key) => {
   const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
@@ -100,7 +100,25 @@ const getSettings = () => {
   const structuredVariant = getSetting("structured_variant")?.value || DEFAULT_STRUCTURED_VARIANT;
   const analysisVariant = getSetting("analysis_variant")?.value || "default";
   const tradeVariant = getSetting("trade_variant")?.value || "default";
-  return { structuredVariant, analysisVariant, tradeVariant };
+  
+  // Champs pour le compte
+  const accountName = getSetting("account_name")?.value || "Luka";
+  const capitalForex = getSetting("capital_forex")?.value || 0;
+  const capitalCrypto = getSetting("capital_crypto")?.value || 0;
+  // REMPLACEMENT de accountCurrency par deux champs
+  const capitalForexCurrency = getSetting("capital_forex_currency")?.value || "EUR"; // NOUVEAU
+  const capitalCryptoCurrency = getSetting("capital_crypto_currency")?.value || "USD"; // NOUVEAU
+
+  return { 
+    structuredVariant, 
+    analysisVariant, 
+    tradeVariant,
+    accountName,
+    capitalForex,
+    capitalCrypto,
+    capitalForexCurrency,  // NOUVEAU
+    capitalCryptoCurrency  // NOUVEAU
+  };
 };
 
 const updateSettings = (updates) => {
@@ -118,6 +136,31 @@ const updateSettings = (updates) => {
     upsertSetting("trade_variant", updates.tradeVariant);
     current.tradeVariant = updates.tradeVariant;
   }
+
+  // Champs pour le compte
+  if (updates.accountName) {
+    upsertSetting("account_name", updates.accountName);
+    current.accountName = updates.accountName;
+  }
+  if (updates.capitalForex !== undefined) {
+    upsertSetting("capital_forex", parseFloat(updates.capitalForex) || 0);
+    current.capitalForex = parseFloat(updates.capitalForex) || 0;
+  }
+  if (updates.capitalCrypto !== undefined) {
+    upsertSetting("capital_crypto", parseFloat(updates.capitalCrypto) || 0);
+    current.capitalCrypto = parseFloat(updates.capitalCrypto) || 0;
+  }
+  
+  // REMPLACEMENT de accountCurrency par deux champs
+  if (updates.capitalForexCurrency) { // NOUVEAU
+    upsertSetting("capital_forex_currency", updates.capitalForexCurrency);
+    current.capitalForexCurrency = updates.capitalForexCurrency;
+  }
+  if (updates.capitalCryptoCurrency) { // NOUVEAU
+    upsertSetting("capital_crypto_currency", updates.capitalCryptoCurrency);
+    current.capitalCryptoCurrency = updates.capitalCryptoCurrency;
+  }
+
   return current;
 };
 

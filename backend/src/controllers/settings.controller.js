@@ -11,15 +11,43 @@ const getSettings = (req, res) => {
 };
 
 const updateSettings = (req, res) => {
-  const { structuredVariant, analysisVariant, tradeVariant } = req.body;
-  const updates = { structuredVariant, analysisVariant, tradeVariant };
+  // Inclure les nouveaux champs de devises
+  const { 
+    structuredVariant, 
+    analysisVariant, 
+    tradeVariant,
+    accountName,
+    capitalForex,
+    capitalCrypto,
+    capitalForexCurrency, // NOUVEAU
+    capitalCryptoCurrency // NOUVEAU
+  } = req.body;
+  
+  const updates = { 
+    structuredVariant, 
+    analysisVariant, 
+    tradeVariant,
+    accountName,
+    capitalForex,
+    capitalCrypto,
+    capitalForexCurrency, // NOUVEAU
+    capitalCryptoCurrency // NOUVEAU
+  };
 
-  if (Object.values(updates).every(v => v === undefined)) {
+  // Filtrer les clés undefined pour que la vérification ci-dessous fonctionne
+  const definedUpdates = Object.entries(updates).reduce((acc, [key, value]) => {
+    if (value !== undefined) {
+      acc[key] = value;
+    }
+    return acc;
+  }, {});
+
+  if (Object.keys(definedUpdates).length === 0) {
     return res.status(400).json({ error: "Aucun champ à mettre à jour." });
   }
   
   try {
-    const newSettings = settingsService.updateSettings(updates);
+    const newSettings = settingsService.updateSettings(definedUpdates);
     res.json(newSettings);
   } catch (err) {
     console.error("Erreur settings :", err);
