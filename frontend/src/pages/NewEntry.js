@@ -1,6 +1,8 @@
+// frontend/src/pages/NewEntry.js
+
 import { Alert, alpha, Box, CircularProgress, Paper, Stack, Typography } from "@mui/material";
-// 'useState' est déjà importé
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom"; // <--- AJOUT : Pour lire l'état de navigation
 import ChatInputBar from "../components/ChatInputBar";
 import EditableAnalysis from "../components/EditableAnalysis";
 import WelcomeScreen from "../components/WelcomeScreen";
@@ -52,9 +54,18 @@ const NewEntry = () => {
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState("");
 
-  // NOUVEL ÉTAT : Gère l'outil sélectionné dans la barre d'input
-  // On met "analyse" par défaut.
-  const [activeTool, setActiveTool] = useState("analyse");
+  // NOUVEL ÉTAT (Logique modifiée)
+  // On lit l'état de la navigation pour définir l'onglet initial
+  const { state } = useLocation();
+  const getInitialTool = () => {
+    const defaultTab = state?.defaultTab; // Vient de Home.js
+    if (defaultTab === 'trade') {
+      return 'trade'; // 'trade' correspond à 'trade'
+    }
+    // 'ai' (de Home.js) ou une navigation directe (null) correspond à 'analyse'
+    return 'analyse';
+  };
+  const [activeTool, setActiveTool] = useState(getInitialTool); // <-- MODIFIÉ
 
   const suggestionClickCallback = useRef(null);
   const scrollRef = useRef(null);
@@ -84,7 +95,7 @@ const NewEntry = () => {
     }
   }, [userTranscript, aiAnalysis, loading]);
 
-  // 2. Logique de soumission (MODIFIÉE)
+  // 2. Logique de soumission (inchangée)
   const handleSend = async (rawText) => {
     setLoading(true);
     setError("");
@@ -94,25 +105,19 @@ const NewEntry = () => {
     setAiAnalysis("");
     setStructuredMetadata(null);
 
-    // [MODIFICATION]
-    // Au lieu de deviner ("isTrade"), on utilise l'état 'activeTool'
-    // qui est contrôlé par le nouveau menu.
-    const entryType = activeTool; // C'est soit "analyse", soit "trade"
+    const entryType = activeTool;
     const template = entryType === "trade" ? tradeVariant : analysisVariant;
-    // [FIN MODIFICATION]
 
     try {
       const [analysisResult, structuredData] = await Promise.all([
-        // Appel 1: Obtenir le texte brut de l'analyse
         requestAnalysis({
           rawText,
-          template, // 'template' est maintenant 'tradeVariant' ou 'analysisVariant'
+          template,
           plan: planDescription,
         }),
-        // Appel 2: Obtenir les métadonnées JSON
         requestStructuredAnalysis({
           rawText,
-          entryType, // 'entryType' est explicitement "trade" ou "analyse"
+          entryType,
           plan: planDescription,
           variant: structuredVariant,
         })
@@ -134,7 +139,7 @@ const NewEntry = () => {
     }
   };
 
-  // 3. Logique de Sauvegarde (MODIFIÉE)
+  // 3. Logique de Sauvegarde (inchangée)
   const handleSave = async (finalContent, finalMetadata) => {
     if (!finalContent || !userTranscript) {
       setSaveError("Aucune analyse à sauvegarder.");
@@ -146,13 +151,8 @@ const NewEntry = () => {
     setSaveSuccess("");
 
     try {
-      // [MODIFICATION]
-      // On utilise 'activeTool' comme source de vérité pour le type,
-      // au lieu de le redétecter.
       const entryType = finalMetadata.entryType || activeTool;
-      // [FIN MODIFICATION]
 
-      // Sauvegarder au journal
       await saveJournalEntry({
         type: entryType,
         content: finalContent,
@@ -255,12 +255,11 @@ const NewEntry = () => {
         </Stack>
       </Box>
 
-      {/* Barre d'input fixe (MODIFIÉE) */}
+      {/* Barre d'input fixe (inchangée) */}
       <ChatInputBar
         onSend={handleSend}
         loading={loading}
         onSuggestionClick={suggestionClickCallback}
-        // Props ajoutées pour lier l'état au composant
         activeTool={activeTool}
         onToolChange={setActiveTool}
       />

@@ -15,6 +15,7 @@ import BrandLogo from "./BrandLogo";
 
 // Icônes
 import DashboardCustomizeRoundedIcon from "@mui/icons-material/DashboardCustomizeRounded";
+import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import InsightsRoundedIcon from "@mui/icons-material/InsightsRounded";
 import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
@@ -25,6 +26,11 @@ import { useThemeMode } from "../context/ThemeModeContext";
 
 // Listes d'items séparées par groupes
 const MAIN_NAV = [
+  {
+    to: "/home",
+    label: "Home",
+    icon: <HomeRoundedIcon />,
+  },
   {
     to: "/",
     label: "TradeForge AI",
