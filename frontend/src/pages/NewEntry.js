@@ -11,6 +11,7 @@ import { saveJournalEntry } from "../services/journalClient";
 import { fetchPlan } from "../services/planClient";
 import { fetchSettings } from "../services/settingsClient";
 import { buildPlanDescription } from "../utils/planUtils";
+import { stringifyTimeframes } from "../utils/timeframeUtils";
 
 // Le composant UserPrompt (inchangé)
 const UserPrompt = ({ text }) => (
@@ -128,7 +129,10 @@ const NewEntry = () => {
       }
 
       setAiAnalysis(analysisResult);
-      setStructuredMetadata(structuredData.metadata);
+      setStructuredMetadata({
+        ...structuredData.metadata,
+        timeframe: stringifyTimeframes(structuredData.metadata?.timeframe),
+      });
 
     } catch (err) {
       console.error("Échec de l'analyse:", err);

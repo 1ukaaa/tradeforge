@@ -9,22 +9,31 @@ export const isValidDate = (value) =>
   value instanceof Date && !Number.isNaN(value.getTime());
 
 /**
- * Formate une date ISO en format court.
+ * Formate une date ISO en format court (JJ/MM/AAAA).
  * @param {string} iso - La chaîne ISO de la date.
  * @param {object} options - Options pour Intl.DateTimeFormat.
  * @returns {string} - La date formatée.
  */
 export const formatDate = (iso, options = {}) => {
-  const defaults = { day: "2-digit", month: "short", year: "numeric" };
   if (!iso) return "Date inconnue";
+  const date = new Date(iso);
+  if (!isValidDate(date)) return iso;
+
+  const useStyle = options?.dateStyle || options?.timeStyle;
+  const defaults = useStyle
+    ? {}
+    : { day: "2-digit", month: "2-digit", year: "numeric" };
+
   try {
-    const date = new Date(iso);
-    if (!isValidDate(date)) return iso; // Retourne l'original si invalide
     return new Intl.DateTimeFormat("fr-FR", { ...defaults, ...options }).format(
       date
     );
   } catch {
-    return iso;
+    return date.toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
   }
 };
 

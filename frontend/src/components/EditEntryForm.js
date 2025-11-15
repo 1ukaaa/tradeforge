@@ -14,10 +14,11 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
+import {
+  TIMEFRAME_OPTIONS,
+  normalizeTimeframes,
+} from "../utils/timeframeUtils";
 
-// --- Constantes ---
-
-const TIMEFRAME_OPTIONS = ["W1", "D1", "H4", "H1", "M15", "M5"];
 const RESULT_OPTIONS = [
   { value: "TP", label: "TP" },
   { value: "SL", label: "SL" },
@@ -72,13 +73,15 @@ const EditEntryForm = ({ entry, onDataChange, onImageDelete, onImageClick, onSet
   };
 
   const handleTimeframeChange = (event, newTimeframes) => {
+    const normalized = normalizeTimeframes(newTimeframes || []);
     onDataChange({
       ...entry,
-      metadata: { ...entry.metadata, timeframe: newTimeframes },
+      metadata: { ...entry.metadata, timeframe: normalized },
     });
   };
 
   const images = entry.metadata.images || [];
+  const metadataDateInput = (entry.metadata?.date || "").split("T")[0];
 
   // --- Rendu ---
 
@@ -95,9 +98,9 @@ const EditEntryForm = ({ entry, onDataChange, onImageDelete, onImageClick, onSet
 
       <TextField
         label="Date de l'entrée"
-        type="datetime-local"
+        type="date"
         size="small"
-        value={entry.metadata.date || ""}
+        value={metadataDateInput}
         onChange={handleMetaChange("date")}
         InputLabelProps={{
           shrink: true,
@@ -161,7 +164,7 @@ const EditEntryForm = ({ entry, onDataChange, onImageDelete, onImageClick, onSet
           Timeframe(s)
         </Typography>
         <ToggleButtonGroup
-          value={entry.metadata.timeframe || []} 
+          value={entry.metadata.timeframe || []}
           onChange={handleTimeframeChange}
           size="small"
           sx={{ flexWrap: "wrap" }}

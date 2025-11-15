@@ -37,20 +37,14 @@ import {
   resultTone,
   typeLabel
 } from "../utils/journalUtils";
+import {
+  normalizeTimeframes,
+  stringifyTimeframes,
+  formatTimeframesForDisplay,
+} from "../utils/timeframeUtils";
 import EditEntryForm from "./EditEntryForm";
 
 // --- Fonctions Utilitaires ---
-
-const timeframesStringToArray = (tfString) => {
-  if (!tfString) return [];
-  if (Array.isArray(tfString)) return tfString;
-  return tfString.split(/[\s,/\\]+/).filter(Boolean);
-};
-const timeframesArrayToString = (tfArray) => {
-  if (!tfArray) return "";
-  if (typeof tfArray === "string") return tfArray;
-  return tfArray.join(" / ");
-};
 
 const MetaItem = ({ icon, label, children }) => (
   <Grid item xs={12} sm={6}>
@@ -106,7 +100,7 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
         ...JSON.parse(JSON.stringify(entry)),
         metadata: {
           ...safeMetadata,
-          timeframe: timeframesStringToArray(safeMetadata.timeframe),
+          timeframe: normalizeTimeframes(safeMetadata.timeframe),
           date: toInputDateTime(displayDate)
         },
       });
@@ -133,7 +127,7 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
       ...editedEntry,
       metadata: {
         ...editedEntry.metadata,
-        timeframe: timeframesArrayToString(editedEntry.metadata.timeframe),
+        timeframe: stringifyTimeframes(editedEntry.metadata.timeframe),
         date: isoDate,
       },
     };
@@ -425,7 +419,7 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
                           label="Timeframe(s)"
                         >
                           <Typography variant="body1" fontWeight={600}>
-                            {displayEntry.metadata?.timeframe || "N/A"}
+                            {formatTimeframesForDisplay(displayEntry.metadata?.timeframe) || "N/A"}
                           </Typography>
                         </MetaItem>
                         <MetaItem
@@ -435,7 +429,7 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
                           <Typography variant="body1" fontWeight={600}>
                             {formatDate(
                               displayEntry.metadata?.date || displayEntry.createdAt,
-                              { dateStyle: "long", timeStyle: "short" }
+                              { dateStyle: "long" }
                             )}
                           </Typography>
                         </MetaItem>
@@ -449,7 +443,7 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
                   <Typography variant="caption" color="text.secondary">
                     {formatDate(
                       displayEntry.metadata?.date || displayEntry.createdAt,
-                      { dateStyle: "full", timeStyle: "short" }
+                      { dateStyle: "full" }
                     )}
                   </Typography>
                   
