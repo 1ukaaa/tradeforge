@@ -1,11 +1,11 @@
 import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import AppLayout from "./layout/AppLayout";
 import Calendar from "./pages/Calendar";
+import Dashboard from "./pages/Dashboard";
 import Home from './pages/Home';
 import Journal from "./pages/Journal";
 import NewEntry from "./pages/NewEntry";
 import Settings from "./pages/Settings";
-import Stats from "./pages/Stats";
 
 const App = () => {
   return (
@@ -15,7 +15,7 @@ const App = () => {
           <Route path="/home" element={<Home />} />
           <Route index element={<NewEntry />} />
           <Route path="journal" element={<Journal />} />
-          <Route path="stats" element={<Stats />} />
+          <Route path="dashboard" element={<Dashboard />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="settings" element={<Settings />} />
         </Route>

@@ -6,6 +6,7 @@ const AppLayout = () => {
   const location = useLocation();
   // La page NewEntry ("/") aura une mise en page spéciale
   const isChatPage = location.pathname === "/";
+  const isDashboardPage = location.pathname === "/dashboard";
 
   return (
     <Box
@@ -42,9 +43,9 @@ const AppLayout = () => {
           <Box
             sx={{
               width: "100%",
-              maxWidth: { lg: 980, xl: 1080 },
-              mx: "auto", 
-              p: { xs: 2, md: 4, lg: 6 }, 
+              maxWidth: isDashboardPage ? "none" : { lg: 980, xl: 1080 },
+              mx: isDashboardPage ? 0 : "auto",
+              p: isDashboardPage ? { xs: 1, md: 2 } : { xs: 2, md: 4, lg: 6 }, 
               pb: { xs: 4, md: 6 },
             }}
           >

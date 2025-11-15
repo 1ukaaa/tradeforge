@@ -45,7 +45,7 @@ const WORKSPACE_NAV = [
     icon: <DashboardCustomizeRoundedIcon />,
   },
   {
-    to: "/stats",
+    to: "/dashboard",
     label: "Dashboard",
     icon: <InsightsRoundedIcon />,
   },
