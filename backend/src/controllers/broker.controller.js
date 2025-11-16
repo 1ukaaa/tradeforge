@@ -96,6 +96,23 @@ const syncBrokerAccount = async (req, res) => {
   }
 };
 
+const importBrokerCsv = async (req, res) => {
+  const { id } = req.params;
+  if (!req.file) {
+    return res.status(400).json({ error: "Fichier CSV requis pour l'import." });
+  }
+  try {
+    const { account, tradesCount, retrievedCount } = await brokerService.importBrokerCsv(
+      Number(id),
+      req.file
+    );
+    res.json({ account, tradesCount, retrievedCount });
+  } catch (error) {
+    console.error("Erreur import CSV broker:", error);
+    res.status(500).json({ error: error.message || "Impossible d'importer le CSV." });
+  }
+};
+
 module.exports = {
   getBrokerSummary,
   getBrokerAccounts,
@@ -103,4 +120,5 @@ module.exports = {
   getBrokerPositions,
   createBrokerAccount,
   syncBrokerAccount,
+  importBrokerCsv,
 };

@@ -11,6 +11,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { fetchJournalEntries } from "../services/journalClient";
 
 import { isValidDate } from "../utils/journalUtils";
@@ -27,10 +28,12 @@ import JournalHeroMinimal from "../components/JournalHeroMinimal";
 import JournalEntryModal from "../components/JournalEntryModal";
 
 const Journal = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [detailEntry, setDetailEntry] = useState(null); // Gère l'ouverture de la modale
+  const pendingEntryId = searchParams.get("entryId");
 
   const [filters, setFilters] = useState({
     searchQuery: "",
@@ -47,6 +50,18 @@ const Journal = () => {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!pendingEntryId || !entries.length) return;
+    const match = entries.find((entry) => String(entry.id) === String(pendingEntryId));
+    if (match) {
+      setDetailEntry(match);
+    } else if (!loading) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("entryId");
+      setSearchParams(next, { replace: true });
+    }
+  }, [pendingEntryId, entries, loading, searchParams, setSearchParams]);
 
   const filteredEntries = useMemo(() => {
     return entries
@@ -85,8 +100,19 @@ const Journal = () => {
       );
   }, [entries, filters]);
 
-  const handleOpenModal = (entry) => setDetailEntry(entry);
-  const handleCloseModal = () => setDetailEntry(null);
+  const handleOpenModal = (entry) => {
+    if (!entry) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("entryId", String(entry.id));
+    setSearchParams(next, { replace: true });
+    setDetailEntry(entry);
+  };
+  const handleCloseModal = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("entryId");
+    setSearchParams(next, { replace: true });
+    setDetailEntry(null);
+  };
 
   const handleViewChange = (_, newMode) => {
     if (newMode) setFilters((f) => ({ ...f, viewMode: newMode }));

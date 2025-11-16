@@ -4,6 +4,8 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import TrendingDownIcon from "@mui/icons-material/TrendingDown";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
+import NoteAddOutlinedIcon from "@mui/icons-material/NoteAddOutlined";
 import {
   Box,
   Card,
@@ -21,6 +23,7 @@ import {
 import { alpha } from "@mui/material/styles";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import { useNavigate } from "react-router-dom";
 import {
   Area,
   AreaChart,
@@ -429,6 +432,7 @@ export const RecentActivity = memo(function RecentActivity({
   pageSize = 5,
   onPageChange,
 }) {
+  const navigate = useNavigate();
   const { totalPages, currentPage, pageItems } = useMemo(() => {
     const total = Math.max(1, Math.ceil(trades.length / pageSize));
     const safePage = Math.min(page, total);
@@ -441,6 +445,28 @@ export const RecentActivity = memo(function RecentActivity({
     if (value === currentPage) return;
     onPageChange?.(value);
   }, [currentPage, onPageChange]);
+
+  const handleTradeNavigate = useCallback(
+    (trade) => {
+      if (!trade) return;
+      if (trade.journalEntryId) {
+        navigate(`/journal?entryId=${trade.journalEntryId}`);
+      } else {
+        navigate("/journal");
+      }
+    },
+    [navigate]
+  );
+
+  const buildKeydownHandler = useCallback(
+    (trade) => (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        handleTradeNavigate(trade);
+      }
+    },
+    [handleTradeNavigate]
+  );
 
   return (
     <Card
@@ -470,6 +496,7 @@ export const RecentActivity = memo(function RecentActivity({
             pageItems.map((trade) => {
               const typeColor = trade.direction === "SELL" ? "#f59e0b" : "#10b981";
               const amountColor = trade.pnl >= 0 ? "#10b981" : "#ef4444";
+              const isLinked = Boolean(trade.journalEntryId);
               return (
                 <Paper
                   key={trade.id}
@@ -481,14 +508,24 @@ export const RecentActivity = memo(function RecentActivity({
                     borderColor: "rgba(226, 232, 240, 0.8)",
                     backgroundColor: "#fff",
                     transition: "all 0.2s",
+                    cursor: "pointer",
+                    "&:hover": {
+                      borderColor: alpha("#6366f1", 0.4),
+                      boxShadow: "0 12px 24px rgba(15,23,42,0.08)",
+                    },
                   }}
+                  onClick={() => handleTradeNavigate(trade)}
+                  onKeyDown={buildKeydownHandler(trade)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Trade ${trade.asset} ${isLinked ? "journalisé" : "non journalisé"}`}
                 >
                   <Box
                     sx={{
                       display: "grid",
                       gridTemplateColumns: {
                         xs: "1fr",
-                        sm: "1.6fr 0.8fr 0.8fr 0.9fr",
+                        sm: "1.6fr 0.9fr 0.8fr 1fr",
                       },
                       alignItems: "center",
                       gap: { xs: 1.5, sm: 2 },
@@ -513,9 +550,30 @@ export const RecentActivity = memo(function RecentActivity({
                         <Typography variant="subtitle2" fontWeight={700}>
                           {trade.asset}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {formatTradeDate(trade.date)}
-                        </Typography>
+                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                          <Typography variant="caption" color="text.secondary">
+                            {formatTradeDate(trade.date)}
+                          </Typography>
+                          <Chip
+                            size="small"
+                            variant="filled"
+                            icon={
+                              isLinked ? (
+                                <TaskAltRoundedIcon sx={{ fontSize: 16 }} />
+                              ) : (
+                                <NoteAddOutlinedIcon sx={{ fontSize: 16 }} />
+                              )
+                            }
+                            label={isLinked ? "Journalisé" : "À documenter"}
+                            sx={{
+                              height: 24,
+                              bgcolor: isLinked ? alpha("#10b981", 0.15) : alpha("#f97316", 0.16),
+                              color: isLinked ? "#047857" : "#b45309",
+                              fontWeight: 600,
+                              "& .MuiChip-icon": { color: "inherit", mr: 0.5 },
+                            }}
+                          />
+                        </Stack>
                       </Box>
                     </Box>
                     <Chip

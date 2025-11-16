@@ -51,3 +51,13 @@ export const syncBrokerAccount = async (accountId) => {
   });
   return ensureSuccess(response, "Impossible de synchroniser le compte.");
 };
+
+export const importBrokerCsv = async (accountId, file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${BROKER_ENDPOINT}/accounts/${accountId}/import`, {
+    method: "POST",
+    body: formData,
+  });
+  return ensureSuccess(response, "Impossible d'importer le CSV.");
+};

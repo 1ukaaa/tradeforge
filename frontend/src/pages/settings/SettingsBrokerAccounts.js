@@ -1,10 +1,12 @@
 import { Alert, Box, Button, Chip, CircularProgress, Grid, IconButton, Paper, Snackbar, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { useEffect, useState } from "react";
+import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
+import { useEffect, useRef, useState } from "react";
 import { ForgeCard } from "../../components/ForgeUI";
 import {
   createBrokerAccount,
   fetchBrokerAccounts,
+  importBrokerCsv,
   syncBrokerAccount,
 } from "../../services/brokerClient";
 
@@ -25,9 +27,6 @@ const getDefaultForm = (type) => {
     currency: "EUR",
     color: "#6366f1",
     initialBalance: 100000,
-    login: "",
-    password: "",
-    server: "",
   };
 };
 
@@ -41,6 +40,8 @@ const SettingsBrokerAccounts = () => {
   const [syncingAccountId, setSyncingAccountId] = useState(null);
   const [syncSuccess, setSyncSuccess] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
+  const [importingAccountId, setImportingAccountId] = useState(null);
+  const fileInputRefs = useRef({});
 
   const loadAccounts = () => {
     setLoading(true);
@@ -54,6 +55,9 @@ const SettingsBrokerAccounts = () => {
   useEffect(() => {
     loadAccounts();
   }, []);
+
+  const isManualAccount = (account) =>
+    account?.provider === "ftmo" || account?.metadata?.importMode === "csv";
 
   const handleFormChange = (field) => (event) => {
     setFormState((prev) => ({ ...prev, [field]: event.target.value }));
@@ -71,15 +75,16 @@ const SettingsBrokerAccounts = () => {
     setError(null);
     setSuccess(null);
     try {
-      if (formState.type === "mt5" && (!formState.login || !formState.password || !formState.server)) {
-        throw new Error("Login, mot de passe et serveur MT5 sont requis.");
-      }
       if (formState.type === "hyperliquid" && !formState.address) {
         throw new Error("L'adresse HyperLiquid est requise.");
       }
       await createBrokerAccount(formState);
-      setSuccess("Compte ajouté. Lancez une synchronisation pour récupérer les trades.");
-      setSnackbar({ open: true, message: "Compte ajouté avec succès.", severity: "success" });
+      const successMessage =
+        formState.type === "mt5"
+          ? "Compte FTMO ajouté. Importez un CSV pour récupérer les trades."
+          : "Compte ajouté. Lancez une synchronisation pour récupérer les trades.";
+      setSuccess(successMessage);
+      setSnackbar({ open: true, message: successMessage, severity: "success" });
       setFormState(getDefaultForm(formState.type));
       loadAccounts();
     } catch (err) {
@@ -87,6 +92,45 @@ const SettingsBrokerAccounts = () => {
       setSnackbar({ open: true, message: err.message, severity: "error" });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const triggerCsvImport = (accountId) => {
+    const input = fileInputRefs.current[accountId];
+    if (input) {
+      input.click();
+    }
+  };
+
+  const handleCsvFileChange = (accountId) => async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportingAccountId(accountId);
+    setError(null);
+    setSyncSuccess(null);
+    try {
+      const result = await importBrokerCsv(accountId, file);
+      const inserted = result?.tradesCount ?? 0;
+      const retrieved = result?.retrievedCount ?? inserted;
+      const message =
+        inserted > 0
+          ? `${inserted} nouveau(x) trade(s) importé(s).`
+          : `Aucun nouveau trade dans ce fichier (${retrieved} lu(s)).`;
+      setSyncSuccess(message);
+      setSnackbar({
+        open: true,
+        message,
+        severity: inserted > 0 ? "success" : "info",
+      });
+      loadAccounts();
+    } catch (err) {
+      setError(err.message);
+      setSnackbar({ open: true, message: err.message, severity: "error" });
+    } finally {
+      setImportingAccountId(null);
+      if (event?.target) {
+        event.target.value = "";
+      }
     }
   };
 
@@ -126,7 +170,7 @@ const SettingsBrokerAccounts = () => {
       <ForgeCard
         title="Ajouter un compte"
         subtitle="CONNEXIONS BROKER"
-        helper="Choisissez votre type de compte (HyperLiquid ou MT5) et configurez ses identifiants."
+        helper="Ajoutez un compte FTMO (import CSV manuel) ou HyperLiquid (connexion API)."
       >
         <Stack spacing={2}>
           <ToggleButtonGroup
@@ -136,7 +180,7 @@ const SettingsBrokerAccounts = () => {
             onChange={handleTypeChange}
             size="small"
           >
-            <ToggleButton value="mt5">MT5 / FTMO</ToggleButton>
+            <ToggleButton value="mt5">FTMO (CSV)</ToggleButton>
             <ToggleButton value="hyperliquid">HyperLiquid</ToggleButton>
           </ToggleButtonGroup>
           <Grid container spacing={2}>
@@ -166,34 +210,13 @@ const SettingsBrokerAccounts = () => {
               />
             </Grid>
             {formState.type === "mt5" ? (
-              <>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Login MT5"
-                    value={formState.login}
-                    onChange={handleFormChange("login")}
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Mot de passe (lecture seule)"
-                    type="password"
-                    value={formState.password}
-                    onChange={handleFormChange("password")}
-                    fullWidth
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Serveur"
-                    placeholder="FTMO-Demo1"
-                    value={formState.server}
-                    onChange={handleFormChange("server")}
-                    fullWidth
-                  />
-                </Grid>
-              </>
+              <Grid item xs={12}>
+                <Alert severity="info">
+                  Les comptes FTMO utilisent désormais un import manuel. Ajoutez le compte, puis
+                  cliquez sur &laquo;&nbsp;Importer un CSV&nbsp;&raquo; dans la section Synchronisation
+                  pour charger le fichier exporté depuis FTMO.
+                </Alert>
+              </Grid>
             ) : (
               <Grid item xs={12}>
                 <TextField
@@ -238,7 +261,7 @@ const SettingsBrokerAccounts = () => {
       <ForgeCard
         title="Synchronisation"
         subtitle="ETAT DES COMPTES"
-        helper="Chaque synchronisation importe le solde actuel et les trades fermés."
+        helper="Importez un CSV FTMO ou lancez une synchronisation HyperLiquid pour récupérer les trades."
       >
         {loading ? (
           <Stack alignItems="center" spacing={1}>
@@ -265,6 +288,13 @@ const SettingsBrokerAccounts = () => {
                     {account.provider?.toUpperCase()} • {account.currency} • Dernière synchro :
                     {account.lastSyncAt ? ` ${new Date(account.lastSyncAt).toLocaleString("fr-FR")}` : " jamais"}
                   </Typography>
+                  {isManualAccount(account) && (
+                    <Typography variant="caption" color="text.secondary">
+                      {account.metadata?.lastImportName
+                        ? `Dernier import : ${account.metadata.lastImportName}`
+                        : "Aucun import pour le moment."}
+                    </Typography>
+                  )}
                 </Box>
                 <Stack direction="row" spacing={1} alignItems="center">
                   <Chip
@@ -272,12 +302,45 @@ const SettingsBrokerAccounts = () => {
                     color={account.status === "error" ? "error" : "success"}
                     size="small"
                   />
-                  <IconButton
-                    onClick={() => handleSync(account.id)}
-                    disabled={syncingAccountId === account.id}
-                  >
-                    {syncingAccountId === account.id ? <CircularProgress size={20} /> : <RefreshIcon />}
-                  </IconButton>
+                  {isManualAccount(account) ? (
+                    <>
+                      <input
+                        type="file"
+                        accept=".csv,.txt"
+                        ref={(node) => {
+                          if (node) {
+                            fileInputRefs.current[account.id] = node;
+                          } else {
+                            delete fileInputRefs.current[account.id];
+                          }
+                        }}
+                        style={{ display: "none" }}
+                        onChange={handleCsvFileChange(account.id)}
+                      />
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={() => triggerCsvImport(account.id)}
+                        disabled={importingAccountId === account.id}
+                        startIcon={
+                          importingAccountId === account.id ? (
+                            <CircularProgress size={14} color="inherit" />
+                          ) : (
+                            <UploadFileRoundedIcon fontSize="small" />
+                          )
+                        }
+                      >
+                        {importingAccountId === account.id ? "Import..." : "Importer un CSV"}
+                      </Button>
+                    </>
+                  ) : (
+                    <IconButton
+                      onClick={() => handleSync(account.id)}
+                      disabled={syncingAccountId === account.id}
+                    >
+                      {syncingAccountId === account.id ? <CircularProgress size={20} /> : <RefreshIcon />}
+                    </IconButton>
+                  )}
                 </Stack>
               </Paper>
             ))}
