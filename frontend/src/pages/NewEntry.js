@@ -10,6 +10,7 @@ import { requestAnalysis, requestStructuredAnalysis } from "../services/aiClient
 import { saveJournalEntry } from "../services/journalClient";
 import { fetchPlan } from "../services/planClient";
 import { fetchSettings } from "../services/settingsClient";
+import { buildAccountsFromSettings } from "../utils/accountUtils";
 import { buildPlanDescription } from "../utils/planUtils";
 import { stringifyTimeframes } from "../utils/timeframeUtils";
 
@@ -42,6 +43,8 @@ const NewEntry = () => {
   const [structuredVariant, setStructuredVariant] = useState("detailed");
   const [analysisVariant, setAnalysisVariant] = useState("default");
   const [tradeVariant, setTradeVariant] = useState("default");
+  const [accountOptions, setAccountOptions] = useState([]);
+  const [defaultAccountId, setDefaultAccountId] = useState(null);
 
   // États du "chat"
   const [userTranscript, setUserTranscript] = useState("");
@@ -84,6 +87,11 @@ const NewEntry = () => {
         setStructuredVariant(settings.structuredVariant || "detailed");
         setAnalysisVariant(settings.analysisVariant || "default");
         setTradeVariant(settings.tradeVariant || "default");
+        const derivedAccounts = buildAccountsFromSettings(settings);
+        setAccountOptions(derivedAccounts);
+        if (derivedAccounts.length) {
+          setDefaultAccountId(derivedAccounts[0].id);
+        }
       } catch (e) { console.error("Erreur chargement réglages:", e); }
     };
     loadPrereqs();
@@ -249,6 +257,9 @@ const NewEntry = () => {
               saving={saving}
               saveError={saveError}
               saveSuccess={saveSuccess}
+              accountOptions={accountOptions}
+              defaultAccountId={defaultAccountId}
+              entryType={activeTool}
             />
           )}
 

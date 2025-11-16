@@ -2,10 +2,11 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
 import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import SaveIcon from "@mui/icons-material/Save";
-import { Alert, alpha, Autocomplete, Box, Button, Chip, CircularProgress, Divider, IconButton, Paper, Stack, TextField, Tooltip, Typography } from "@mui/material";
+import { Alert, alpha, Autocomplete, Box, Button, Chip, CircularProgress, Divider, IconButton, InputAdornment, MenuItem, Paper, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useCallback, useEffect, useState } from "react";
 import BrandLogo from "./BrandLogo";
+import { getCurrencySymbol } from "../utils/accountUtils";
 
 // Simule un rendu Markdown simple (identique à l'ancien AnalysisDisplay)
 const SimpleMarkdownViewer = ({ content }) => {
@@ -81,6 +82,9 @@ const EditableAnalysis = ({
   saving,
   saveError,
   saveSuccess,
+  accountOptions = [],
+  defaultAccountId = null,
+  entryType = "analyse",
 }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
@@ -104,6 +108,24 @@ const EditableAnalysis = ({
     return () => clearTimeout(timeout);
   }, [copied]);
 
+  // Préselectionner un compte si nécessaire
+  useEffect(() => {
+    if (editableMeta.accountId || accountOptions.length === 0) return;
+    const fallbackId = defaultAccountId || accountOptions[0]?.id;
+    if (!fallbackId) return;
+    const fallbackAccount = accountOptions.find((acc) => acc.id === fallbackId);
+    setEditableMeta((prev) => ({
+      ...prev,
+      accountId: fallbackId,
+      accountName: fallbackAccount?.name,
+      pnlCurrency: fallbackAccount?.currency || prev.pnlCurrency,
+    }));
+  }, [accountOptions, defaultAccountId, editableMeta.accountId]);
+
+  const selectedAccount = accountOptions.find(
+    (acc) => acc.id === (editableMeta.accountId || defaultAccountId)
+  ) || (accountOptions.length === 1 ? accountOptions[0] : null);
+
   const handleCopy = useCallback(() => {
     if (!content) return;
     navigator.clipboard.writeText(content).then(() => {
@@ -124,11 +146,24 @@ const EditableAnalysis = ({
     }));
   };
 
+  const handleAccountChange = (event) => {
+    const nextAccount = accountOptions.find((acc) => acc.id === event.target.value);
+    setEditableMeta((prev) => ({
+      ...prev,
+      accountId: nextAccount?.id,
+      accountName: nextAccount?.name,
+      pnlCurrency: nextAccount?.currency || prev.pnlCurrency,
+    }));
+  };
+
   // Appeler onSave avec le contenu et les métadonnées finales
   const handleSaveClick = () => {
     onSave(content, editableMeta);
   };
-  
+
+  const normalizedEntryType = (editableMeta.entryType || entryType || "analyse").toLowerCase();
+  const isTradeEntry = normalizedEntryType === "trade";
+
   const allTags = editableMeta.tags || [];
 
   return (
@@ -184,9 +219,9 @@ const EditableAnalysis = ({
               value={editableMeta.title || ""}
               onChange={handleMetaChange("title")}
             />
-            <Stack direction={{xs: "column", sm: "row"}} spacing={2}>
-              <TextField
-                label="Symbole(s)"
+          <Stack direction={{xs: "column", sm: "row"}} spacing={2}>
+            <TextField
+              label="Symbole(s)"
                 variant="outlined"
                 size="small"
                 value={editableMeta.symbol || ""}
@@ -200,9 +235,58 @@ const EditableAnalysis = ({
                 value={editableMeta.timeframe || ""}
                 onChange={handleMetaChange("timeframe")}
                 sx={{flex: 1}}
-              />
+            />
+          </Stack>
+          {isTradeEntry && accountOptions.length > 0 && (
+            <Stack spacing={2}>
+              <TextField
+                select
+                label="Compte associé"
+                value={editableMeta.accountId || selectedAccount?.id || ""}
+                onChange={handleAccountChange}
+                size="small"
+                fullWidth
+              >
+                {accountOptions.map((account) => (
+                  <MenuItem key={account.id} value={account.id}>
+                    {account.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                <TextField
+                  label="Gain / Perte"
+                  variant="outlined"
+                  size="small"
+                  type="number"
+                  value={editableMeta.pnlAmount ?? ""}
+                  onChange={handleMetaChange("pnlAmount")}
+                  helperText="Utilisez un montant positif pour un gain, négatif pour une perte."
+                  fullWidth
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Box sx={{ pr: 0.5, fontWeight: 500, color: "text.secondary" }}>
+                          {getCurrencySymbol(editableMeta.pnlCurrency || selectedAccount?.currency)}
+                        </Box>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <TextField
+                  label="% net (optionnel)"
+                  variant="outlined"
+                  size="small"
+                  type="number"
+                  value={editableMeta.pnlPercent ?? ""}
+                  onChange={handleMetaChange("pnlPercent")}
+                  helperText="Par rapport au capital du compte"
+                  fullWidth
+                />
+              </Stack>
             </Stack>
-            <Autocomplete
+          )}
+          <Autocomplete
               multiple
               freeSolo // Permet d'ajouter des tags qui ne sont pas dans la liste
               options={[]} // On pourrait charger les tags existants ici

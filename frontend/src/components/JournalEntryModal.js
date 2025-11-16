@@ -1,4 +1,5 @@
 // frontend/src/components/JournalEntryModal.js
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
@@ -7,6 +8,7 @@ import LabelIcon from "@mui/icons-material/Label";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import TimerIcon from "@mui/icons-material/Timer";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import {
   Alert,
   Box,
@@ -30,6 +32,7 @@ import {
   deleteJournalEntry,
   updateJournalEntry,
 } from "../services/journalClient";
+import { fetchSettings } from "../services/settingsClient";
 import {
   formatDate, // Récupère la 1ère image (qui sera l'image principale)
   getEntryTitle,
@@ -37,6 +40,7 @@ import {
   resultTone,
   typeLabel
 } from "../utils/journalUtils";
+import { buildAccountsFromSettings, getCurrencySymbol } from "../utils/accountUtils";
 import {
   normalizeTimeframes,
   stringifyTimeframes,
@@ -90,6 +94,7 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
   });
 
   const [previewImageSrc, setPreviewImageSrc] = useState(null);
+  const [accountOptions, setAccountOptions] = useState([]);
 
   useEffect(() => {
     if (entry) {
@@ -115,6 +120,23 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
     setMutationState({ loading: false, error: "" });
     onClose();
   };
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadAccounts = async () => {
+      try {
+        const settings = await fetchSettings();
+        if (!isMounted) return;
+        setAccountOptions(buildAccountsFromSettings(settings));
+      } catch (error) {
+        console.error("Impossible de charger les comptes:", error);
+      }
+    };
+    loadAccounts();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleUpdate = async () => {
     if (!editedEntry) return;
@@ -237,6 +259,10 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
   const displayEntry = isEditing ? editedEntry : entry;
   const displayImages = displayEntry.metadata?.images || [];
   const mainImage = displayImages[0]?.src || null;
+  const resolvedAccount = displayEntry?.metadata?.accountId
+    ? accountOptions.find((acc) => acc.id === displayEntry.metadata.accountId)
+    : null;
+  const accountLabel = displayEntry?.metadata?.accountName || resolvedAccount?.name;
 
   return (
     <>
@@ -265,6 +291,7 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
             // --- VUE ÉDITION ---
             <EditEntryForm
               entry={editedEntry}
+              accountOptions={accountOptions}
               onDataChange={setEditedEntry}
               onImageDelete={handleImageDelete}
               onImageClick={(src) => setPreviewImageSrc(src)}
@@ -404,6 +431,44 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
                               color={resultTone(displayEntry.metadata?.result)}
                               sx={{ fontWeight: 600 }}
                             />
+                          </MetaItem>
+                        )}
+                        {displayEntry.type === "trade" && (
+                          <MetaItem
+                            icon={<AccountBalanceWalletIcon fontSize="small" />}
+                            label="Compte"
+                          >
+                            <Typography variant="body1" fontWeight={600}>
+                              {accountLabel || "Non renseigné"}
+                            </Typography>
+                          </MetaItem>
+                        )}
+                        {displayEntry.type === "trade" && (
+                          <MetaItem
+                            icon={<TrendingUpIcon fontSize="small" />}
+                            label="Gain / Perte"
+                          >
+                            <Typography
+                              variant="body1"
+                              fontWeight={700}
+                              sx={{ color: (Number(displayEntry.metadata?.pnlAmount) || 0) >= 0 ? "#10b981" : "#ef4444" }}
+                            >
+                              {(() => {
+                                const amount = Number(displayEntry.metadata?.pnlAmount);
+                                if (!Number.isFinite(amount)) return "N/A";
+                                const symbol = getCurrencySymbol(
+                                  displayEntry.metadata?.pnlCurrency || resolvedAccount?.currency
+                                );
+                                const formatted = Math.abs(amount).toLocaleString("fr-FR", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                });
+                                const sign = amount >= 0 ? "+" : "-";
+                                const percent = displayEntry.metadata?.pnlPercent;
+                                return `${sign}${symbol}${formatted}` +
+                                  (percent ? ` (${percent}%)` : "");
+                              })()}
+                            </Typography>
                           </MetaItem>
                         )}
                         <MetaItem

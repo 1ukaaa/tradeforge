@@ -7,6 +7,8 @@ import {
   Button,
   Chip,
   Grid,
+  InputAdornment,
+  MenuItem,
   Paper,
   Stack,
   TextField,
@@ -18,6 +20,7 @@ import {
   TIMEFRAME_OPTIONS,
   normalizeTimeframes,
 } from "../utils/timeframeUtils";
+import { getCurrencySymbol } from "../utils/accountUtils";
 
 const RESULT_OPTIONS = [
   { value: "TP", label: "TP" },
@@ -29,7 +32,14 @@ const SYMBOL_SUGGESTIONS = ["EURUSD", "NAS100", "US30", "DAX", "UKOIL", "BTCUSD"
 
 // --- Composant Principal ---
 
-const EditEntryForm = ({ entry, onDataChange, onImageDelete, onImageClick, onSetMainImage }) => {
+const EditEntryForm = ({
+  entry,
+  accountOptions = [],
+  onDataChange,
+  onImageDelete,
+  onImageClick,
+  onSetMainImage,
+}) => {
   
   // --- Handlers ---
 
@@ -72,6 +82,19 @@ const EditEntryForm = ({ entry, onDataChange, onImageDelete, onImageClick, onSet
     });
   };
 
+  const handleAccountChange = (event) => {
+    const account = accountOptions.find((acc) => acc.id === event.target.value);
+    onDataChange({
+      ...entry,
+      metadata: {
+        ...entry.metadata,
+        accountId: account?.id,
+        accountName: account?.name,
+        pnlCurrency: account?.currency || entry.metadata.pnlCurrency,
+      },
+    });
+  };
+
   const handleTimeframeChange = (event, newTimeframes) => {
     const normalized = normalizeTimeframes(newTimeframes || []);
     onDataChange({
@@ -82,6 +105,10 @@ const EditEntryForm = ({ entry, onDataChange, onImageDelete, onImageClick, onSet
 
   const images = entry.metadata.images || [];
   const metadataDateInput = (entry.metadata?.date || "").split("T")[0];
+  const selectedAccount = accountOptions.find(
+    (acc) => acc.id === entry.metadata.accountId
+  ) || (accountOptions.length === 1 ? accountOptions[0] : null);
+  const showAccountFields = entry.type === "trade" && accountOptions.length > 0;
 
   // --- Rendu ---
 
@@ -125,7 +152,7 @@ const EditEntryForm = ({ entry, onDataChange, onImageDelete, onImageClick, onSet
           )}
           sx={{ flex: 1 }}
         />
-        
+
         {entry.type === "trade" && (
           <>
             <Stack spacing={1} sx={{flex: 1}}>
@@ -158,6 +185,54 @@ const EditEntryForm = ({ entry, onDataChange, onImageDelete, onImageClick, onSet
           </>
         )}
       </Stack>
+
+      {showAccountFields && (
+        <Stack spacing={2}>
+          <TextField
+            select
+            label="Compte associé"
+            value={entry.metadata.accountId || selectedAccount?.id || ""}
+            onChange={handleAccountChange}
+            size="small"
+            fullWidth
+          >
+            {accountOptions.map((account) => (
+              <MenuItem key={account.id} value={account.id}>
+                {account.name}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+            <TextField
+              label="Gain / Perte"
+              type="number"
+              size="small"
+              value={entry.metadata.pnlAmount ?? ""}
+              onChange={handleMetaChange("pnlAmount")}
+              helperText="Positif = gain, négatif = perte"
+              fullWidth
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Box sx={{ pr: 0.5, fontWeight: 500, color: "text.secondary" }}>
+                      {getCurrencySymbol(entry.metadata.pnlCurrency || selectedAccount?.currency)}
+                    </Box>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              label="% net"
+              type="number"
+              size="small"
+              value={entry.metadata.pnlPercent ?? ""}
+              onChange={handleMetaChange("pnlPercent")}
+              helperText="Par rapport au capital du compte"
+              fullWidth
+            />
+          </Stack>
+        </Stack>
+      )}
 
       <Stack spacing={1}>
         <Typography variant="body2" color="text.secondary">
