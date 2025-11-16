@@ -9,6 +9,7 @@ import {
   importBrokerCsv,
   syncBrokerAccount,
 } from "../../services/brokerClient";
+import { fetchIntegrations } from "../../services/integrationsClient";
 
 const getDefaultForm = (type) => {
   if (type === "hyperliquid") {
@@ -41,6 +42,9 @@ const SettingsBrokerAccounts = () => {
   const [syncSuccess, setSyncSuccess] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
   const [importingAccountId, setImportingAccountId] = useState(null);
+  const [twitterIntegration, setTwitterIntegration] = useState(null);
+  const [loadingIntegrations, setLoadingIntegrations] = useState(true);
+  const [integrationsError, setIntegrationsError] = useState(null);
   const fileInputRefs = useRef({});
 
   const loadAccounts = () => {
@@ -52,8 +56,27 @@ const SettingsBrokerAccounts = () => {
       .finally(() => setLoading(false));
   };
 
+  const loadIntegrations = () => {
+    setLoadingIntegrations(true);
+    setIntegrationsError(null);
+    fetchIntegrations()
+      .then((data) => {
+        const fallback = {
+          provider: "twitter",
+          connected: false,
+          hasAccessToken: false,
+          hasAccessSecret: false,
+          handle: null,
+        };
+        setTwitterIntegration(data.twitter || fallback);
+      })
+      .catch((err) => setIntegrationsError(err.message))
+      .finally(() => setLoadingIntegrations(false));
+  };
+
   useEffect(() => {
     loadAccounts();
+    loadIntegrations();
   }, []);
 
   const isManualAccount = (account) =>
@@ -345,6 +368,56 @@ const SettingsBrokerAccounts = () => {
               </Paper>
             ))}
           </Stack>
+        )}
+      </ForgeCard>
+
+      <ForgeCard
+        title="Compte Twitter"
+        subtitle="INTEGRATION SOCIALE"
+        helper="Les clés de l'app Twitter sont stockées côté serveur. Une fois en place, le mode Tweet pourra publier directement."
+        actions={
+          <Button variant="outlined" size="small" onClick={loadIntegrations} disabled={loadingIntegrations}>
+            {loadingIntegrations ? "Chargement..." : "Rafraîchir"}
+          </Button>
+        }
+      >
+        {integrationsError && (
+          <Alert severity="error">{integrationsError}</Alert>
+        )}
+        {loadingIntegrations ? (
+          <Stack alignItems="center" spacing={1}>
+            <CircularProgress size={24} />
+            <Typography variant="body2" color="text.secondary">
+              Vérification des clés Twitter...
+            </Typography>
+          </Stack>
+        ) : twitterIntegration ? (
+          <Stack spacing={1.5}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip
+                label={twitterIntegration.connected ? "Connecté" : "À configurer"}
+                color={twitterIntegration.connected ? "success" : "default"}
+                size="small"
+              />
+              {twitterIntegration.handle && (
+                <Typography fontWeight={600}>{twitterIntegration.handle}</Typography>
+              )}
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              {twitterIntegration.connected
+                ? "Les variables TWITTER_ACCESS_TOKEN et TWITTER_ACCESS_SECRET sont détectées dans backend/.env."
+                : "Ajoute TWITTER_ACCESS_TOKEN et TWITTER_ACCESS_SECRET dans backend/.env pour activer ton compte Twitter."}
+            </Typography>
+            {!twitterIntegration.handle && (
+              <Typography variant="caption" color="text.secondary">
+                (Optionnel) Ajoute TWITTER_HANDLE pour afficher l'@ associé au compte.
+              </Typography>
+            )}
+          </Stack>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            Impossible de récupérer les informations Twitter pour le moment.
+          </Typography>
         )}
       </ForgeCard>
       <Snackbar

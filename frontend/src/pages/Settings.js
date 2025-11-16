@@ -5,7 +5,6 @@ import { useState } from "react";
 import SettingsAppearance from "./settings/SettingsAppearance";
 import SettingsPlan from "./settings/SettingsPlan";
 import SettingsPromptVariants from "./settings/SettingsPromptVariants";
-import SettingsStructuredPrompt from "./settings/SettingsStructuredPrompt";
 import SettingsBrokerAccounts from "./settings/SettingsBrokerAccounts";
 
 // Nouveau composant pour gérer le panneau d'onglet
@@ -39,31 +38,27 @@ const Settings = () => {
           variant="scrollable"
           scrollButtons="auto"
         >
+          <Tab label="Compte" value="brokers" />
           <Tab label="Apparence" value="appearance" />
           <Tab label="Plan de Trading" value="plan" />
-          <Tab label="Prompts (JSON)" value="structured" />
           <Tab label="Prompts (Texte)" value="variants" />
           <Tab label="Notifications" value="notifications" disabled />
-          <Tab label="Brokers" value="brokers" />
         </Tabs>
       </Box>
 
       {/* 3. Contenu des panneaux */}
       <Box>
+        <TabPanel value={activeTab} index="brokers">
+          <SettingsBrokerAccounts />
+        </TabPanel>
         <TabPanel value={activeTab} index="appearance">
           <SettingsAppearance />
         </TabPanel>
         <TabPanel value={activeTab} index="plan">
           <SettingsPlan />
         </TabPanel>
-        <TabPanel value={activeTab} index="structured">
-          <SettingsStructuredPrompt />
-        </TabPanel>
         <TabPanel value={activeTab} index="variants">
           <SettingsPromptVariants />
-        </TabPanel>
-        <TabPanel value={activeTab} index="brokers">
-          <SettingsBrokerAccounts />
         </TabPanel>
 
       </Box>
