@@ -23,6 +23,7 @@ import {
   FormGroup,
   Grid,
   IconButton,
+  Paper,
   Stack,
   Typography,
   useTheme,
@@ -30,12 +31,12 @@ import {
 
 // Imports des composants
 import { ForgeCard } from "../components/ForgeUI"; // On garde ForgeCard pour le conteneur
-import JournalEntryModal from "../components/JournalEntryModal";
 import useCalendarEvents from "../hooks/useCalendarEvents";
 import useCalendarFilters from "../hooks/useCalendarFilters";
 import useCalendarInteractions from "../hooks/useCalendarInteractions";
 import { formatDate } from "../utils/journalUtils";
-import { mapTradesToEvents } from "../utils/calendarEvents";
+import { formatCurrencyValue as formatCurrencyDashboard } from "../utils/dashboardUtils";
+import { Link as RouterLink } from "react-router-dom";
 
 // Imports pour les filtres et la modale
 import AssessmentIcon from "@mui/icons-material/Assessment";
@@ -46,7 +47,201 @@ import DoNotDisturbAltIcon from "@mui/icons-material/DoNotDisturbAlt";
 import EventBusyIcon from "@mui/icons-material/EventBusy";
 import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
-import { JournalImageCard } from "../components/JournalImageCard";
+import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
+import QueryStatsRoundedIcon from "@mui/icons-material/QueryStatsRounded";
+
+const formatDateTime = (value, withTime = true) => {
+  if (!value) return "Date inconnue";
+  try {
+    return new Intl.DateTimeFormat("fr-FR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      ...(withTime
+        ? {
+            hour: "2-digit",
+            minute: "2-digit",
+          }
+        : {}),
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+};
+
+const formatSignedAmount = (value, currency) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "N/A";
+  const formatted = formatCurrencyDashboard(Math.abs(num), currency || "EUR");
+  return num >= 0 ? `+${formatted}` : `-${formatted}`;
+};
+
+const formatPrice = (value) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "—";
+  return new Intl.NumberFormat("fr-FR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 5,
+  }).format(num);
+};
+
+const TradeSummaryCard = ({ trade, onClick }) => {
+  const isProfit = Number(trade.pnl) >= 0;
+  const tone = isProfit ? "success.main" : "error.main";
+  return (
+    <Paper
+      variant="outlined"
+      onClick={onClick}
+      sx={{
+        p: 2,
+        borderRadius: 2,
+        cursor: "pointer",
+        transition: "border-color 0.2s, box-shadow 0.2s",
+        "&:hover": {
+          borderColor: tone,
+          boxShadow: (theme) =>
+            theme.palette.mode === "dark"
+              ? "0 8px 20px rgba(0,0,0,0.35)"
+              : "0 8px 20px rgba(15,23,42,0.12)",
+        },
+      }}
+    >
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Box>
+          <Typography variant="subtitle2" fontWeight={700}>
+            {trade.symbol || "Instrument"}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {trade.accountName || "Compte inconnu"}
+          </Typography>
+        </Box>
+        <Chip
+          label={trade.direction === "short" || trade.direction === "SELL" ? "Vente" : "Achat"}
+          size="small"
+          color={isProfit ? "success" : "warning"}
+        />
+      </Stack>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mt={1.5}>
+        <Typography variant="body2" color="text.secondary">
+          {formatDateTime(trade.closedAt || trade.openedAt)}
+        </Typography>
+        <Typography variant="subtitle1" fontWeight={700} color={tone}>
+          {formatSignedAmount(trade.pnl, trade.currency)}
+        </Typography>
+      </Stack>
+    </Paper>
+  );
+};
+
+const TradeDetailModal = ({ open, trade, onClose }) => {
+  if (!trade) return null;
+  const isProfit = Number(trade.pnl) >= 0;
+  const directionLabel = trade.direction === "short" || trade.direction === "SELL" ? "Vente" : "Achat";
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle>
+        <Stack spacing={0.5}>
+          <Typography variant="overline" color="text.secondary">
+            Trade importé
+          </Typography>
+          <Typography variant="h5" fontWeight={700}>
+            {trade.symbol || "Instrument"} • {directionLabel}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {trade.accountName || "Compte inconnu"}
+          </Typography>
+        </Stack>
+      </DialogTitle>
+      <DialogContent dividers>
+        <Grid container spacing={2}>
+          <Grid item xs={6}>
+            <Typography variant="caption" color="text.secondary">
+              Date d'ouverture
+            </Typography>
+            <Typography variant="body1">{formatDateTime(trade.openedAt)}</Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <Typography variant="caption" color="text.secondary">
+              Date de clôture
+            </Typography>
+            <Typography variant="body1">{formatDateTime(trade.closedAt)}</Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <Typography variant="caption" color="text.secondary">
+              Volume
+            </Typography>
+            <Typography variant="body1">
+              {trade.volume ? `${trade.volume} lot(s)` : "—"}
+            </Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <Typography variant="caption" color="text.secondary">
+              PnL
+            </Typography>
+            <Typography
+              variant="body1"
+              fontWeight={700}
+              color={isProfit ? "success.main" : "error.main"}
+            >
+              {formatSignedAmount(trade.pnl, trade.currency)}
+            </Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <Typography variant="caption" color="text.secondary">
+              Prix d'entrée
+            </Typography>
+            <Typography variant="body1">{formatPrice(trade.entryPrice)}</Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <Typography variant="caption" color="text.secondary">
+              Prix de sortie
+            </Typography>
+            <Typography variant="body1">{formatPrice(trade.exitPrice)}</Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <Typography variant="caption" color="text.secondary">
+              Identifiant externe
+            </Typography>
+            <Typography variant="body1">{trade.externalTradeId || "—"}</Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <Typography variant="caption" color="text.secondary">
+              Statut
+            </Typography>
+            <Typography variant="body1" textTransform="capitalize">
+              {trade.status || "Clôturé"}
+            </Typography>
+          </Grid>
+        </Grid>
+      </DialogContent>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
+        sx={{ px: 3, py: 2 }}
+      >
+        {trade.journalEntryId ? (
+          <Button
+            component={RouterLink}
+            to={`/journal?entryId=${trade.journalEntryId}`}
+            startIcon={<LaunchRoundedIcon />}
+            onClick={onClose}
+          >
+            Voir dans le journal
+          </Button>
+        ) : (
+          <Stack direction="row" spacing={1} alignItems="center" color="text.secondary">
+            <QueryStatsRoundedIcon fontSize="small" />
+            <Typography variant="body2">
+              Non lié à une entrée de journal
+            </Typography>
+          </Stack>
+        )}
+        <Button onClick={onClose}>Fermer</Button>
+      </Stack>
+    </Dialog>
+  );
+};
 
 // --- Panneau de contrôle des filtres (Mis à jour) ---
 const CalendarFilterControl = ({
@@ -60,7 +255,7 @@ const CalendarFilterControl = ({
       <Grid container spacing={3} rowSpacing={2}>
         <Grid item xs={12} md={4}>
           <Typography variant="subtitle2" gutterBottom>
-            Journal
+            Trades importés
           </Typography>
           <FormGroup>
             <FormControlLabel
@@ -73,7 +268,7 @@ const CalendarFilterControl = ({
                   checkedIcon={<BusinessCenterIcon color="primary" />}
                 />
               }
-              label="Trades Exécutés"
+              label="Trades importés"
             />
           </FormGroup>
         </Grid>
@@ -219,12 +414,12 @@ const FocusDayModal = ({
 
           {/* Trades du jour */}
           <Stack spacing={2}>
-            <Typography variant="subtitle2">Trades Exécutés</Typography>
+            <Typography variant="subtitle2">Trades importés</Typography>
             {trades.length > 0 ? (
               trades.map((trade) => (
-                <JournalImageCard
-                  key={trade.id}
-                  entry={trade}
+                <TradeSummaryCard
+                  key={trade.id || trade.externalTradeId}
+                  trade={trade}
                   onClick={() => onTradeClick(trade)}
                 />
               ))
@@ -234,7 +429,7 @@ const FocusDayModal = ({
                   sx={{ fontSize: 40, color: "text.secondary" }}
                 />
                 <Typography variant="body2" color="text.secondary">
-                  Aucun trade enregistré.
+                  Aucun trade importé ce jour.
                 </Typography>
               </Stack>
             )}
@@ -251,12 +446,7 @@ const FocusDayModal = ({
 // --- Composant Principal (Refonte V2) ---
 const Calendar = () => {
   const theme = useTheme();
-  const {
-    events: allEvents,
-    setEvents,
-    loading,
-    error,
-  } = useCalendarEvents(theme);
+  const { events: allEvents, loading, error } = useCalendarEvents(theme);
   const {
     typeFilter,
     impactFilter,
@@ -266,13 +456,13 @@ const Calendar = () => {
   } = useCalendarFilters(allEvents);
   const {
     focusInfo,
-    selectedEntry,
+    selectedTrade,
     handleEventClick,
     handleDateClick,
     handleFocusClose,
     handleModalClose,
     openTradeFromFocus,
-    setSelectedEntry,
+    setSelectedTrade,
   } = useCalendarInteractions(allEvents);
 
   return (
@@ -286,7 +476,7 @@ const Calendar = () => {
           Calendrier de Trading
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 640 }}>
-          Corrèlez vos trades exécutés avec les annonces économiques.
+          Corrèlez vos trades importés avec les annonces économiques.
         </Typography>
       </Box>
 
@@ -402,27 +592,10 @@ const Calendar = () => {
         onTradeClick={openTradeFromFocus}
       />
 
-      {/* Modale pour voir un trade (inchangée) */}
-      <JournalEntryModal
-        entry={selectedEntry}
-        open={Boolean(selectedEntry)}
+      <TradeDetailModal
+        open={Boolean(selectedTrade)}
+        trade={selectedTrade}
         onClose={handleModalClose}
-        onUpdate={(updatedEntry) => {
-          setEvents((prev) =>
-            prev.map((event) => {
-              if (event.id !== updatedEntry.id) {
-                return event;
-              }
-              const mapped = mapTradesToEvents([updatedEntry], theme)[0];
-              return mapped || event;
-            })
-          );
-          setSelectedEntry(updatedEntry);
-        }}
-        onDelete={(deletedId) => {
-          setEvents((prev) => prev.filter((event) => event.id !== deletedId));
-          handleModalClose();
-        }}
       />
     </Stack>
   );

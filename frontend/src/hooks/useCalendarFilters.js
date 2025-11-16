@@ -29,7 +29,7 @@ const useCalendarFilters = (events) => {
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
       const props = event.extendedProps || {};
-      if (props.type === "trade") {
+      if (props.type === "brokerTrade") {
         return typeFilter.trade;
       }
       if (props.type === "economic") {

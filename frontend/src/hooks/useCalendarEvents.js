@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchEconomicEvents } from "../services/economicClient";
-import { fetchJournalEntries } from "../services/journalClient";
-import { mapTradesToEvents } from "../utils/calendarEvents";
+import { fetchBrokerPositions } from "../services/brokerClient";
+import { mapBrokerTradesToEvents } from "../utils/calendarEvents";
 
 const useCalendarEvents = (theme) => {
   const [events, setEvents] = useState([]);
@@ -14,12 +14,12 @@ const useCalendarEvents = (theme) => {
       setLoading(true);
       setError("");
       try {
-        const [journalEntries, economicEvents] = await Promise.all([
-          fetchJournalEntries(),
+        const [brokerTrades, economicEvents] = await Promise.all([
+          fetchBrokerPositions(),
           fetchEconomicEvents(),
         ]);
         if (!isMounted) return;
-        const tradeEvents = mapTradesToEvents(journalEntries, theme);
+        const tradeEvents = mapBrokerTradesToEvents(brokerTrades, theme);
         setEvents([...tradeEvents, ...economicEvents]);
       } catch (err) {
         if (!isMounted) return;

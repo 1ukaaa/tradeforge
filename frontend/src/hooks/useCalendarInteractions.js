@@ -8,11 +8,11 @@ const useCalendarInteractions = (events) => {
     trades: [],
     economics: [],
   });
-  const [selectedEntry, setSelectedEntry] = useState(null);
+  const [selectedTrade, setSelectedTrade] = useState(null);
 
   const handleEventClick = useCallback((clickInfo) => {
-    if (clickInfo.event.extendedProps.type === "trade") {
-      setSelectedEntry(clickInfo.event.extendedProps.journalEntry);
+    if (clickInfo.event.extendedProps.type === "brokerTrade") {
+      setSelectedTrade(clickInfo.event.extendedProps.brokerTrade);
     }
   }, []);
 
@@ -23,8 +23,8 @@ const useCalendarInteractions = (events) => {
 
       for (const event of events) {
         if (isSameDay(event.date, info.date)) {
-          if (event.extendedProps.type === "trade") {
-            trades.push(event.extendedProps.journalEntry);
+          if (event.extendedProps.type === "brokerTrade") {
+            trades.push(event.extendedProps.brokerTrade);
           } else if (event.extendedProps.type === "economic") {
             economics.push(event);
           }
@@ -45,23 +45,23 @@ const useCalendarInteractions = (events) => {
   }, []);
 
   const handleModalClose = useCallback(() => {
-    setSelectedEntry(null);
+    setSelectedTrade(null);
   }, []);
 
   const openTradeFromFocus = useCallback((trade) => {
     setFocusInfo((prev) => ({ ...prev, open: false }));
-    setSelectedEntry(trade);
+    setSelectedTrade(trade);
   }, []);
 
   return {
     focusInfo,
-    selectedEntry,
+    selectedTrade,
     handleEventClick,
     handleDateClick,
     handleFocusClose,
     handleModalClose,
     openTradeFromFocus,
-    setSelectedEntry,
+    setSelectedTrade,
   };
 };
 

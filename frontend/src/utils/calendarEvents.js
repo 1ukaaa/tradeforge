@@ -1,30 +1,35 @@
 import { alpha } from "@mui/material";
-import { resultTone } from "./journalUtils";
 
-export const mapTradesToEvents = (entries, theme) => {
-  return entries
-    .filter((entry) => entry.type === "trade")
-    .map((entry) => {
-      const meta = entry.metadata || {};
-      const title = `${meta.symbol || "Trade"} (${meta.result || "N/A"})`;
-      const tone = resultTone(meta.result);
-      const color = theme.palette[tone] || theme.palette.info;
+const resolveTradeColor = (trade, theme) => {
+  const isWinning = Number(trade.pnl) >= 0;
+  const palette = isWinning ? theme.palette.success : theme.palette.error;
+  return {
+    bg: alpha(palette.main, 0.15),
+    border: palette.main,
+    text: theme.palette.mode === "dark" ? palette.light : palette.dark,
+  };
+};
 
-      return {
-        id: entry.id,
-        title,
-        date: meta.date || entry.createdAt,
-        allDay: true,
-        backgroundColor: alpha(color.main, 0.15),
-        borderColor: color.main,
-        textColor: theme.palette.mode === "dark" ? color.light : color.dark,
-        extendedProps: {
-          type: "trade",
-          impact: "none",
-          journalEntry: entry,
-        },
-      };
-    });
+export const mapBrokerTradesToEvents = (trades = [], theme) => {
+  return trades.map((trade) => {
+    const colors = resolveTradeColor(trade, theme);
+    const title = `${trade.symbol || "Trade"} • ${trade.direction === "short" || trade.direction === "SELL" ? "Vente" : "Achat"}`;
+    const date = trade.date || trade.closedAt || trade.openedAt;
+    return {
+      id: trade.id || trade.externalTradeId || `${trade.brokerAccountId}-${date}`,
+      title,
+      date,
+      allDay: true,
+      backgroundColor: colors.bg,
+      borderColor: colors.border,
+      textColor: colors.text,
+      extendedProps: {
+        type: "brokerTrade",
+        brokerTrade: trade,
+        impact: "none",
+      },
+    };
+  });
 };
 
 export const isSameDay = (date1, date2) => {
