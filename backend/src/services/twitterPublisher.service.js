@@ -54,19 +54,6 @@ const uploadAttachments = async (client, attachments = []) => {
   return uploads;
 };
 
-const distributeMedia = (tweets, mediaIds) => {
-  const MAX_PER_TWEET = 4;
-  const map = tweets.map(() => []);
-  if (!mediaIds.length) return map;
-  mediaIds.forEach((mediaId, index) => {
-    const tweetIndex = Math.min(Math.floor(index / MAX_PER_TWEET), tweets.length - 1);
-    if (tweetIndex >= 0) {
-      map[tweetIndex].push(mediaId);
-    }
-  });
-  return map;
-};
-
 const publishThread = async (payload = {}) => {
   const tweets = Array.isArray(payload.tweets) ? payload.tweets : [];
   if (!tweets.length) {
@@ -74,10 +61,19 @@ const publishThread = async (payload = {}) => {
   }
 
   const client = createClient();
-  const attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
-  const uploadedMediaIds = await uploadAttachments(client, attachments);
-  const tweetMediaMap = distributeMedia(tweets, uploadedMediaIds);
-
+  const tweetMediaMap = [];
+  for (let index = 0; index < tweets.length; index += 1) {
+    const tweet = tweets[index];
+    const attachments = Array.isArray(tweet.media) ? tweet.media : [];
+    // Compatibilité avec anciens brouillons
+    const legacyAttachments =
+      index === 0 && (!attachments.length) && Array.isArray(payload.attachments)
+        ? payload.attachments
+        : [];
+    const mediaToUpload = attachments.length ? attachments : legacyAttachments;
+    const uploaded = await uploadAttachments(client, mediaToUpload);
+    tweetMediaMap.push(uploaded.slice(0, 4)); // Twitter limite à 4 médias
+  }
   let replyToId = null;
   const publishedTweets = [];
 

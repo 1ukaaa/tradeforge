@@ -82,7 +82,32 @@ const fileToDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
-const cloneDraft = (draft) => JSON.parse(JSON.stringify(draft));
+const ensureTweetMedia = (tweet) => ({
+  ...tweet,
+  media: Array.isArray(tweet.media) ? tweet.media : [],
+});
+
+const hydrateDraft = (draft) => {
+  if (!draft) return draft;
+  const cloned = JSON.parse(JSON.stringify(draft));
+  const tweets = Array.isArray(cloned?.payload?.tweets)
+    ? cloned.payload.tweets.map(ensureTweetMedia)
+    : [DEFAULT_TWEET()];
+  const legacyAttachments = Array.isArray(cloned?.payload?.attachments)
+    ? cloned.payload.attachments
+    : [];
+  if (legacyAttachments.length && tweets[0] && !tweets[0].media.length) {
+    tweets[0].media = legacyAttachments;
+  }
+  return {
+    ...cloned,
+    payload: {
+      ...cloned.payload,
+      tweets,
+      attachments: [],
+    },
+  };
+};
 
 const TwitterStudio = () => {
   const [drafts, setDrafts] = useState([]);
@@ -103,17 +128,74 @@ const TwitterStudio = () => {
   const [entrySearch, setEntrySearch] = useState("");
   const [generating, setGenerating] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
+  const [draggingMedia, setDraggingMedia] = useState(null);
+  const [pendingTweetIndex, setPendingTweetIndex] = useState(null);
   const fileInputRef = useRef(null);
+
+  const updateTweetMedia = (tweetIndex, updater) => {
+    setEditorDraft((prev) => {
+      if (!prev) return prev;
+      const tweets = prev.payload?.tweets ? [...prev.payload.tweets] : [];
+      if (!tweets[tweetIndex]) return prev;
+      const currentMedia = Array.isArray(tweets[tweetIndex].media) ? [...tweets[tweetIndex].media] : [];
+      const nextMedia = updater(currentMedia);
+      tweets[tweetIndex] = { ...tweets[tweetIndex], media: nextMedia };
+      return {
+        ...prev,
+        payload: {
+          ...prev.payload,
+          tweets,
+        },
+      };
+    });
+    setIsDirty(true);
+  };
+
+  const moveMediaItem = (sourceTweetIndex, mediaId, targetTweetIndex, targetMediaId = null) => {
+    setEditorDraft((prev) => {
+      if (!prev) return prev;
+      const tweets = prev.payload?.tweets ? [...prev.payload.tweets] : [];
+      const sourceTweet = tweets[sourceTweetIndex];
+      const targetTweet = tweets[targetTweetIndex];
+      if (!sourceTweet || !targetTweet) return prev;
+      const sourceMedia = Array.isArray(sourceTweet.media) ? [...sourceTweet.media] : [];
+      const sourceIndex = sourceMedia.findIndex((item) => item.id === mediaId);
+      if (sourceIndex === -1) return prev;
+      const [mediaItem] = sourceMedia.splice(sourceIndex, 1);
+      const targetMedia =
+        sourceTweetIndex === targetTweetIndex ? sourceMedia : Array.isArray(targetTweet.media) ? [...targetTweet.media] : [];
+      let insertIndex =
+        targetMediaId !== null ? targetMedia.findIndex((item) => item.id === targetMediaId) : targetMedia.length;
+      if (insertIndex < 0 || insertIndex > targetMedia.length) {
+        insertIndex = targetMedia.length;
+      }
+      if (sourceTweetIndex === targetTweetIndex && insertIndex >= sourceIndex) {
+        insertIndex = Math.min(insertIndex, targetMedia.length);
+      }
+      targetMedia.splice(insertIndex, 0, mediaItem);
+      tweets[sourceTweetIndex] = { ...sourceTweet, media: sourceMedia };
+      tweets[targetTweetIndex] = { ...targetTweet, media: targetMedia };
+      return {
+        ...prev,
+        payload: {
+          ...prev.payload,
+          tweets,
+        },
+      };
+    });
+    setIsDirty(true);
+  };
 
   const loadDrafts = useCallback(() => {
     setLoading(true);
     setError(null);
     fetchTwitterDrafts()
       .then((items) => {
-        setDrafts(items);
+        const hydrated = items.map(hydrateDraft);
+        setDrafts(hydrated);
         setActiveDraftId((prev) => {
           if (prev) return prev;
-          if (items.length) return items[0].id;
+          if (hydrated.length) return hydrated[0].id;
           return null;
         });
       })
@@ -154,7 +236,7 @@ const TwitterStudio = () => {
       return;
     }
     const selected = drafts.find((draft) => draft.id === activeDraftId);
-    setEditorDraft(selected ? cloneDraft(selected) : null);
+    setEditorDraft(selected ? hydrateDraft(selected) : null);
     setIsDirty(false);
   }, [activeDraftId, drafts]);
 
@@ -166,8 +248,9 @@ const TwitterStudio = () => {
         status: "draft",
         payload: { tweets: [DEFAULT_TWEET()] },
       });
-      setDrafts((prev) => [draft, ...prev]);
-      setActiveDraftId(draft.id);
+      const hydrated = hydrateDraft(draft);
+      setDrafts((prev) => [hydrated, ...prev]);
+      setActiveDraftId(hydrated.id);
       pushNotification("Brouillon créé.", "success");
     } catch (err) {
       setError(err.message);
@@ -251,9 +334,13 @@ const TwitterStudio = () => {
 
   const handleAttachEntry = (entry) => {
     if (!entry) return;
+    const attachments = mapEntryImagesToAttachments(entry);
     setEditorDraft((prev) => {
       if (!prev) return prev;
-      const attachments = mapEntryImagesToAttachments(entry);
+      const tweets = prev.payload?.tweets ? [...prev.payload.tweets] : [];
+      if (attachments.length && tweets[0]) {
+        tweets[0] = { ...tweets[0], media: attachments };
+      }
       return {
         ...prev,
         sourceEntryId: entry.id,
@@ -266,7 +353,7 @@ const TwitterStudio = () => {
         },
         payload: {
           ...prev.payload,
-          attachments,
+          tweets,
         },
       };
     });
@@ -279,77 +366,64 @@ const TwitterStudio = () => {
       if (!prev) return prev;
       const { metadata = {} } = prev;
       const { sourceTitle, sourceType, sourceDate, sourceSymbol, ...restMetadata } = metadata;
+      const tweets = (prev.payload?.tweets || []).map((tweet) => ({
+        ...tweet,
+        media: [],
+      }));
       return {
         ...prev,
         sourceEntryId: null,
         metadata: restMetadata,
         payload: {
           ...prev.payload,
-          attachments: [],
+          tweets,
         },
       };
     });
     setIsDirty(true);
   };
 
-  const handleRemoveAttachment = (attachmentId) => {
+  const handleRemoveAttachment = (tweetIndex, attachmentId) => {
     if (!attachmentId) return;
-    setEditorDraft((prev) => {
-      if (!prev) return prev;
-      const attachments = prev.payload?.attachments ? [...prev.payload.attachments] : [];
-      const filtered = attachments.filter((attachment) => attachment.id !== attachmentId);
-      return {
-        ...prev,
-        payload: {
-          ...prev.payload,
-          attachments: filtered,
-        },
-      };
-    });
-    setIsDirty(true);
+    updateTweetMedia(tweetIndex, (media) => media.filter((attachment) => attachment.id !== attachmentId));
   };
 
-  const handleReorderAttachment = (attachmentId, direction) => {
+  const handleReorderAttachment = (tweetIndex, attachmentId, direction) => {
     if (!attachmentId || !direction) return;
     setEditorDraft((prev) => {
       if (!prev) return prev;
-      const attachments = prev.payload?.attachments ? [...prev.payload.attachments] : [];
+      const tweets = prev.payload?.tweets ? [...prev.payload.tweets] : [];
+      const targetTweet = tweets[tweetIndex];
+      if (!targetTweet) return prev;
+      const attachments = Array.isArray(targetTweet.media) ? [...targetTweet.media] : [];
       const index = attachments.findIndex((item) => item.id === attachmentId);
       if (index === -1) return prev;
       const targetIndex = index + direction;
       if (targetIndex < 0 || targetIndex >= attachments.length) return prev;
       const [moved] = attachments.splice(index, 1);
       attachments.splice(targetIndex, 0, moved);
+      tweets[tweetIndex] = { ...targetTweet, media: attachments };
       return {
         ...prev,
         payload: {
           ...prev.payload,
-          attachments,
+          tweets,
         },
       };
     });
     setIsDirty(true);
   };
 
-  const handleAddAttachmentFromSrc = (src, name = "") => {
+  const handleAddAttachmentFromSrc = (tweetIndex, src, name = "") => {
     if (!src) return;
-    setEditorDraft((prev) => {
-      if (!prev) return prev;
-      const attachments = prev.payload?.attachments ? [...prev.payload.attachments] : [];
-      attachments.push({
+    updateTweetMedia(tweetIndex, (media) => [
+      ...media,
+      {
         id: `attachment-${Date.now()}`,
         src,
-        caption: name || `Image ${attachments.length + 1}`,
-      });
-      return {
-        ...prev,
-        payload: {
-          ...prev.payload,
-          attachments,
-        },
-      };
-    });
-    setIsDirty(true);
+        caption: name || `Image ${media.length + 1}`,
+      },
+    ]);
   };
 
   const handleAttachmentFileChange = async (event) => {
@@ -357,7 +431,9 @@ const TwitterStudio = () => {
     if (!file) return;
     try {
       const dataUrl = await fileToDataUrl(file);
-      handleAddAttachmentFromSrc(dataUrl, file.name);
+      const targetIndex = pendingTweetIndex ?? 0;
+      handleAddAttachmentFromSrc(targetIndex, dataUrl, file.name);
+      setPendingTweetIndex(null);
       pushNotification("Image ajoutée au brouillon.", "success");
     } catch (err) {
       console.error("Erreur lecture image :", err);
@@ -369,8 +445,24 @@ const TwitterStudio = () => {
     }
   };
 
-  const handleAddAttachmentClick = () => {
+  const handleAddAttachmentClick = (tweetIndex) => () => {
+    setPendingTweetIndex(tweetIndex);
     fileInputRef.current?.click();
+  };
+
+  const handleMediaDragStart = (tweetIndex, mediaId) => () => {
+    setDraggingMedia({ tweetIndex, mediaId });
+  };
+
+  const handleMediaDragEnd = () => setDraggingMedia(null);
+
+  const handleMediaDrop = (tweetIndex, targetMediaId = null) => (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (draggingMedia) {
+      moveMediaItem(draggingMedia.tweetIndex, draggingMedia.mediaId, tweetIndex, targetMediaId);
+    }
+    setDraggingMedia(null);
   };
 
   const handleGenerateWithGemini = async () => {
@@ -386,10 +478,13 @@ const TwitterStudio = () => {
         entryId: editorDraft.sourceEntryId,
         variant: variantValue,
       });
+      const existingMedia = Array.isArray(editorDraft.payload?.tweets)
+        ? editorDraft.payload.tweets.map((tweet) => tweet.media || [])
+        : [];
       const generatedTweets = (data?.tweets || []).map((tweet, index) => ({
         id: tweet.id || `tweet-${Date.now()}-${index}`,
         text: tweet.text || "",
-        media: tweet.media || [],
+        media: existingMedia[index] ? [...existingMedia[index]] : [],
       }));
       if (!generatedTweets.length) {
         throw new Error("Gemini n'a pas renvoyé de tweets.");
@@ -428,7 +523,8 @@ const TwitterStudio = () => {
         metadata: editorDraft.metadata,
       };
       const updated = await updateTwitterDraft(editorDraft.id, payload);
-      setDrafts((prev) => prev.map((draft) => (draft.id === updated.id ? updated : draft)));
+      const hydrated = hydrateDraft(updated);
+      setDrafts((prev) => prev.map((draft) => (draft.id === hydrated.id ? hydrated : draft)));
       setIsDirty(false);
       pushNotification("Brouillon enregistré.", "success");
     } catch (err) {
@@ -452,8 +548,9 @@ const TwitterStudio = () => {
         await handleSaveDraft();
       }
       const { draft } = await publishTwitterDraft(editorDraft.id);
-      setDrafts((prev) => prev.map((item) => (item.id === draft.id ? draft : item)));
-      setActiveDraftId(draft.id);
+      const hydrated = hydrateDraft(draft);
+      setDrafts((prev) => prev.map((item) => (item.id === hydrated.id ? hydrated : item)));
+      setActiveDraftId(hydrated.id);
       loadIntegrations();
       pushNotification("Thread publié sur Twitter.", "success");
     } catch (err) {
@@ -595,7 +692,6 @@ const TwitterStudio = () => {
 
   const previewTweets = editorDraft?.payload?.tweets || [];
   const previewCount = Math.max(previewTweets.length, 1);
-  const attachments = editorDraft?.payload?.attachments || [];
   const sourceInfo = editorDraft?.sourceEntryId
     ? {
         title: editorDraft.metadata?.sourceTitle || `Entrée #${editorDraft.sourceEntryId}`,
@@ -807,123 +903,153 @@ const TwitterStudio = () => {
 
               <ForgeCard title="Prévisualisation" subtitle="APERÇU LIVE">
                 <Stack spacing={2}>
-                  {previewTweets.map((tweet, index) => (
-                    <Box
-                      key={tweet.id}
-                      sx={{
-                        p: 2,
-                        borderRadius: 3,
-                        border: (theme) => `1px solid ${theme.palette.divider}`,
-                        background: (theme) =>
-                          theme.palette.mode === "dark"
-                            ? "linear-gradient(180deg, rgba(15,23,42,0.6), rgba(15,23,42,0.2))"
-                            : "linear-gradient(180deg, rgba(255,255,255,0.9), rgba(248,250,252,0.9))",
-                      }}
-                    >
-                      <Stack spacing={1}>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Box
-                            sx={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: "50%",
-                              background: (theme) => theme.palette.primary.main,
-                              opacity: 0.6,
-                            }}
-                          />
-                          <Stack>
-                            <Typography fontWeight={600}>{integrationInfo?.handle || "TradeForge"}</Typography>
+                  {previewTweets.map((tweet, index) => {
+                    const tweetMedia = Array.isArray(tweet.media) ? tweet.media : [];
+                    return (
+                      <Box
+                        key={tweet.id}
+                        sx={{
+                          p: 2,
+                          borderRadius: 3,
+                          border: (theme) => `1px solid ${theme.palette.divider}`,
+                          background: (theme) =>
+                            theme.palette.mode === "dark"
+                              ? "linear-gradient(180deg, rgba(15,23,42,0.6), rgba(15,23,42,0.2))"
+                              : "linear-gradient(180deg, rgba(255,255,255,0.9), rgba(248,250,252,0.9))",
+                        }}
+                        onDragOver={(event) => {
+                          if (draggingMedia) {
+                            event.preventDefault();
+                          }
+                        }}
+                        onDrop={handleMediaDrop(index, null)}
+                      >
+                        <Stack spacing={1}>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Box
+                              sx={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: "50%",
+                                background: (theme) => theme.palette.primary.main,
+                                opacity: 0.6,
+                              }}
+                            />
+                            <Stack>
+                              <Typography fontWeight={600}>{integrationInfo?.handle || "TradeForge"}</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {integrationInfo?.handle || "@tradeforge"}
+                              </Typography>
+                            </Stack>
+                          </Stack>
+                          {tweet.text ? (
+                            <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
+                              {tweet.text}
+                            </Typography>
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              (Commence à écrire pour visualiser le rendu)
+                            </Typography>
+                          )}
+                          {tweetMedia.length > 0 && (
+                            <Grid
+                              container
+                              spacing={1}
+                              onDragOver={(event) => event.preventDefault()}
+                              onDrop={handleMediaDrop(index, null)}
+                            >
+                              {tweetMedia.map((attachment, attachIndex) => (
+                                <Grid item xs={tweetMedia.length > 1 ? 6 : 12} key={attachment.id}>
+                                  <Box
+                                    sx={{
+                                      position: "relative",
+                                      borderRadius: 2,
+                                      overflow: "hidden",
+                                      outline:
+                                        draggingMedia?.mediaId === attachment.id &&
+                                        draggingMedia?.tweetIndex === index
+                                          ? (theme) => `1px dashed ${theme.palette.primary.main}`
+                                          : "none",
+                                    }}
+                                    draggable
+                                    onDragStart={handleMediaDragStart(index, attachment.id)}
+                                    onDragEnd={handleMediaDragEnd}
+                                    onDragOver={(event) => event.preventDefault()}
+                                    onDrop={handleMediaDrop(index, attachment.id)}
+                                  >
+                                    <Box
+                                      component="img"
+                                      src={attachment.src}
+                                      alt={attachment.caption || "Image"}
+                                      sx={{
+                                        width: "100%",
+                                        height: 180,
+                                        objectFit: "cover",
+                                        display: "block",
+                                      }}
+                                    />
+                                    <Stack
+                                      direction="row"
+                                      spacing={0.5}
+                                      sx={{ position: "absolute", top: 8, right: 8 }}
+                                    >
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => handleReorderAttachment(index, attachment.id, -1)}
+                                        disabled={attachIndex === 0}
+                                        sx={{
+                                          color: "#111",
+                                          backgroundColor: "rgba(255,255,255,0.85)",
+                                        }}
+                                      >
+                                        <ChevronLeftIcon fontSize="small" />
+                                      </IconButton>
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => handleReorderAttachment(index, attachment.id, 1)}
+                                        disabled={attachIndex === tweetMedia.length - 1}
+                                        sx={{
+                                          color: "#111",
+                                          backgroundColor: "rgba(255,255,255,0.85)",
+                                        }}
+                                      >
+                                        <ChevronRightIcon fontSize="small" />
+                                      </IconButton>
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => handleRemoveAttachment(index, attachment.id)}
+                                        sx={{
+                                          color: "#111",
+                                          backgroundColor: "rgba(255,255,255,0.85)",
+                                        }}
+                                      >
+                                        <DeleteOutlineIcon fontSize="small" />
+                                      </IconButton>
+                                    </Stack>
+                                  </Box>
+                                </Grid>
+                              ))}
+                            </Grid>
+                          )}
+                          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center" mt={1}>
+                            <Button
+                              variant="outlined"
+                              startIcon={<AddPhotoAlternateIcon />}
+                              onClick={handleAddAttachmentClick(index)}
+                            >
+                              Ajouter une image
+                            </Button>
                             <Typography variant="caption" color="text.secondary">
-                              {integrationInfo?.handle || "@tradeforge"}
+                              Formats supportés : fichiers images ou captures copiées depuis le journal.
                             </Typography>
                           </Stack>
+                          <Typography variant="caption" color="text.secondary">
+                            {index + 1} / {previewCount}
+                          </Typography>
                         </Stack>
-                        {tweet.text ? (
-                          <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
-                            {tweet.text}
-                          </Typography>
-                        ) : (
-                          <Typography variant="body2" color="text.secondary">
-                            (Commence à écrire pour visualiser le rendu)
-                          </Typography>
-                        )}
-                        {index === 0 && attachments.length > 0 && (
-                          <Grid container spacing={1}>
-                            {attachments.map((attachment, attachIndex) => (
-                              <Grid item xs={attachments.length > 1 ? 6 : 12} key={attachment.id}>
-                                <Box sx={{ position: "relative", borderRadius: 2, overflow: "hidden" }}>
-                                  <Box
-                                    component="img"
-                                    src={attachment.src}
-                                    alt={attachment.caption || "Image"}
-                                    sx={{
-                                      width: "100%",
-                                      height: 180,
-                                      objectFit: "cover",
-                                      display: "block",
-                                    }}
-                                  />
-                                  <Stack
-                                    direction="row"
-                                    spacing={0.5}
-                                    sx={{ position: "absolute", top: 8, right: 8 }}
-                                  >
-                                    <IconButton
-                                      size="small"
-                                      onClick={() => handleReorderAttachment(attachment.id, -1)}
-                                      disabled={attachIndex === 0}
-                                      sx={{
-                                        color: "#111",
-                                        backgroundColor: "rgba(255,255,255,0.85)",
-                                      }}
-                                    >
-                                      <ChevronLeftIcon fontSize="small" />
-                                    </IconButton>
-                                    <IconButton
-                                      size="small"
-                                      onClick={() => handleReorderAttachment(attachment.id, 1)}
-                                      disabled={attachIndex === attachments.length - 1}
-                                      sx={{
-                                        color: "#111",
-                                        backgroundColor: "rgba(255,255,255,0.85)",
-                                      }}
-                                    >
-                                      <ChevronRightIcon fontSize="small" />
-                                    </IconButton>
-                                    <IconButton
-                                      size="small"
-                                      onClick={() => handleRemoveAttachment(attachment.id)}
-                                      sx={{
-                                        color: "#111",
-                                        backgroundColor: "rgba(255,255,255,0.85)",
-                                      }}
-                                    >
-                                      <DeleteOutlineIcon fontSize="small" />
-                                    </IconButton>
-                                  </Stack>
-                                </Box>
-                              </Grid>
-                            ))}
-                          </Grid>
-                        )}
-                        <Typography variant="caption" color="text.secondary">
-                          {index + 1} / {previewCount}
-                        </Typography>
-                      </Stack>
-                    </Box>
-                  ))}
-                </Stack>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center" mt={2}>
-                  <Button
-                    variant="outlined"
-                    startIcon={<AddPhotoAlternateIcon />}
-                    onClick={handleAddAttachmentClick}
-                  >
-                    Ajouter une image
-                  </Button>
-                  <Typography variant="caption" color="text.secondary">
-                    Formats supportés : fichiers images ou captures copiées depuis le journal.
-                  </Typography>
+                      </Box>
+                    );
+                  })}
                 </Stack>
               </ForgeCard>
             </Stack>

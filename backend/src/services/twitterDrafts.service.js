@@ -4,11 +4,16 @@ const { parseMetadata, serializeMetadata } = require("../core/utils");
 
 const ensureArray = (value) => (Array.isArray(value) ? value : []);
 
-const normalizeTweet = (tweet = {}, index = 0, seed = Date.now()) => ({
-  id: tweet.id || `tweet-${seed}-${index + 1}`,
-  text: typeof tweet.text === "string" ? tweet.text : "",
-  media: ensureArray(tweet.media),
-});
+const normalizeTweet = (tweet = {}, index = 0, seed = Date.now()) => {
+  const normalizedMedia = ensureArray(tweet.media)
+    .map((media, mediaIndex) => normalizeAttachment(media, `${seed}-${index}-${mediaIndex}`))
+    .filter(Boolean);
+  return {
+    id: tweet.id || `tweet-${seed}-${index + 1}`,
+    text: typeof tweet.text === "string" ? tweet.text : "",
+    media: normalizedMedia,
+  };
+};
 
 const normalizeAttachment = (attachment = {}, index = 0, seed = Date.now()) => {
   if (typeof attachment === "string") {
@@ -26,16 +31,19 @@ const normalizeAttachment = (attachment = {}, index = 0, seed = Date.now()) => {
 const normalizePayload = (payload = {}) => {
   const source = typeof payload === "object" && payload !== null ? payload : {};
   const seed = Date.now();
-  const sanitizedTweets = ensureArray(source.tweets).map((tweet, index) =>
-    normalizeTweet(tweet, index, seed)
-  );
-  const tweets = sanitizedTweets.length > 0 ? sanitizedTweets : [normalizeTweet({}, 0, seed)];
-  const attachments = ensureArray(source.attachments)
+  let tweets = ensureArray(source.tweets).map((tweet, index) => normalizeTweet(tweet, index, seed));
+  if (!tweets.length) {
+    tweets = [normalizeTweet({}, 0, seed)];
+  }
+  const legacyAttachments = ensureArray(source.attachments)
     .map((attachment, index) => normalizeAttachment(attachment, index, seed))
     .filter(Boolean);
+  if (legacyAttachments.length && tweets[0] && (!tweets[0].media || !tweets[0].media.length)) {
+    tweets[0] = { ...tweets[0], media: legacyAttachments };
+  }
   return {
     tweets,
-    attachments,
+    attachments: [],
     notes: typeof source.notes === "string" ? source.notes : "",
   };
 };
