@@ -16,6 +16,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
+import { useMemo } from "react";
 import {
   TIMEFRAME_OPTIONS,
   normalizeTimeframes,
@@ -35,6 +36,7 @@ const SYMBOL_SUGGESTIONS = ["EURUSD", "NAS100", "US30", "DAX", "UKOIL", "BTCUSD"
 const EditEntryForm = ({
   entry,
   accountOptions = [],
+  brokerTrades = [],
   onDataChange,
   onImageDelete,
   onImageClick,
@@ -91,6 +93,35 @@ const EditEntryForm = ({
         accountId: account?.id,
         accountName: account?.name,
         pnlCurrency: account?.currency || entry.metadata.pnlCurrency,
+        brokerTradeId: undefined,
+        brokerTradeLabel: undefined,
+      },
+    });
+  };
+
+  const handleBrokerTradeChange = (_, newTrade) => {
+    if (!newTrade) {
+      onDataChange({
+        ...entry,
+        metadata: {
+          ...entry.metadata,
+          brokerTradeId: undefined,
+          brokerTradeLabel: undefined,
+        },
+      });
+      return;
+    }
+    onDataChange({
+      ...entry,
+      metadata: {
+        ...entry.metadata,
+        brokerTradeId: newTrade.id,
+        brokerTradeLabel: formatBrokerTradeOption(newTrade),
+        accountId: newTrade.brokerAccountId,
+        accountName: newTrade.accountName,
+        pnlAmount: newTrade.pnl,
+        pnlCurrency: newTrade.currency,
+        symbol: entry.metadata.symbol || newTrade.symbol,
       },
     });
   };
@@ -109,6 +140,21 @@ const EditEntryForm = ({
     (acc) => acc.id === entry.metadata.accountId
   ) || (accountOptions.length === 1 ? accountOptions[0] : null);
   const showAccountFields = entry.type === "trade" && accountOptions.length > 0;
+  const availableBrokerTrades = useMemo(() => {
+    if (!brokerTrades.length) return [];
+    if (!selectedAccount) return brokerTrades;
+    return brokerTrades.filter((trade) => trade.brokerAccountId === selectedAccount.id);
+  }, [brokerTrades, selectedAccount]);
+  const selectedBrokerTrade = useMemo(() => {
+    if (!entry.metadata.brokerTradeId) return null;
+    return (
+      availableBrokerTrades.find(
+        (trade) =>
+          trade.id === entry.metadata.brokerTradeId ||
+          (Array.isArray(trade.fillIds) && trade.fillIds.includes(entry.metadata.brokerTradeId))
+      ) || null
+    );
+  }, [availableBrokerTrades, entry.metadata.brokerTradeId]);
 
   // --- Rendu ---
 
@@ -202,6 +248,23 @@ const EditEntryForm = ({
               </MenuItem>
             ))}
           </TextField>
+          {availableBrokerTrades.length > 0 && (
+            <Autocomplete
+              options={availableBrokerTrades}
+              value={selectedBrokerTrade}
+              onChange={handleBrokerTradeChange}
+              getOptionLabel={formatBrokerTradeOption}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Associer une position importée"
+                  size="small"
+                  helperText="Sélectionnez la position importée correspondante"
+                />
+              )}
+            />
+          )}
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField
               label="Gain / Perte"
@@ -408,6 +471,25 @@ const EditEntryForm = ({
       />
     </Stack>
   );
+};
+
+const formatBrokerTradeOption = (trade) => {
+  if (!trade) return "";
+  const date = trade.closedAt || trade.openedAt;
+  const dateLabel = date
+    ? new Date(date).toLocaleString("fr-FR", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
+  const legsLabel = trade.fillsCount > 1 ? ` (${trade.fillsCount} ordres)` : "";
+  const pnlValue = Number(trade.pnl);
+  const pnlLabel = Number.isFinite(pnlValue)
+    ? ` • ${pnlValue >= 0 ? "+" : "-"}${Math.abs(pnlValue).toFixed(2)} ${trade.currency || ""}`
+    : "";
+  return `${trade.symbol || "Trade"} • ${trade.direction || ""}${legsLabel} • ${dateLabel}${pnlLabel}`;
 };
 
 export default EditEntryForm;

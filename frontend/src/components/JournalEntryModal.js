@@ -5,6 +5,7 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
 import EditIcon from "@mui/icons-material/Edit";
 import LabelIcon from "@mui/icons-material/Label";
+import LinkIcon from "@mui/icons-material/Link";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import TimerIcon from "@mui/icons-material/Timer";
@@ -32,7 +33,7 @@ import {
   deleteJournalEntry,
   updateJournalEntry,
 } from "../services/journalClient";
-import { fetchSettings } from "../services/settingsClient";
+import { fetchBrokerSummary, fetchBrokerPositions } from "../services/brokerClient";
 import {
   formatDate, // Récupère la 1ère image (qui sera l'image principale)
   getEntryTitle,
@@ -40,7 +41,7 @@ import {
   resultTone,
   typeLabel
 } from "../utils/journalUtils";
-import { buildAccountsFromSettings, getCurrencySymbol } from "../utils/accountUtils";
+import { getCurrencySymbol } from "../utils/accountUtils";
 import {
   normalizeTimeframes,
   stringifyTimeframes,
@@ -63,6 +64,17 @@ const MetaItem = ({ icon, label, children }) => (
     </Stack>
   </Grid>
 );
+
+const findBrokerTradeMatch = (trades, targetId) => {
+  if (!targetId) return null;
+  return (
+    trades.find(
+      (trade) =>
+        trade.id === targetId ||
+        (Array.isArray(trade.fillIds) && trade.fillIds.includes(targetId))
+    ) || null
+  );
+};
 
 const toInputDateTime = (dateString) => {
   if (!dateString) return "";
@@ -95,6 +107,7 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
 
   const [previewImageSrc, setPreviewImageSrc] = useState(null);
   const [accountOptions, setAccountOptions] = useState([]);
+  const [brokerTrades, setBrokerTrades] = useState([]);
 
   useEffect(() => {
     if (entry) {
@@ -123,16 +136,20 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
 
   useEffect(() => {
     let isMounted = true;
-    const loadAccounts = async () => {
+    const loadBrokerData = async () => {
       try {
-        const settings = await fetchSettings();
+        const [summary, positions] = await Promise.all([
+          fetchBrokerSummary(),
+          fetchBrokerPositions(),
+        ]);
         if (!isMounted) return;
-        setAccountOptions(buildAccountsFromSettings(settings));
+        setAccountOptions(summary.accounts || []);
+        setBrokerTrades(positions || []);
       } catch (error) {
-        console.error("Impossible de charger les comptes:", error);
+        console.error("Impossible de charger les comptes broker:", error);
       }
     };
-    loadAccounts();
+    loadBrokerData();
     return () => {
       isMounted = false;
     };
@@ -263,6 +280,9 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
     ? accountOptions.find((acc) => acc.id === displayEntry.metadata.accountId)
     : null;
   const accountLabel = displayEntry?.metadata?.accountName || resolvedAccount?.name;
+  const linkedBrokerTrade = displayEntry?.metadata?.brokerTradeId
+    ? findBrokerTradeMatch(brokerTrades, displayEntry.metadata.brokerTradeId)
+    : null;
 
   return (
     <>
@@ -292,6 +312,7 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
             <EditEntryForm
               entry={editedEntry}
               accountOptions={accountOptions}
+              brokerTrades={brokerTrades}
               onDataChange={setEditedEntry}
               onImageDelete={handleImageDelete}
               onImageClick={(src) => setPreviewImageSrc(src)}
@@ -441,6 +462,26 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
                             <Typography variant="body1" fontWeight={600}>
                               {accountLabel || "Non renseigné"}
                             </Typography>
+                          </MetaItem>
+                        )}
+                        {displayEntry.type === "trade" && (displayEntry.metadata?.brokerTradeId || linkedBrokerTrade) && (
+                          <MetaItem
+                            icon={<LinkIcon fontSize="small" />}
+                            label="Trade relié"
+                          >
+                            <Stack spacing={0.5}>
+                              <Typography variant="body1" fontWeight={600}>
+                                #{linkedBrokerTrade?.externalTradeId || displayEntry.metadata?.brokerTradeId}
+                              </Typography>
+                              {linkedBrokerTrade && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {formatDate(
+                                    linkedBrokerTrade.closedAt || linkedBrokerTrade.openedAt,
+                                    { dateStyle: "medium", timeStyle: "short" }
+                                  )}
+                                </Typography>
+                              )}
+                            </Stack>
                           </MetaItem>
                         )}
                         {displayEntry.type === "trade" && (

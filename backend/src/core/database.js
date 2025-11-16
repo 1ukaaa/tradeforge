@@ -31,6 +31,77 @@ function initJournal() {
   `);
 }
 
+function initBrokerTables() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS broker_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      externalId TEXT UNIQUE,
+      name TEXT NOT NULL,
+      provider TEXT,
+      type TEXT,
+      currency TEXT,
+      color TEXT,
+      initialBalance REAL DEFAULT 0,
+      currentBalance REAL DEFAULT 0,
+      status TEXT,
+      lastSyncAt TEXT,
+      metadata TEXT,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS broker_trades (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      brokerAccountId INTEGER NOT NULL,
+      externalTradeId TEXT,
+      symbol TEXT,
+      direction TEXT,
+      volume REAL,
+      entryPrice REAL,
+      exitPrice REAL,
+      pnl REAL,
+      pnlCurrency TEXT,
+      openedAt TEXT,
+      closedAt TEXT,
+      metadata TEXT,
+      UNIQUE(brokerAccountId, externalTradeId),
+      FOREIGN KEY (brokerAccountId) REFERENCES broker_accounts(id) ON DELETE CASCADE
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS broker_integrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      brokerAccountId INTEGER UNIQUE NOT NULL,
+      type TEXT NOT NULL,
+      status TEXT,
+      credentials TEXT,
+      metadata TEXT,
+      lastSyncAt TEXT,
+      error TEXT,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      FOREIGN KEY (brokerAccountId) REFERENCES broker_accounts(id) ON DELETE CASCADE
+    );
+  `);
+
+  ensureBrokerAccountColumns();
+}
+
+function ensureBrokerAccountColumns() {
+  const columns = db.prepare("PRAGMA table_info(broker_accounts)").all();
+  const names = columns.map((col) => col.name);
+  const alter = (column, definition) => {
+    if (!names.includes(column)) {
+      db.exec(`ALTER TABLE broker_accounts ADD COLUMN ${column} ${definition}`);
+    }
+  };
+  alter("status", "TEXT");
+  alter("lastSyncAt", "TEXT");
+}
+
 // MODIFICATION : La logique de seeding vit ici maintenant
 function seedJournalEntries() {
   const { count } = db.prepare("SELECT COUNT(*) as count FROM entries").get();
@@ -142,12 +213,19 @@ function initializeDatabase() {
   initSettingsTable();
   initStructuredTemplates();
   initPromptVariants();
+  initBrokerTables();
   
   // MODIFICATION : On appelle la fonction de seeding locale
   seedJournalEntries(); 
+  cleanupSeedBrokerData();
   
   console.log("Base de données prête.");
   // MODIFICATION : On retire setImmediate, plus besoin
+}
+
+function cleanupSeedBrokerData() {
+  db.exec("DELETE FROM broker_integrations WHERE status = 'seeded'");
+  db.exec("DELETE FROM broker_accounts WHERE status = 'seeded'");
 }
 
 // Exécute l'initialisation

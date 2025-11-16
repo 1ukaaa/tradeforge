@@ -1,11 +1,7 @@
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
-import AddIcon from "@mui/icons-material/Add";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
 import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
-import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
-import TrendingDownIcon from "@mui/icons-material/TrendingDown";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import {
   Alert,
@@ -13,37 +9,26 @@ import {
   Avatar,
   Box,
   Button,
-  Card,
-  CardContent,
-  Chip,
   CircularProgress,
   Container,
-  IconButton,
   LinearProgress,
-  Paper,
   Stack,
   Typography,
 } from "@mui/material";
-import { format } from "date-fns";
+import { addDays, format, subDays, subMonths, subYears } from "date-fns";
 import { fr } from "date-fns/locale";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useDashboardSummary } from "../hooks/useDashboardSummary";
+import { formatCurrencyValue, formatSignedCurrency } from "../utils/dashboardUtils";
 import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Tooltip as ChartTooltip,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-} from "recharts";
-import { fetchJournalEntries } from "../services/journalClient";
-import { fetchSettings } from "../services/settingsClient";
-import { ACCOUNT_IDS } from "../utils/accountUtils";
-import {
-  buildDashboardData,
-  formatCurrencyValue,
-  formatSignedCurrency,
-} from "../utils/dashboardUtils";
+  AccountsList,
+  GoalInsights,
+  Goals,
+  PerformanceChart,
+  RecentActivity,
+  StatCard,
+  formatTradeDate,
+} from "./dashboard/DashboardWidgets";
 
 const userData = {
   name: "Luka",
@@ -51,10 +36,77 @@ const userData = {
     "https://api.dicebear.com/7.x/avataaars/svg?seed=Trader&top=ShortHairShortFlat&facialHair=BeardLight&facialHairColor=BrownDark&clothes=BlazerShirt&accessories=Prescription02&skinColor=Tanned",
 };
 
+const EMPTY_ARRAY = [];
+const CHART_RANGE_OPTIONS = [
+  { key: "7d", label: "7 derniers jours", shortLabel: "7J", getThreshold: (endDate) => subDays(endDate, 6) },
+  { key: "30d", label: "30 derniers jours", shortLabel: "30J", getThreshold: (endDate) => subDays(endDate, 29) },
+  { key: "6m", label: "6 derniers mois", shortLabel: "6M", getThreshold: (endDate) => subMonths(endDate, 6) },
+  { key: "1y", label: "1 an", shortLabel: "1A", getThreshold: (endDate) => subYears(endDate, 1) },
+  { key: "all", label: "Depuis le début", shortLabel: "ALL" },
+];
+const CHART_RANGE_LOOKUP = Object.fromEntries(CHART_RANGE_OPTIONS.map((option) => [option.key, option]));
+const RECENT_ACTIVITY_PAGE_SIZE = 5;
+
+const buildFullHistory = (trades = [], initialBalance = 0) => {
+  const baseline = Number(initialBalance) || 0;
+  const normalizedTrades = trades
+    .map((trade) => {
+      const rawDate = trade.date || trade.closedAt || trade.openedAt;
+      if (!rawDate) return null;
+      const date = new Date(rawDate);
+      if (Number.isNaN(date.getTime())) return null;
+      return {
+        timestamp: date.getTime(),
+        pnl: Number(trade.pnl) || 0,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startDate = normalizedTrades.length ? new Date(normalizedTrades[0].timestamp) : new Date(today);
+  startDate.setHours(0, 0, 0, 0);
+  const history = [];
+  let runningValue = baseline;
+  let tradeIndex = 0;
+
+  for (let cursor = new Date(startDate); cursor <= today; cursor = addDays(cursor, 1)) {
+    const dayEndTs = cursor.getTime() + 86400000 - 1;
+    while (tradeIndex < normalizedTrades.length && normalizedTrades[tradeIndex].timestamp <= dayEndTs) {
+      runningValue += normalizedTrades[tradeIndex].pnl;
+      tradeIndex += 1;
+    }
+    const pnlValue = runningValue - baseline;
+    history.push({
+      date: format(cursor, "dd MMM", { locale: fr }),
+      value: Math.round(runningValue * 100) / 100,
+      pnl: Math.round(pnlValue * 100) / 100,
+      timestamp: cursor.getTime(),
+      iso: cursor.toISOString(),
+    });
+  }
+
+  return history;
+};
+
+const filterHistoryByRange = (history = [], rangeKey = "30d") => {
+  if (!history.length) return [];
+  const range = CHART_RANGE_LOOKUP[rangeKey];
+  if (!range || !range.getThreshold) {
+    return history;
+  }
+  const endDate = new Date(history[history.length - 1].timestamp);
+  const startDate = range.getThreshold(new Date(endDate));
+  startDate.setHours(0, 0, 0, 0);
+  const thresholdTs = startDate.getTime();
+  return history.filter((entry) => entry.timestamp >= thresholdTs);
+};
+
 const buildGoalsData = (stats, trades) => {
   if (!stats) return [];
   const monthlyTarget = stats.initialBalance > 0 ? stats.initialBalance * 0.05 : 0;
-  const winTrades = trades.filter((trade) => trade.amount > 0).length;
+  const winTrades = trades.filter((trade) => trade.pnl > 0).length;
   const totalTrades = trades.length;
   const winRate = totalTrades ? (winTrades / totalTrades) * 100 : 0;
 
@@ -104,7 +156,7 @@ const buildGoalInsights = (stats, goals, trades) => {
 
   let losingStreak = 0;
   for (const trade of trades) {
-    if (trade.amount < 0) {
+    if (trade.pnl < 0) {
       losingStreak += 1;
     } else {
       break;
@@ -134,591 +186,100 @@ const buildGoalInsights = (stats, goals, trades) => {
   return [monthlyInsight, executionInsight];
 };
 
-const formatTradeDate = (date) => {
-  if (!date) return "-";
-  try {
-    return format(date, "dd MMM yyyy • HH:mm", { locale: fr });
-  } catch {
-    return "-";
-  }
-};
-
-const StatCard = ({
-  title,
-  value = 0,
-  change = 0,
-  changePercent = 0,
-  icon: Icon,
-  color,
-  currency,
-}) => {
-  const isPositive = change >= 0;
-  const percentLabel = Number.isFinite(changePercent)
-    ? `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}%`
-    : "N/A";
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        borderRadius: 4,
-        border: "1px solid",
-        borderColor: alpha(color, 0.2),
-        height: "100%",
-        position: "relative",
-        overflow: "hidden",
-        background: `linear-gradient(135deg, ${alpha(color, 0.08)}, #fff)`,
-        transition: "all 0.35s ease",
-        "&:before": {
-          content: '""',
-          position: "absolute",
-          inset: 0,
-          background: `radial-gradient(circle at top right, ${alpha(color, 0.25)}, transparent 55%)`,
-          opacity: 0.9,
-        },
-        "&:hover": {
-          transform: "translateY(-4px)",
-          boxShadow: `0 16px 32px ${alpha(color, 0.25)}`,
-        },
-      }}
-    >
-      <CardContent sx={{ p: 3, position: "relative", zIndex: 1 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-          <Box>
-            <Typography variant="overline" sx={{ color: alpha("#0f172a", 0.7), letterSpacing: 1 }}>
-              {title}
-            </Typography>
-            <Typography variant="h4" fontWeight={700}>
-              {formatCurrencyValue(value, currency)}
-            </Typography>
-          </Box>
-          <Box
-            sx={{
-              width: 48,
-              height: 48,
-              borderRadius: "18px",
-              bgcolor: alpha(color, 0.15),
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Icon sx={{ fontSize: 26, color }} />
-          </Box>
-        </Box>
-
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          {isPositive ? (
-            <TrendingUpIcon sx={{ fontSize: 18, color: "#10b981" }} />
-          ) : (
-            <TrendingDownIcon sx={{ fontSize: 18, color: "#ef4444" }} />
-          )}
-          <Typography
-            variant="body2"
-            sx={{ color: isPositive ? "#10b981" : "#ef4444", fontWeight: 600 }}
-          >
-            {formatSignedCurrency(change, currency)}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            ({percentLabel})
-          </Typography>
-        </Box>
-      </CardContent>
-    </Card>
-  );
-};
-
-const PerformanceChart = ({ history = [], currency }) => {
-  const values = history.map((entry) => entry.value);
-  const startValue = values[0] || 0;
-  const endValue = values[values.length - 1] || 0;
-  const changeValue = endValue - startValue;
-  const changePercent = startValue ? (changeValue / startValue) * 100 : 0;
-  const maxEntry = history.reduce((prev, curr) => (curr.value > prev.value ? curr : prev), history[0] || { value: 0, date: "-" });
-  const minEntry = history.reduce((prev, curr) => (curr.value < prev.value ? curr : prev), history[0] || { value: 0, date: "-" });
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        borderRadius: 4,
-        border: "1px solid",
-        borderColor: "divider",
-        background: "linear-gradient(180deg, #ffffff, rgba(99,102,241,0.02))",
-      }}
-    >
-      <CardContent sx={{ p: { xs: 3, md: 4 }, pb: { xs: 3, md: 4 } }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2.5 }}>
-          <Box>
-            <Typography variant="h6" fontWeight={700}>
-              Performance du portefeuille
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              30 derniers jours
-            </Typography>
-          </Box>
-          <Chip label="1M" size="small" color="primary" />
-        </Box>
-
-        {history.length === 0 ? (
-          <Stack sx={{ minHeight: 230, alignItems: "center", justifyContent: "center" }}>
-            <Typography color="text.secondary">Pas encore de données disponibles.</Typography>
-          </Stack>
-        ) : (
-          <ResponsiveContainer width="100%" height={230}>
-            <AreaChart data={history}>
-              <defs>
-                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="date" stroke="#9ca3af" style={{ fontSize: 12 }} />
-              <YAxis
-                stroke="#9ca3af"
-                style={{ fontSize: 12 }}
-                tickFormatter={(value) => formatSignedCurrency(value, currency)}
-              />
-              <ChartTooltip
-                contentStyle={{
-                  backgroundColor: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 8,
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                }}
-                formatter={(value) => formatCurrencyValue(value, currency)}
-              />
-              <Area type="monotone" dataKey="value" stroke="#6366f1" strokeWidth={2} fill="url(#colorValue)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
-
-        <Box
-          sx={{
-            mt: 2.5,
-            display: "grid",
-            gridTemplateColumns: { xs: "repeat(1, minmax(0, 1fr))", sm: "repeat(3, minmax(0, 1fr))" },
-            gap: 2,
-          }}
-        >
-          {[
-            {
-              label: "Variation 30 jours",
-              primary: formatSignedCurrency(changeValue, currency),
-              secondary: `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}%`,
-              positive: changeValue >= 0,
-            },
-            {
-              label: "Plus haut",
-              primary: formatCurrencyValue(maxEntry?.value || 0, currency),
-              secondary: maxEntry?.date || "-",
-              positive: true,
-            },
-            {
-              label: "Plus bas",
-              primary: formatCurrencyValue(minEntry?.value || 0, currency),
-              secondary: minEntry?.date || "-",
-              positive: false,
-            },
-          ].map((stat) => (
-            <Box
-              key={stat.label}
-              sx={{
-                p: 2,
-                borderRadius: 3,
-                border: "1px solid",
-                borderColor: "rgba(226,232,240,0.8)",
-                backgroundColor: "#fff",
-              }}
-            >
-              <Typography variant="caption" color="text.secondary">
-                {stat.label}
-              </Typography>
-              <Typography
-                variant="h6"
-                fontWeight={700}
-                sx={{ color: stat.positive ? "#4338ca" : "#ef4444" }}
-              >
-                {stat.primary}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {stat.secondary}
-              </Typography>
-            </Box>
-          ))}
-        </Box>
-      </CardContent>
-    </Card>
-  );
-};
-
-const AccountsList = ({ accounts = [], selectedAccountId, onSelectAccount }) => (
-  <Card
-    elevation={0}
-    sx={{
-      borderRadius: 4,
-      border: "1px solid",
-      borderColor: "divider",
-    }}
-  >
-    <CardContent sx={{ p: 3 }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-        <Typography variant="h6" fontWeight={700}>
-          Mes comptes
-        </Typography>
-        <IconButton size="small">
-          <AddIcon />
-        </IconButton>
-      </Box>
-
-      <Stack spacing={2}>
-        {accounts.map((account) => {
-          const isSelected = selectedAccountId === account.id;
-          return (
-            <Paper
-              key={account.id}
-              elevation={0}
-              onClick={() => onSelectAccount(account.id)}
-              sx={{
-                p: 2,
-                borderRadius: 3,
-                cursor: "pointer",
-                border: "1px solid",
-                borderColor: isSelected ? account.color : alpha(account.color, 0.15),
-                bgcolor: alpha(account.color, isSelected ? 0.1 : 0.05),
-                transition: "all 0.2s",
-              }}
-            >
-              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                  <Box
-                    sx={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      bgcolor: account.color,
-                    }}
-                  />
-                  <Box>
-                    <Typography variant="body2" fontWeight={600}>
-                      {account.name}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {formatCurrencyValue(account.currentBalance, account.currency)}
-                    </Typography>
-                  </Box>
-                </Box>
-                <Chip
-                  label={`${account.gainPercent >= 0 ? "+" : ""}${account.gainPercent.toFixed(2)}%`}
-                  size="small"
-                  sx={{
-                    bgcolor: account.gainPercent >= 0 ? alpha("#10b981", 0.1) : alpha("#ef4444", 0.1),
-                    color: account.gainPercent >= 0 ? "#10b981" : "#ef4444",
-                    fontWeight: 600,
-                  }}
-                />
-              </Box>
-            </Paper>
-          );
-        })}
-      </Stack>
-    </CardContent>
-  </Card>
-);
-
-const RecentActivity = ({ trades = [] }) => (
-  <Card
-    elevation={0}
-    sx={{
-      borderRadius: 4,
-      border: "1px solid",
-      borderColor: "divider",
-    }}
-  >
-    <CardContent sx={{ p: 3 }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-        <Typography variant="h6" fontWeight={700}>
-          Activité récente
-        </Typography>
-        <IconButton size="small">
-          <MoreVertIcon />
-        </IconButton>
-      </Box>
-
-      <Stack spacing={1.5}>
-        {trades.length === 0 && (
-          <Typography variant="body2" color="text.secondary">
-            Aucun trade n'a encore été enregistré.
-          </Typography>
-        )}
-        {trades.slice(0, 5).map((trade) => {
-          const typeColor = trade.direction === "SELL" ? "#f59e0b" : "#10b981";
-          const amountColor = trade.amount >= 0 ? "#10b981" : "#ef4444";
-          return (
-            <Paper
-              key={trade.id}
-              elevation={0}
-              sx={{
-                p: 1.75,
-                borderRadius: 3,
-                border: "1px solid",
-                borderColor: "rgba(226, 232, 240, 0.8)",
-                backgroundColor: "#fff",
-                transition: "all 0.2s",
-              }}
-            >
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: {
-                    xs: "1fr",
-                    sm: "1.6fr 0.8fr 0.8fr 0.9fr",
-                  },
-                  alignItems: "center",
-                  gap: { xs: 1.5, sm: 2 },
-                }}
-              >
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                  <Box
-                    sx={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: 2,
-                      bgcolor: alpha(typeColor, 0.12),
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: typeColor,
-                    }}
-                  >
-                    <SwapHorizIcon />
-                  </Box>
-                  <Box>
-                    <Typography variant="subtitle2" fontWeight={700}>
-                      {trade.asset}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {formatTradeDate(trade.date)}
-                    </Typography>
-                  </Box>
-                </Box>
-                <Chip
-                  label={trade.direction === "SELL" ? "Vente" : "Achat"}
-                  size="small"
-                  sx={{
-                    justifySelf: { xs: "flex-start", sm: "center" },
-                    bgcolor: alpha(typeColor, 0.12),
-                    color: typeColor,
-                    fontWeight: 600,
-                  }}
-                />
-                <Typography
-                  variant="subtitle1"
-                  fontWeight={700}
-                  sx={{ color: amountColor, justifySelf: { xs: "flex-start", sm: "center" } }}
-                >
-                  {formatSignedCurrency(trade.amount, trade.currency)}
-                </Typography>
-                <Chip
-                  label={trade.amount >= 0 ? "Gain confirmé" : "Perte"}
-                  size="small"
-                  sx={{
-                    justifySelf: { xs: "flex-start", sm: "flex-end" },
-                    bgcolor: trade.amount >= 0 ? alpha("#10b981", 0.12) : alpha("#ef4444", 0.12),
-                    color: trade.amount >= 0 ? "#047857" : "#b91c1c",
-                    fontWeight: 600,
-                  }}
-                />
-              </Box>
-            </Paper>
-          );
-        })}
-      </Stack>
-    </CardContent>
-  </Card>
-);
-
-const Goals = ({ goals = [] }) => (
-  <Card
-    elevation={0}
-    sx={{
-      borderRadius: 4,
-      border: "1px solid",
-      borderColor: "divider",
-    }}
-  >
-    <CardContent sx={{ p: 3 }}>
-      <Typography variant="h6" fontWeight={700} sx={{ mb: 3 }}>
-        Objectifs
-      </Typography>
-
-      <Stack spacing={3}>
-        {goals.map((goal) => {
-          const progress = goal.target
-            ? Math.min(100, Math.max(0, (goal.current / (goal.target || 1)) * 100))
-            : 0;
-          return (
-            <Box key={goal.id}>
-              <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
-                <Typography variant="body2" fontWeight={600}>
-                  {goal.title}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {goal.isPercent
-                    ? `${goal.current}% / ${goal.target}%`
-                    : `${formatCurrencyValue(goal.current, goal.currency)} / ${formatCurrencyValue(goal.target, goal.currency)}`}
-                </Typography>
-              </Box>
-              <LinearProgress
-                variant="determinate"
-                value={progress}
-                sx={{
-                  height: 8,
-                  borderRadius: 4,
-                  bgcolor: alpha(goal.color, 0.1),
-                  "& .MuiLinearProgress-bar": {
-                    bgcolor: goal.color,
-                    borderRadius: 4,
-                  },
-                }}
-              />
-            </Box>
-          );
-        })}
-        {goals.length === 0 && (
-          <Typography variant="body2" color="text.secondary">
-            Configurez des objectifs pour suivre votre progression.
-          </Typography>
-        )}
-      </Stack>
-    </CardContent>
-  </Card>
-);
-
-const GoalInsights = ({ insights = [] }) => (
-  <Card
-    elevation={0}
-    sx={{
-      borderRadius: 4,
-      border: "1px solid",
-      borderColor: "divider",
-    }}
-  >
-    <CardContent sx={{ p: 3 }}>
-      <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
-        Plan d'action
-      </Typography>
-      <Stack spacing={2.5}>
-        {insights.map((insight) => (
-          <Box
-            key={insight.id}
-            sx={{
-              p: 2,
-              borderRadius: 3,
-              border: "1px solid",
-              borderColor: alpha(insight.color, 0.2),
-              bgcolor: alpha(insight.color, 0.05),
-            }}
-          >
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
-              <Typography variant="subtitle2" fontWeight={700}>
-                {insight.title}
-              </Typography>
-              <Chip
-                label={insight.tag}
-                size="small"
-                sx={{
-                  bgcolor: "#fff",
-                  border: "1px solid",
-                  borderColor: alpha(insight.color, 0.3),
-                  color: insight.color,
-                  fontWeight: 600,
-                }}
-              />
-            </Box>
-            <Typography variant="body2" color="text.secondary">
-              {insight.description}
-            </Typography>
-          </Box>
-        ))}
-        {insights.length === 0 && (
-          <Typography variant="body2" color="text.secondary">
-            Les recommandations apparaîtront dès que des trades seront enregistrés.
-          </Typography>
-        )}
-      </Stack>
-    </CardContent>
-  </Card>
-);
-
 export default function TradingDashboard() {
   const [selectedAccountId, setSelectedAccountId] = useState(null);
-  const [dashboardState, setDashboardState] = useState({
-    loading: true,
-    error: "",
-    accounts: [],
-    accountsMap: {},
-    aggregate: null,
-    trades: [],
-    settings: null,
-  });
-
-  useEffect(() => {
-    let isMounted = true;
-    const loadDashboard = async () => {
-      try {
-        const [settings, entries] = await Promise.all([
-          fetchSettings(),
-          fetchJournalEntries(),
-        ]);
-        if (!isMounted) return;
-        const data = buildDashboardData(settings, entries);
-        setDashboardState({
-          loading: false,
-          error: "",
-          settings,
-          ...data,
-        });
-      } catch (error) {
-        if (!isMounted) return;
-        setDashboardState((prev) => ({
-          ...prev,
-          loading: false,
-          error: error.message || "Impossible de charger le dashboard.",
-        }));
-      }
-    };
-    loadDashboard();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const [chartRange, setChartRange] = useState("30d");
+  const [chartMetric, setChartMetric] = useState("equity");
+  const [recentPage, setRecentPage] = useState(1);
+  const {
+    loading,
+    error,
+    accounts,
+    aggregate,
+    trades,
+    accountsMap,
+    tradesByAccount,
+  } = useDashboardSummary();
 
   const currentStats = useMemo(() => {
-    if (!selectedAccountId || selectedAccountId === ACCOUNT_IDS.ALL) {
-      return dashboardState.aggregate;
+    if (!selectedAccountId) {
+      return aggregate;
     }
-    return dashboardState.accountsMap[selectedAccountId];
-  }, [dashboardState.aggregate, dashboardState.accountsMap, selectedAccountId]);
+    return accountsMap.get(selectedAccountId) || null;
+  }, [aggregate, selectedAccountId, accountsMap]);
 
   const visibleTrades = useMemo(() => {
-    if (!selectedAccountId) return dashboardState.trades;
-    return dashboardState.trades.filter((trade) => trade.accountId === selectedAccountId);
-  }, [dashboardState.trades, selectedAccountId]);
+    if (!selectedAccountId) return trades;
+    return tradesByAccount.get(selectedAccountId) || EMPTY_ARRAY;
+  }, [selectedAccountId, trades, tradesByAccount]);
+  const fullHistory = useMemo(() => {
+    if (!currentStats) return [];
+    return buildFullHistory(visibleTrades, currentStats.initialBalance || 0);
+  }, [visibleTrades, currentStats]);
+  const chartHistory = useMemo(
+    () => filterHistoryByRange(fullHistory, chartRange),
+    [fullHistory, chartRange]
+  );
 
   const goals = useMemo(() => buildGoalsData(currentStats, visibleTrades), [currentStats, visibleTrades]);
   const insights = useMemo(() => buildGoalInsights(currentStats, goals, visibleTrades), [currentStats, goals, visibleTrades]);
+  const statCards = useMemo(() => {
+    if (!currentStats) return EMPTY_ARRAY;
+    const baseBalance = currentStats.initialBalance || 0;
+    const percentFromBase = (value) => (baseBalance > 0 ? (value / baseBalance) * 100 : 0);
+    return [
+      {
+        title: "Solde total",
+        value: currentStats.currentBalance,
+        change: currentStats.realizedPnl,
+        changePercent: currentStats.gainPercent,
+        icon: AccountBalanceWalletIcon,
+        color: "#6366f1",
+      },
+      {
+        title: "Profit mensuel",
+        value: currentStats.monthlyProfit,
+        change: currentStats.monthlyProfit,
+        changePercent: percentFromBase(currentStats.monthlyProfit),
+        icon: TrendingUpIcon,
+        color: "#10b981",
+      },
+      {
+        title: "Profit hebdomadaire",
+        value: currentStats.weeklyProfit,
+        change: currentStats.weeklyProfit,
+        changePercent: percentFromBase(currentStats.weeklyProfit),
+        icon: TrendingUpIcon,
+        color: "#8b5cf6",
+      },
+    ];
+  }, [currentStats]);
 
-  const handleAccountSelect = (accountId) => {
+  const handleAccountSelect = useCallback((accountId) => {
     setSelectedAccountId((prev) => (prev === accountId ? null : accountId));
-  };
+    setRecentPage(1);
+  }, [setRecentPage, setSelectedAccountId]);
 
-  const lastTrade = visibleTrades[0] || currentStats?.lastTrade || null;
-  const monthlyGoal = goals[0];
-  const monthlyGoalProgress = monthlyGoal?.target
-    ? Math.min(100, Math.max(0, (monthlyGoal.current / (monthlyGoal.target || 1)) * 100))
-    : 0;
+  useEffect(() => {
+    const maxPage = Math.max(
+      1,
+      Math.ceil((visibleTrades.length || 0) / RECENT_ACTIVITY_PAGE_SIZE)
+    );
+    if (recentPage > maxPage) {
+      setRecentPage(maxPage);
+    }
+  }, [visibleTrades, recentPage]);
+
+  const lastTrade = useMemo(
+    () => visibleTrades[0] || currentStats?.lastTrade || null,
+    [visibleTrades, currentStats]
+  );
+  const monthlyGoal = useMemo(() => goals[0] || null, [goals]);
+  const monthlyGoalProgress = useMemo(() => {
+    if (!monthlyGoal?.target) return 0;
+    return Math.min(100, Math.max(0, (monthlyGoal.current / (monthlyGoal.target || 1)) * 100));
+  }, [monthlyGoal]);
+  const hasSummaryData = Boolean(aggregate || accounts.length);
 
   return (
     <Box sx={{ bgcolor: "#f8fafc", minHeight: "100vh", py: 6 }}>
@@ -938,9 +499,9 @@ export default function TradingDashboard() {
                   </Typography>
                   <Typography
                     variant="body2"
-                    sx={{ color: lastTrade.amount >= 0 ? "#10b981" : "#ef4444", fontWeight: 600 }}
+                    sx={{ color: lastTrade.pnl >= 0 ? "#10b981" : "#ef4444", fontWeight: 600 }}
                   >
-                    {formatSignedCurrency(lastTrade.amount, lastTrade.currency)}
+                    {formatSignedCurrency(lastTrade.pnl, lastTrade.currency)}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {formatTradeDate(lastTrade.date)}
@@ -950,18 +511,24 @@ export default function TradingDashboard() {
             </Box>
           </Box>
 
-          {dashboardState.error && !dashboardState.loading && (
-            <Alert severity="error">{dashboardState.error}</Alert>
+          {error && !loading && (
+            <Alert severity="error">{error}</Alert>
           )}
 
-          {dashboardState.loading && (
+          {loading && !hasSummaryData && (
             <Stack alignItems="center" spacing={2}>
               <CircularProgress />
               <Typography color="text.secondary">Chargement du dashboard...</Typography>
             </Stack>
           )}
 
-          {currentStats && !dashboardState.loading && (
+          {!loading && !error && !hasSummaryData && (
+            <Alert severity="info">
+              Aucun compte broker n'est configuré pour le moment. Importez vos données FTMO/MT5 pour alimenter ce dashboard.
+            </Alert>
+          )}
+
+          {currentStats && hasSummaryData && (
             <>
               <Box
                 sx={{
@@ -970,38 +537,7 @@ export default function TradingDashboard() {
                   gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
                 }}
               >
-                {[
-                  {
-                    title: "Solde total",
-                    value: currentStats.currentBalance,
-                    change: currentStats.realizedPnl,
-                    changePercent: currentStats.gainPercent,
-                    icon: AccountBalanceWalletIcon,
-                    color: "#6366f1",
-                  },
-                  {
-                    title: "Profit mensuel",
-                    value: currentStats.monthlyProfit,
-                    change: currentStats.monthlyProfit,
-                    changePercent:
-                      currentStats.initialBalance > 0
-                        ? (currentStats.monthlyProfit / currentStats.initialBalance) * 100
-                        : 0,
-                    icon: TrendingUpIcon,
-                    color: "#10b981",
-                  },
-                  {
-                    title: "Profit hebdomadaire",
-                    value: currentStats.weeklyProfit,
-                    change: currentStats.weeklyProfit,
-                    changePercent:
-                      currentStats.initialBalance > 0
-                        ? (currentStats.weeklyProfit / currentStats.initialBalance) * 100
-                        : 0,
-                    icon: TrendingUpIcon,
-                    color: "#8b5cf6",
-                  },
-                ].map((stat) => (
+                {statCards.map((stat) => (
                   <StatCard key={stat.title} currency={currentStats.currency} {...stat} />
                 ))}
               </Box>
@@ -1014,12 +550,25 @@ export default function TradingDashboard() {
                 }}
               >
                 <Stack spacing={3}>
-                  <PerformanceChart history={currentStats.history} currency={currentStats.currency} />
-                  <RecentActivity trades={visibleTrades} />
+                  <PerformanceChart
+                    history={chartHistory}
+                    currency={currentStats?.currency || "USD"}
+                    rangeKey={chartRange}
+                    onRangeChange={setChartRange}
+                    rangeOptions={CHART_RANGE_OPTIONS}
+                    metricKey={chartMetric}
+                    onMetricChange={setChartMetric}
+                  />
+                  <RecentActivity
+                    trades={visibleTrades}
+                    page={recentPage}
+                    pageSize={RECENT_ACTIVITY_PAGE_SIZE}
+                    onPageChange={setRecentPage}
+                  />
                 </Stack>
                 <Stack spacing={3}>
                   <AccountsList
-                    accounts={dashboardState.accounts}
+                    accounts={accounts}
                     selectedAccountId={selectedAccountId}
                     onSelectAccount={handleAccountSelect}
                   />

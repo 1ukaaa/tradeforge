@@ -10,7 +10,7 @@ import { requestAnalysis, requestStructuredAnalysis } from "../services/aiClient
 import { saveJournalEntry } from "../services/journalClient";
 import { fetchPlan } from "../services/planClient";
 import { fetchSettings } from "../services/settingsClient";
-import { buildAccountsFromSettings } from "../utils/accountUtils";
+import { fetchBrokerSummary, fetchBrokerPositions } from "../services/brokerClient";
 import { buildPlanDescription } from "../utils/planUtils";
 import { stringifyTimeframes } from "../utils/timeframeUtils";
 
@@ -44,6 +44,7 @@ const NewEntry = () => {
   const [analysisVariant, setAnalysisVariant] = useState("default");
   const [tradeVariant, setTradeVariant] = useState("default");
   const [accountOptions, setAccountOptions] = useState([]);
+  const [brokerTrades, setBrokerTrades] = useState([]);
   const [defaultAccountId, setDefaultAccountId] = useState(null);
 
   // États du "chat"
@@ -87,8 +88,14 @@ const NewEntry = () => {
         setStructuredVariant(settings.structuredVariant || "detailed");
         setAnalysisVariant(settings.analysisVariant || "default");
         setTradeVariant(settings.tradeVariant || "default");
-        const derivedAccounts = buildAccountsFromSettings(settings);
+
+        const [summary, positions] = await Promise.all([
+          fetchBrokerSummary(),
+          fetchBrokerPositions(),
+        ]);
+        const derivedAccounts = summary.accounts || [];
         setAccountOptions(derivedAccounts);
+        setBrokerTrades(positions || []);
         if (derivedAccounts.length) {
           setDefaultAccountId(derivedAccounts[0].id);
         }
@@ -260,6 +267,7 @@ const NewEntry = () => {
               accountOptions={accountOptions}
               defaultAccountId={defaultAccountId}
               entryType={activeTool}
+              brokerTrades={brokerTrades}
             />
           )}
 

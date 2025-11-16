@@ -9,6 +9,7 @@ const {
 } = require('./settings.routes');
 const geminiRoutes = require('./gemini.routes');
 const economicRoutes = require('./economic.routes');
+const brokerRoutes = require('./broker.routes');
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use('/structured-templates', structuredTemplatesRouter);
 router.use('/gemini', geminiRoutes);
 
 router.use("/economic-events", economicRoutes);
+router.use('/broker', brokerRoutes);
 
 module.exports = router;

@@ -4,7 +4,7 @@ import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
 import SaveIcon from "@mui/icons-material/Save";
 import { Alert, alpha, Autocomplete, Box, Button, Chip, CircularProgress, Divider, IconButton, InputAdornment, MenuItem, Paper, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import BrandLogo from "./BrandLogo";
 import { getCurrencySymbol } from "../utils/accountUtils";
 
@@ -75,6 +75,25 @@ const SimpleMarkdownViewer = ({ content }) => {
  * Affiche la réponse de l'IA ET les métadonnées éditables.
  * Remplace AnalysisDisplay.js
  */
+const formatBrokerTradeOption = (trade) => {
+  if (!trade) return "";
+  const date = trade.closedAt || trade.openedAt;
+  const dateLabel = date
+    ? new Date(date).toLocaleString("fr-FR", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
+  const legsLabel = trade.fillsCount > 1 ? ` (${trade.fillsCount} ordres)` : "";
+  const pnlValue = Number(trade.pnl);
+  const pnlLabel = Number.isFinite(pnlValue)
+    ? ` • ${pnlValue >= 0 ? "+" : "-"}${Math.abs(pnlValue).toFixed(2)} ${trade.currency || ""}`
+    : "";
+  return `${trade.symbol || "Trade"} • ${trade.direction || ""}${legsLabel} • ${dateLabel}${pnlLabel}`;
+};
+
 const EditableAnalysis = ({
   content,
   initialMetadata, // Reçoit les métadonnées brutes de l'IA
@@ -85,6 +104,7 @@ const EditableAnalysis = ({
   accountOptions = [],
   defaultAccountId = null,
   entryType = "analyse",
+  brokerTrades = [],
 }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
@@ -126,6 +146,23 @@ const EditableAnalysis = ({
     (acc) => acc.id === (editableMeta.accountId || defaultAccountId)
   ) || (accountOptions.length === 1 ? accountOptions[0] : null);
 
+  const availableBrokerTrades = useMemo(() => {
+    if (!brokerTrades.length) return [];
+    if (!selectedAccount) return brokerTrades;
+    return brokerTrades.filter((trade) => trade.brokerAccountId === selectedAccount.id);
+  }, [brokerTrades, selectedAccount]);
+
+  const selectedBrokerTrade = useMemo(() => {
+    if (!editableMeta.brokerTradeId) return null;
+    return (
+      availableBrokerTrades.find(
+        (trade) =>
+          trade.id === editableMeta.brokerTradeId ||
+          (Array.isArray(trade.fillIds) && trade.fillIds.includes(editableMeta.brokerTradeId))
+      ) || null
+    );
+  }, [availableBrokerTrades, editableMeta.brokerTradeId]);
+
   const handleCopy = useCallback(() => {
     if (!content) return;
     navigator.clipboard.writeText(content).then(() => {
@@ -153,6 +190,29 @@ const EditableAnalysis = ({
       accountId: nextAccount?.id,
       accountName: nextAccount?.name,
       pnlCurrency: nextAccount?.currency || prev.pnlCurrency,
+      brokerTradeId: undefined,
+      brokerTradeLabel: undefined,
+    }));
+  };
+
+  const handleBrokerTradeChange = (_, newTrade) => {
+    if (!newTrade) {
+      setEditableMeta((prev) => ({
+        ...prev,
+        brokerTradeId: undefined,
+        brokerTradeLabel: undefined,
+      }));
+      return;
+    }
+    setEditableMeta((prev) => ({
+      ...prev,
+      brokerTradeId: newTrade.id,
+      brokerTradeLabel: formatBrokerTradeOption(newTrade),
+      accountId: newTrade.brokerAccountId,
+      accountName: newTrade.accountName,
+      pnlAmount: newTrade.pnl,
+      pnlCurrency: newTrade.currency,
+      symbol: prev.symbol || newTrade.symbol,
     }));
   };
 
@@ -253,6 +313,23 @@ const EditableAnalysis = ({
                   </MenuItem>
                 ))}
               </TextField>
+              {availableBrokerTrades.length > 0 && (
+                <Autocomplete
+                  options={availableBrokerTrades}
+                  value={selectedBrokerTrade}
+                  onChange={handleBrokerTradeChange}
+                  getOptionLabel={formatBrokerTradeOption}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Associer une position importée"
+                      size="small"
+                      helperText="Reliez cette analyse à une position importée"
+                    />
+                  )}
+                />
+              )}
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                 <TextField
                   label="Gain / Perte"
