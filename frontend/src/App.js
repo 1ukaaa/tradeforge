@@ -6,6 +6,7 @@ import Home from './pages/Home';
 import Journal from "./pages/Journal";
 import NewEntry from "./pages/NewEntry";
 import Settings from "./pages/Settings";
+import TwitterStudio from "./pages/TwitterStudio";
 
 const App = () => {
   return (
@@ -18,6 +19,7 @@ const App = () => {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="twitter" element={<TwitterStudio />} />
         </Route>
       </Routes>
     </Router>

@@ -22,6 +22,7 @@ import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
 // 1. AJOUTER L'ICÔNE CALENDRIER
 import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
+import TwitterIcon from "@mui/icons-material/Twitter";
 import { useThemeMode } from "../context/ThemeModeContext";
 
 // Listes d'items séparées par groupes
@@ -43,6 +44,11 @@ const WORKSPACE_NAV = [
     to: "/journal",
     label: "Journal",
     icon: <DashboardCustomizeRoundedIcon />,
+  },
+  {
+    to: "/twitter",
+    label: "Twitter Studio",
+    icon: <TwitterIcon />,
   },
   {
     to: "/dashboard",

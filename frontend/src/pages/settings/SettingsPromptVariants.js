@@ -1,38 +1,225 @@
 // frontend/src/pages/settings/SettingsPromptVariants.js
 import {
-    Button,
-    Chip,
-    MenuItem,
-    Stack,
-    TextField,
-    ToggleButton,
-    ToggleButtonGroup,
-    Typography
+  Button,
+  Chip,
+  MenuItem,
+  Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
 import { ForgeCard } from "../../components/ForgeUI";
 import {
-    deletePromptVariant,
-    fetchPromptVariants,
-    fetchSettings,
-    savePromptVariant,
-    saveSettings
+  deletePromptVariant,
+  fetchPromptVariants,
+  fetchSettings,
+  savePromptVariant,
+  saveSettings,
 } from "../../services/settingsClient";
 
-// Constantes (copiées de l'ancien Settings.js)
+const PROMPT_TYPES = [
+  { value: "analysis", label: "Analyse", hasActive: true },
+  { value: "trade", label: "Trade", hasActive: true },
+  { value: "twitter", label: "Twitter", hasActive: false },
+];
+
+const TYPE_SETTINGS_KEYS = {
+  analysis: "analysisVariant",
+  trade: "tradeVariant",
+};
+
 const DEFAULT_PROMPT_TEMPLATES = {
-  analysis: `... (copiez le contenu de DEFAULT_PROMPT_TEMPLATES.analysis de l'ancien Settings.js) ...`,
-  trade: `... (copiez le contenu de DEFAULT_PROMPT_TEMPLATES.trade de l'ancien Settings.js) ...`,
+  analysis: {
+    default: `Tu es un assistant de journal de trading, expert des marchés dérivés.
+Analyse le contenu fourni et restitue un rapport ultra synthétique en français en respectant STRICTEMENT ce format markdown :
+
+TYPE : Analyse
+
+### 1. 🔭 Contexte multi-timeframes (Monthly / Weekly / Daily)
+Weekly — ...
+Daily — ...
+Monthly — ...
+
+### 2. 🧭 Zones clés & stratégie (Daily)
+Zone clé — ...
+Stratégie — ...
+Validation — ...
+
+### 3. ⏱️ Structure intraday (H4 / H1 / M15)
+Cadre intraday — ...
+Déclencheur — ...
+Gestion — ...
+
+### 4. 🎯 Scénarios proposés
+Scénario 1 — ...
+Invalidation 1 — ...
+Scénario 2 — ...
+Invalidation 2 — ...
+
+### 5. ⚠️ Risques & invalidations
+Risque principal — ...
+Plan B — ...
+
+### 6. ✅ Next steps / synthèse finale
+Priorité — ...
+Monitoring — ...
+
+Règles :
+1) Style professionnel, phrases très courtes, aucune redite, tu ne prends pas de position définitive.
+2) Chaque ligne interne commence par un intitulé (Weekly, Stratégie, Scénario 1, etc.) suivi d'un espace, d'un tiret long « — » puis d'une phrase descriptive.
+3) N'utilise jamais de listes à puces (*, -, •) ni de gras/italique.
+4) Ajoute une ligne vide entre chaque section pour la lisibilité.
+5) Termine par un rappel chiffré si des niveaux sont mentionnés.
+
+CONTENU SOURCE :
+{{rawText}}`,
+  },
+  trade: {
+    default: `Tu es un assistant de journal de trading, expert des marchés dérivés.
+Analyse le contenu fourni comme un trade exécuté (ou validé) et restitue un rapport ultra synthétique en français en respectant STRICTEMENT ce format markdown :
+
+TYPE : Trade
+
+### 1. 🔭 Contexte multi-timeframes (Monthly / Weekly / Daily)
+Weekly — ...
+Daily — ...
+Monthly — ...
+
+### 2. 🧭 Zones clés & stratégie (Daily et intraday)
+Plan — ...
+Zone clé — ...
+Gestion du risque — ...
+
+### 3. ⏱️ Structure intraday (H4 / H1 / M15) et ordre exécuté
+Structure — ...
+Entrée — ...
+Gestion — ...
+
+### 4. 🎯 Objectifs & déroulé
+Objectif — ...
+Déroulé — ...
+Niveaux — ...
+
+### 5. 📍 Résultat final
+Résultat — ...
+Jugement — ...
+
+### 6. ⚓ Relecture du trade
+Points positifs — ...
+Points à améliorer — ...
+Ajustement — ...
+
+### 7. ⚠️ Risques & invalidations
+Risque — ...
+Invalidation — ...
+
+### 8. ✅ Enseignements / verdict synthétique chiffré
+Synthèse — ...
+Leçon chiffrée — ...
+
+Règles :
+1) Style direct, phrases très courtes, pas de redite.
+2) Mentionne explicitement si le trade a TP ou SL puis analyse si c'était une erreur ou un bon trade malgré tout.
+3) Chaque ligne interne commence par un intitulé suivi d'un tiret long « — » puis d'une phrase descriptive. N'utilise jamais de listes à puces (*, -, •) ni de gras/italique.
+4) Ajoute une ligne vide entre chaque section pour la lisibilité.
+
+Plan de trading fourni :
+{{plan || "Plan manquant — indique pourquoi l’absence de plan a impacté la lecture du trade."}}
+
+Mission :
+1) Commente si l'exécution rapportée suit ou dévie du plan ; détaille les écarts (TA, gestion du risque, niveaux, timing).
+2) Indique la qualité de la décision finale (bonne décision, ajustement nécessaire, erreur) en lien avec ce plan.
+
+CONTENU SOURCE :
+{{rawText}}`,
+  },
+  twitter: {
+    default: `Tu es un ghostwriter spécialisé en finance et en trading. Tu écris un TWEET UNIQUE (<= 280 caractères) en français qui résume une idée clé de trading de façon punchy.
+
+Contraintes :
+1) Une seule phrase principale, ton direct et professionnel.
+2) Autorise jusqu'à 1 emoji pertinent, pas plus.
+3) Pas d'hashtags génériques (#trading), pas de mention autopromo.
+4) Termine par un CTA léger ou une observation chiffrée.
+
+Format attendu :
+Tweet — <message>
+
+CONTENU SOURCE :
+{{rawText}}`,
+    "tweet.simple": `Tu es un ghostwriter spécialisé en finance et en trading. Tu écris un TWEET UNIQUE (<= 280 caractères) en français qui simplifie l'analyse fournie.
+
+Contraintes :
+- Une seule idée forte, ton direct, pas de jargon inutile.
+- Maximum 1 emoji pertinent.
+- Pas d'hashtags génériques, sauf si cité dans la source.
+- Ajoute un chiffre ou niveau clé si pertinent.
+
+Format attendu :
+Tweet — <message>
+
+CONTENU SOURCE :
+{{rawText}}`,
+    "thread.analysis": `Tu es un ghostwriter spécialisé en threads Twitter pour traders (X). Tu écris un thread de 4 à 6 tweets pour présenter une analyse ou un trade.
+
+Contraintes :
+- Chaque tweet <= 260 caractères.
+- Utilise ce format exact :
+Tweet 1 — ...
+Tweet 2 — ...
+...
+- Tweet 1 : Hook fort + contexte.
+- Dernier tweet : call-to-action léger ou leçon clé.
+- Autorise 1 emoji par tweet maximum, pas de hashtag générique.
+
+Inspiration :
+CONTENU SOURCE :
+{{rawText}}`,
+    "thread.annonce": `Tu es un ghostwriter spécialisé dans les annonces produit / release pour Twitter (X). Tu écris un thread de 3 à 5 tweets pour annoncer une nouveauté, un outil ou une série d'insights.
+
+Contraintes :
+- Chaque tweet <= 260 caractères.
+- Format :
+Tweet 1 — Hook annonce (emoji possible)
+Tweet 2 — Détail / bénéfice #1
+Tweet 3 — Détail / bénéfice #2
+Tweet 4 — Exemple ou preuve (optionnel)
+Tweet 5 — Call-to-action clair
+- Pas plus de 2 hashtags dans tout le thread, uniquement s'ils sont déjà fournis dans la source.
+
+Inspiration :
+{{rawText}}`,
+  },
+};
+
+DEFAULT_PROMPT_TEMPLATES.twitter.default = DEFAULT_PROMPT_TEMPLATES.twitter["tweet.simple"];
+
+const getDefaultVariantName = (type) => {
+  if (type === "twitter") return "tweet.simple";
+  return "default";
+};
+
+const getDefaultPromptText = (type, variant) => {
+  const typeMap = DEFAULT_PROMPT_TEMPLATES[type] || {};
+  return typeMap[variant] || typeMap.default || "";
 };
 
 const SettingsPromptVariants = () => {
-  const [analysisVariantActive, setAnalysisVariantActive] = useState("default");
-  const [tradeVariantActive, setTradeVariantActive] = useState("default");
-  const [promptVariants, setPromptVariants] = useState({ analysis: [], trade: [] });
+  const [activeVariants, setActiveVariants] = useState({
+    analysis: "default",
+    trade: "default",
+  });
+  const [promptVariants, setPromptVariants] = useState({ analysis: [], trade: [], twitter: [] });
   const [selectedPromptType, setSelectedPromptType] = useState("analysis");
-  const [selectedPromptVariant, setSelectedPromptVariant] = useState("default");
-  const [variantNameInput, setVariantNameInput] = useState("default");
-  const [variantPromptText, setVariantPromptText] = useState(DEFAULT_PROMPT_TEMPLATES.analysis);
+  const [selectedPromptVariant, setSelectedPromptVariant] = useState(
+    getDefaultVariantName("analysis")
+  );
+  const [variantNameInput, setVariantNameInput] = useState(getDefaultVariantName("analysis"));
+  const [variantPromptText, setVariantPromptText] = useState(
+    getDefaultPromptText("analysis", getDefaultVariantName("analysis"))
+  );
   const [variantSaving, setVariantSaving] = useState(false);
   const [variantFeedback, setVariantFeedback] = useState({ text: "", severity: "success" });
   const [variantDeleting, setVariantDeleting] = useState(false);
@@ -44,21 +231,32 @@ const SettingsPromptVariants = () => {
         const [settings, variants] = await Promise.all([fetchSettings(), fetchPromptVariants()]);
         if (cancelled) return;
         
-        setAnalysisVariantActive(settings.analysisVariant || "default");
-        setTradeVariantActive(settings.tradeVariant || "default");
-        setPromptVariants(variants);
+        setActiveVariants({
+          analysis: settings.analysisVariant || "default",
+          trade: settings.tradeVariant || "default",
+        });
+        setPromptVariants({
+          analysis: variants.analysis || [],
+          trade: variants.trade || [],
+          twitter: variants.twitter || [],
+        });
 
-        const initialVariant =
-          variants.analysis?.find((item) => item.variant === (settings.analysisVariant || "default"))?.variant ||
-          variants.analysis?.[0]?.variant ||
-          "default";
-        setSelectedPromptType("analysis");
-        setSelectedPromptVariant(initialVariant);
-        setVariantNameInput(initialVariant);
-        setVariantPromptText(
-          variants.analysis?.find((item) => item.variant === initialVariant)?.prompt ||
-            DEFAULT_PROMPT_TEMPLATES.analysis
-        );
+        const initialType = "analysis";
+        const analysisList = variants.analysis || [];
+        const resolvedVariant =
+          analysisList.find(
+            (item) => item.variant === (settings.analysisVariant || "default")
+          )?.variant ||
+          analysisList[0]?.variant ||
+          getDefaultVariantName("analysis");
+
+        setSelectedPromptType(initialType);
+        setSelectedPromptVariant(resolvedVariant);
+        setVariantNameInput(resolvedVariant);
+        const matched =
+          analysisList.find((item) => item.variant === resolvedVariant)?.prompt ||
+          getDefaultPromptText(initialType, resolvedVariant);
+        setVariantPromptText(matched);
       } catch (err) {
         if (cancelled) return;
         console.warn("Impossible de charger les variantes IA :", err);
@@ -71,7 +269,8 @@ const SettingsPromptVariants = () => {
   useEffect(() => {
     const list = promptVariants[selectedPromptType] || [];
     const matched = list.find((variant) => variant.variant === selectedPromptVariant);
-    setVariantPromptText(matched?.prompt || DEFAULT_PROMPT_TEMPLATES[selectedPromptType]);
+    const fallback = getDefaultPromptText(selectedPromptType, selectedPromptVariant);
+    setVariantPromptText(matched?.prompt || fallback);
     setVariantNameInput(selectedPromptVariant);
   }, [selectedPromptType, selectedPromptVariant, promptVariants]);
 
@@ -79,11 +278,11 @@ const SettingsPromptVariants = () => {
     if (!value) return;
     setSelectedPromptType(value);
     const list = promptVariants[value] || [];
-    const fallbackVariant = value === "analysis" ? analysisVariantActive : tradeVariantActive;
+    const fallbackVariant = activeVariants[value];
     const defaultSelection =
       list.find((variant) => variant.variant === fallbackVariant)?.variant ||
       list[0]?.variant ||
-      "default";
+      getDefaultVariantName(value);
     setSelectedPromptVariant(defaultSelection);
     setVariantNameInput(defaultSelection);
     setVariantFeedback({ text: "", severity: "success" });
@@ -131,17 +330,22 @@ const SettingsPromptVariants = () => {
   };
 
   const handleSetActiveVariant = async () => {
-    const payload =
-      selectedPromptType === "analysis"
-        ? { analysisVariant: variantNameInput }
-        : { tradeVariant: variantNameInput };
+    const settingsKey = TYPE_SETTINGS_KEYS[selectedPromptType];
+    if (!settingsKey) {
+      setVariantFeedback({
+        text: "Ce type de prompt n'utilise pas de variante active.",
+        severity: "info",
+      });
+      return;
+    }
+    const payload = { [settingsKey]: variantNameInput };
     try {
       const result = await saveSettings(payload);
-      if (result.analysisVariant && selectedPromptType === "analysis") {
-        setAnalysisVariantActive(result.analysisVariant);
-      }
-      if (result.tradeVariant && selectedPromptType === "trade") {
-        setTradeVariantActive(result.tradeVariant);
+      if (result[settingsKey]) {
+        setActiveVariants((prev) => ({
+          ...prev,
+          [selectedPromptType]: result[settingsKey],
+        }));
       }
       setVariantFeedback({ text: "Variante active mise à jour", severity: "success" });
     } catch (err) {
@@ -168,10 +372,12 @@ const SettingsPromptVariants = () => {
     setVariantFeedback({ text: "", severity: "success" });
     const currentList = promptVariants[selectedPromptType] || [];
     const filteredVariants = currentList.filter((variant) => variant.variant !== variantNameInput);
-    const activeVariant =
-      selectedPromptType === "analysis" ? analysisVariantActive : tradeVariantActive;
-    const cleanedActive = activeVariant !== variantNameInput ? activeVariant : null;
-    const nextVariant = filteredVariants[0]?.variant || cleanedActive || "default";
+    const activeVariant = TYPE_SETTINGS_KEYS[selectedPromptType]
+      ? activeVariants[selectedPromptType]
+      : null;
+    const cleanedActive = activeVariant && activeVariant !== variantNameInput ? activeVariant : null;
+    const nextVariant =
+      filteredVariants[0]?.variant || cleanedActive || getDefaultVariantName(selectedPromptType);
 
     try {
       await deletePromptVariant(selectedPromptType, variantNameInput);
@@ -179,11 +385,11 @@ const SettingsPromptVariants = () => {
         ...prev,
         [selectedPromptType]: filteredVariants,
       }));
-      if (selectedPromptType === "analysis" && analysisVariantActive === variantNameInput) {
-        setAnalysisVariantActive("default");
-      }
-      if (selectedPromptType === "trade" && tradeVariantActive === variantNameInput) {
-        setTradeVariantActive("default");
+      if (TYPE_SETTINGS_KEYS[selectedPromptType] && activeVariants[selectedPromptType] === variantNameInput) {
+        setActiveVariants((prev) => ({
+          ...prev,
+          [selectedPromptType]: "default",
+        }));
       }
       setSelectedPromptVariant(nextVariant);
       setVariantNameInput(nextVariant);
@@ -199,12 +405,14 @@ const SettingsPromptVariants = () => {
   };
   
   const isDefaultVariantName = variantNameInput === "default";
+  const canSetActive = Boolean(TYPE_SETTINGS_KEYS[selectedPromptType]);
+  const availableVariants = promptVariants[selectedPromptType] || [];
 
   return (
     <ForgeCard
       subtitle="VARIANTES PROMPT (TEXTE)"
       title="Prompts Gemini (Texte Brut)"
-      helper="Crée, sélectionne ou active une variante différente pour chaque type de prompt (Analyse vs Trade)."
+      helper="Crée, sélectionne ou active une variante différente pour chaque type de prompt (Analyse, Trade, Twitter)."
     >
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
         <ToggleButtonGroup
@@ -214,8 +422,11 @@ const SettingsPromptVariants = () => {
           aria-label="Type de prompt"
           size="small"
         >
-          <ToggleButton value="analysis">Analyse</ToggleButton>
-          <ToggleButton value="trade">Trade</ToggleButton>
+          {PROMPT_TYPES.map((type) => (
+            <ToggleButton key={type.value} value={type.value}>
+              {type.label}
+            </ToggleButton>
+          ))}
         </ToggleButtonGroup>
         <TextField
           select
@@ -225,11 +436,16 @@ const SettingsPromptVariants = () => {
           size="small"
           sx={{ minWidth: 200 }}
         >
-          {(promptVariants[selectedPromptType] || []).map((variant) => (
+          {availableVariants.map((variant) => (
             <MenuItem key={variant.variant} value={variant.variant}>
               {variant.variant}
             </MenuItem>
           ))}
+          {availableVariants.length === 0 && (
+            <MenuItem value={selectedPromptVariant} disabled>
+              Aucune variante enregistrée
+            </MenuItem>
+          )}
         </TextField>
         <TextField
           label="Nom de la variante"
@@ -244,17 +460,24 @@ const SettingsPromptVariants = () => {
           }
         />
       </Stack>
-      <Stack direction="row" spacing={1} alignItems="center">
+      {canSetActive ? (
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography variant="caption" color="text.secondary">
+            Variante active pour ce type :
+          </Typography>
+          <Chip
+            size="small"
+            label={activeVariants[selectedPromptType]}
+            variant="outlined"
+            color="primary"
+          />
+        </Stack>
+      ) : (
         <Typography variant="caption" color="text.secondary">
-          Variante active pour ce type :
+          Chaque variante Twitter correspond à un format précis (tweet synthèse, thread analyse, annonce).
+          Sélectionne celle à éditer dans la liste.
         </Typography>
-        <Chip
-          size="small"
-          label={selectedPromptType === "analysis" ? analysisVariantActive : tradeVariantActive}
-          variant="outlined"
-          color="primary"
-        />
-      </Stack>
+      )}
       <TextField
         label="Prompt complet (Texte)"
         value={variantPromptText}
@@ -269,13 +492,11 @@ const SettingsPromptVariants = () => {
         <Button variant="contained" onClick={handleVariantSave} disabled={variantSaving}>
           {variantSaving ? "Sauvegarde…" : "Sauvegarder la variante"}
         </Button>
-        <Button
-          variant="outlined"
-          onClick={handleSetActiveVariant}
-          disabled={!variantNameInput}
-        >
-          Définir comme variante active
-        </Button>
+        {canSetActive && (
+          <Button variant="outlined" onClick={handleSetActiveVariant} disabled={!variantNameInput}>
+            Définir comme variante active
+          </Button>
+        )}
         <Button
           variant="outlined"
           color="error"

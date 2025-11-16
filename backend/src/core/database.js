@@ -122,6 +122,32 @@ function initEconomicEventsTable() {
   `);
 }
 
+function initTwitterDraftsTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS twitter_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT,
+      variant TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      payload TEXT NOT NULL,
+      sourceEntryId INTEGER,
+      metadata TEXT,
+      publishedTweetId TEXT,
+      publishedAt TEXT,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_twitter_drafts_status
+    ON twitter_drafts (status);
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_twitter_drafts_updatedAt
+    ON twitter_drafts (updatedAt);
+  `);
+}
+
 // MODIFICATION : La logique de seeding vit ici maintenant
 function seedJournalEntries() {
   const { count } = db.prepare("SELECT COUNT(*) as count FROM entries").get();
@@ -235,6 +261,7 @@ function initializeDatabase() {
   initPromptVariants();
   initBrokerTables();
   initEconomicEventsTable();
+  initTwitterDraftsTable();
   
   // MODIFICATION : On appelle la fonction de seeding locale
   seedJournalEntries(); 

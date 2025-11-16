@@ -75,14 +75,23 @@ const callGeminiAPI = async (payload) => {
 /**
  * Génère l'analyse texte (Markdown).
  */
-const generateAnalysis = async ({ rawText, template, plan, variant }) => {
+const inferPromptType = (type, template = "") => {
+  if (type) return type;
+  if (typeof template === "string") {
+    if (template.startsWith("trade")) return "trade";
+    if (template.startsWith("twitter")) return "twitter";
+  }
+  return "analysis";
+};
+
+const generateAnalysis = async ({ rawText, template = "", plan, variant, type }) => {
   if (!rawText || typeof rawText !== "string") {
     throw new Error("Texte d'analyse manquant.");
   }
-  
-  const type = template.startsWith("trade") ? "trade" : "analysis";
+
+  const promptType = inferPromptType(type, template);
   const activePlan = typeof plan === "string" ? plan : "";
-  const prompt = buildPrompt(type, rawText, activePlan, variant);
+  const prompt = buildPrompt(promptType, rawText, activePlan, variant);
 
   const payload = {
     contents: [{ parts: [{ text: prompt }] }]

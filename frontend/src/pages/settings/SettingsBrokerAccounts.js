@@ -59,17 +59,20 @@ const SettingsBrokerAccounts = () => {
   const loadIntegrations = () => {
     setLoadingIntegrations(true);
     setIntegrationsError(null);
-    fetchIntegrations()
-      .then((data) => {
-        const fallback = {
-          provider: "twitter",
-          connected: false,
-          hasAccessToken: false,
-          hasAccessSecret: false,
-          handle: null,
-        };
-        setTwitterIntegration(data.twitter || fallback);
-      })
+        fetchIntegrations()
+          .then((data) => {
+            const fallback = {
+              provider: "twitter",
+              connected: false,
+              hasAccessToken: false,
+              hasAccessSecret: false,
+              hasApiKey: false,
+              hasApiSecret: false,
+              publishReady: false,
+              handle: null,
+            };
+            setTwitterIntegration(data.twitter || fallback);
+          })
       .catch((err) => setIntegrationsError(err.message))
       .finally(() => setLoadingIntegrations(false));
   };
@@ -399,13 +402,20 @@ const SettingsBrokerAccounts = () => {
                 color={twitterIntegration.connected ? "success" : "default"}
                 size="small"
               />
+              <Chip
+                label={twitterIntegration.publishReady ? "Prêt à publier" : "Préparation uniquement"}
+                color={twitterIntegration.publishReady ? "info" : "default"}
+                size="small"
+              />
               {twitterIntegration.handle && (
                 <Typography fontWeight={600}>{twitterIntegration.handle}</Typography>
               )}
             </Stack>
             <Typography variant="body2" color="text.secondary">
-              {twitterIntegration.connected
-                ? "Les variables TWITTER_ACCESS_TOKEN et TWITTER_ACCESS_SECRET sont détectées dans backend/.env."
+              {twitterIntegration.publishReady
+                ? "Toutes les clés requises (API et Access Token) sont détectées. Les publications seront envoyées directement sur Twitter."
+                : twitterIntegration.connected
+                ? "Les Access Token sont présents. Ajoute TWITTER_API_KEY et TWITTER_API_SECRET pour autoriser la publication automatique."
                 : "Ajoute TWITTER_ACCESS_TOKEN et TWITTER_ACCESS_SECRET dans backend/.env pour activer ton compte Twitter."}
             </Typography>
             {!twitterIntegration.handle && (

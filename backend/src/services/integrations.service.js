@@ -10,6 +10,8 @@ const formatHandle = (handle) => {
 const getTwitterIntegration = () => {
   const accessToken = process.env.TWITTER_ACCESS_TOKEN?.trim();
   const accessSecret = process.env.TWITTER_ACCESS_SECRET?.trim();
+  const apiKey = process.env.TWITTER_API_KEY?.trim();
+  const apiSecret = process.env.TWITTER_API_SECRET?.trim();
   const handle = formatHandle(process.env.TWITTER_HANDLE);
 
   return {
@@ -18,6 +20,9 @@ const getTwitterIntegration = () => {
     handle,
     hasAccessToken: Boolean(accessToken),
     hasAccessSecret: Boolean(accessSecret),
+    hasApiKey: Boolean(apiKey),
+    hasApiSecret: Boolean(apiSecret),
+    publishReady: Boolean(accessToken && accessSecret && apiKey && apiSecret),
   };
 };
 
