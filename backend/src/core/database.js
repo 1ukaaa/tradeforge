@@ -102,6 +102,26 @@ function ensureBrokerAccountColumns() {
   alter("lastSyncAt", "TEXT");
 }
 
+function initEconomicEventsTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS economic_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT UNIQUE NOT NULL,
+      title TEXT NOT NULL,
+      currency TEXT,
+      impact TEXT,
+      date TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_economic_events_date
+    ON economic_events (date);
+  `);
+}
+
 // MODIFICATION : La logique de seeding vit ici maintenant
 function seedJournalEntries() {
   const { count } = db.prepare("SELECT COUNT(*) as count FROM entries").get();
@@ -214,6 +234,7 @@ function initializeDatabase() {
   initStructuredTemplates();
   initPromptVariants();
   initBrokerTables();
+  initEconomicEventsTable();
   
   // MODIFICATION : On appelle la fonction de seeding locale
   seedJournalEntries(); 

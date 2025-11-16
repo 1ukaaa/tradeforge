@@ -1,5 +1,6 @@
 // backend/src/services/economic.service.js
 const axios = require("axios");
+const db = require("../core/database");
 const { ECONOMIC_EVENTS_SOURCE_URL } = require("../config/server.config");
 
 // Cache en mémoire simple
@@ -12,6 +13,78 @@ let cache = {
 let isFetching = false;
 
 const CACHE_DURATION = 4 * 60 * 60 * 1000; // 4 heures
+const UPSERT_EVENT_SQL = `
+  INSERT INTO economic_events (event_id, title, currency, impact, date, payload, createdAt, updatedAt)
+  VALUES (@event_id, @title, @currency, @impact, @date, @payload, @createdAt, @updatedAt)
+  ON CONFLICT(event_id) DO UPDATE SET
+    title = excluded.title,
+    currency = excluded.currency,
+    impact = excluded.impact,
+    date = excluded.date,
+    payload = excluded.payload,
+    updatedAt = excluded.updatedAt
+`;
+const SELECT_EVENTS_SQL = `
+  SELECT payload
+  FROM economic_events
+  ORDER BY date ASC, id ASC
+`;
+
+const upsertEconomicEventStmt = db.prepare(UPSERT_EVENT_SQL);
+const selectEconomicEventsStmt = db.prepare(SELECT_EVENTS_SQL);
+
+const parseStoredPayload = (payload) => {
+  try {
+    return JSON.parse(payload);
+  } catch (err) {
+    console.warn("Service éco: Impossible de parser un événement stocké:", err.message);
+    return null;
+  }
+};
+
+const getStoredEconomicEvents = () => {
+  try {
+    return selectEconomicEventsStmt
+      .all()
+      .map(({ payload }) => parseStoredPayload(payload))
+      .filter(Boolean);
+  } catch (err) {
+    console.error("Service éco: Erreur lors de la lecture en base:", err.message);
+    return [];
+  }
+};
+
+const persistEconomicEvents = (events) => {
+  if (!Array.isArray(events) || events.length === 0) {
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+  const rows = events
+    .filter((event) => event?.id && event?.date)
+    .map((event) => ({
+      event_id: event.id,
+      title: event.title || "Événement",
+      currency: event.extendedProps?.currency || null,
+      impact: event.extendedProps?.impact || null,
+      date: event.date,
+      payload: JSON.stringify(event),
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    }));
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  const insertMany = db.transaction((records) => {
+    records.forEach((record) => upsertEconomicEventStmt.run(record));
+  });
+
+  insertMany(rows);
+};
+
+cache.data = getStoredEconomicEvents();
 
 /**
  * Transforme les événements JSON bruts de Forex Factory
@@ -63,7 +136,8 @@ const mapEvents = (events) => {
         // PROPRIÉTÉ AJOUTÉE (ESSENTIELLE POUR LES FILTRES)
         extendedProps: {
           type: 'economic',
-          impact: impact 
+          impact: impact,
+          currency: currency,
         }
       };
     });
@@ -94,7 +168,10 @@ const getEconomicEvents = async () => {
   if (!url) {
     console.warn("URL FOREX_FACTORY_URL non définie dans .env");
     isFetching = false; // Libère le verrou
-    return [];
+    if (!cache.data.length) {
+      cache.data = getStoredEconomicEvents();
+    }
+    return cache.data;
   }
 
   try {
@@ -102,7 +179,10 @@ const getEconomicEvents = async () => {
   } catch {
     console.warn("URL FOREX_FACTORY_URL invalide:", url);
     isFetching = false;
-    return [];
+    if (!cache.data.length) {
+      cache.data = getStoredEconomicEvents();
+    }
+    return cache.data;
   }
 
   try {
@@ -112,18 +192,28 @@ const getEconomicEvents = async () => {
     // Transforme les données JSON en événements de calendrier
     const allEvents = mapEvents(jsonEvents); // Appel de la fonction corrigée
 
+    // Persiste les événements pour conserver l'historique
+    persistEconomicEvents(allEvents);
+
+    const storedEvents = getStoredEconomicEvents();
+
     // Met à jour le cache
     cache = {
-      data: allEvents,
+      data: storedEvents,
       lastFetch: now,
     };
 
-    console.log(`Service éco (JSON) : Cache mis à jour avec ${allEvents.length} événements.`);
-    return allEvents;
+    console.log(`Service éco (JSON) : Cache mis à jour et ${storedEvents.length} événements persistés.`);
+    return storedEvents;
 
   } catch (err) {
     console.error("Erreur lors de la récupération du calendrier JSON:", err.message);
-    // En cas d'erreur (ex: 429), on renvoie l'ancien cache s'il existe
+    // En cas d'erreur (ex: 429), on renvoie les événements persistés
+    const storedEvents = getStoredEconomicEvents();
+    if (storedEvents.length) {
+      console.log("Service éco : Renvoi des événements persistés en base.");
+    }
+    cache.data = storedEvents.length ? storedEvents : cache.data;
     return cache.data || [];
   } finally {
     // Quoi qu'il arrive, libère le verrou
