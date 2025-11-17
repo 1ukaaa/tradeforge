@@ -12,6 +12,7 @@ const economicRoutes = require('./economic.routes');
 const brokerRoutes = require('./broker.routes');
 const integrationsRoutes = require('./integrations.routes');
 const twitterRoutes = require('./twitter.routes');
+const discordRoutes = require('./discord.routes');
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use("/economic-events", economicRoutes);
 router.use('/broker', brokerRoutes);
 router.use('/integrations', integrationsRoutes);
 router.use('/twitter', twitterRoutes);
+router.use('/discord', discordRoutes);
 
 module.exports = router;

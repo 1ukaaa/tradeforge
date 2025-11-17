@@ -1,49 +1,49 @@
-import {
-  Alert,
-  Avatar,
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  Grid,
-  IconButton,
-  List,
-  ListItemAvatar,
-  ListItemButton,
-  ListItemText,
-  Paper,
-  Snackbar,
-  Stack,
-  TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-} from "@mui/material";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AddCommentIcon from "@mui/icons-material/AddComment";
-import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
-import SaveIcon from "@mui/icons-material/Save";
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
+import SaveIcon from "@mui/icons-material/Save";
+import {
+    Alert,
+    Avatar,
+    Box,
+    Button,
+    Chip,
+    CircularProgress,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    Divider,
+    Grid,
+    IconButton,
+    List,
+    ListItemAvatar,
+    ListItemButton,
+    ListItemText,
+    Paper,
+    Snackbar,
+    Stack,
+    TextField,
+    ToggleButton,
+    ToggleButtonGroup,
+    Typography,
+} from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ForgeCard } from "../components/ForgeUI";
-import {
-  createTwitterDraft,
-  deleteTwitterDraft,
-  fetchTwitterDrafts,
-  generateTwitterFromEntry,
-  publishTwitterDraft,
-  updateTwitterDraft,
-} from "../services/twitterClient";
 import { fetchIntegrations } from "../services/integrationsClient";
 import { fetchJournalEntries } from "../services/journalClient";
+import {
+    createTwitterDraft,
+    deleteTwitterDraft,
+    fetchTwitterDrafts,
+    generateTwitterFromEntry,
+    publishTwitterDraft,
+    updateTwitterDraft,
+} from "../services/twitterClient";
 
 const VARIANT_OPTIONS = [
   { value: "tweet.simple", label: "Tweet Synthèse" },

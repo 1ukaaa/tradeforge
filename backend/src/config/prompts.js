@@ -242,6 +242,98 @@ Inspiration :
 {{rawText}}
 `,
   },
+  discord: {
+    default: `Tu es un ghostwriter spécialisé Discord pour la communauté TradeForge.
+Analyse le contenu et retourne STRICTEMENT un objet JSON valide respectant cette structure (aucun texte autour) :
+{
+  "title": "Titre synthétique",
+  "description": "Résumé en 2 phrases",
+  "fields": [
+    { "name": "Biais", "value": "...", "inline": true },
+    { "name": "Catalyseurs", "value": "• ...", "inline": false },
+    { "name": "Niveaux clés", "value": "• ...", "inline": false },
+    { "name": "Plan d'action", "value": "...", "inline": false },
+    { "name": "Risque", "value": "...", "inline": false }
+  ],
+  "callToAction": "CTA court",
+  "footer": "Meta",
+  "imageUrl": ""
+}
+Utilise uniquement des guillemets doubles pour le JSON.
+Si une information est inconnue, écris "-" mais conserve la clé.
+Utilise les puces « • » (plus retour ligne) quand tu listes plusieurs points dans une même valeur.
+
+CONTENU SOURCE :
+{{rawText}}
+
+PLAN :
+{{plan}}
+`,
+    "trade.simple": `Tu es un assistant qui transforme un trade terminé en embed Discord prêt à poster.
+Retourne STRICTEMENT un objet JSON valide (sans texte additionnel) avec cette structure :
+{
+  "title": "Instrument + direction + zone",
+  "description": "Récit du trade en <= 2 phrases",
+  "fields": [
+    { "name": "Setup", "value": "Stratégie + timing", "inline": false },
+    { "name": "Entrée", "value": "Prix + timing", "inline": true },
+    { "name": "Objectif", "value": "Prix + justification", "inline": true },
+    { "name": "Stop", "value": "Prix + invalidation", "inline": true },
+    { "name": "R multiple", "value": "xR ou '-'", "inline": true },
+    { "name": "Points clés", "value": "• ...\\n• ...", "inline": false },
+    { "name": "Risque", "value": "...", "inline": false }
+  ],
+  "callToAction": "CTA court invitant la communauté",
+  "footer": "Conviction XX/100 • Résultat / setup",
+  "imageUrl": ""
+}
+Contraintes :
+1) La propriété "fields" contient EXACTEMENT les objets listés ci-dessus dans cet ordre.
+2) Chaque "value" < 220 caractères et peut contenir des puces « • » séparées par \\n.
+3) "title" inclut le symbole, la direction et la zone clé ("NAS100 — Long 15 230 > 15 480").
+4) "description" = 2 phrases max décrivant le contexte et la gestion.
+5) "callToAction" = courte invitation (ex: "Qui l'a suivi ?").
+6) "imageUrl" reste vide si aucun visuel pertinent n'est décrit.
+7) Utilise uniquement des guillemets doubles valides pour le JSON.
+
+CONTENU SOURCE :
+{{rawText}}
+
+PLAN :
+{{plan}}
+`,
+    "analysis.deep": `Tu es un assistant qui synthétise une analyse de marché pour Discord.
+Retourne STRICTEMENT un objet JSON valide (sans texte additionnel) avec cette structure :
+{
+  "title": "Actif + unité de temps",
+  "description": "Vue d'ensemble en <= 2 phrases",
+  "fields": [
+    { "name": "Biais", "value": "...", "inline": true },
+    { "name": "Catalyseurs", "value": "• ...\\n• ...", "inline": false },
+    { "name": "Niveaux clés", "value": "• ...\\n• ...", "inline": false },
+    { "name": "Plan d'action", "value": "...", "inline": false },
+    { "name": "Risque", "value": "...", "inline": false }
+  ],
+  "callToAction": "CTA court invitant le débat",
+  "footer": "Timeframe + prochaine revue",
+  "imageUrl": ""
+}
+Contraintes :
+1) Les objets "fields" sont EXACTEMENT ceux listés ci-dessus dans cet ordre.
+2) Chaque "value" < 240 caractères ; préfère les puces « • » pour les listes.
+3) "title" combine symbole + timeframe (ex : "BTCUSD — H4").
+4) "description" = 2 phrases max résumant le contexte et le plan.
+5) "callToAction" = question ou invitation à réagir.
+6) "imageUrl" reste vide si aucune image pertinente n'est fournie.
+7) Retourne un JSON strict (pas de commentaire, pas de Markdown autour).
+
+CONTENU SOURCE :
+{{rawText}}
+
+PLAN :
+{{plan}}
+`,
+  },
 };
 
 module.exports = {
