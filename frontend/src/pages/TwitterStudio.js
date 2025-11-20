@@ -1,1156 +1,608 @@
-import AddCommentIcon from "@mui/icons-material/AddComment";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import BatteryFullIcon from "@mui/icons-material/BatteryFull";
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import CloseIcon from "@mui/icons-material/Close";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import EditIcon from '@mui/icons-material/Edit';
+import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
+import IosShareIcon from "@mui/icons-material/IosShare";
+import RepeatIcon from "@mui/icons-material/Repeat";
 import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
 import SaveIcon from "@mui/icons-material/Save";
+import SignalCellularAltIcon from "@mui/icons-material/SignalCellularAlt";
+import VerifiedIcon from '@mui/icons-material/Verified';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import WifiIcon from "@mui/icons-material/Wifi";
 import {
-    Alert,
-    Avatar,
-    Box,
-    Button,
-    Chip,
-    CircularProgress,
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogTitle,
-    Divider,
-    Grid,
-    IconButton,
-    List,
-    ListItemAvatar,
-    ListItemButton,
-    ListItemText,
-    Paper,
-    Snackbar,
-    Stack,
-    TextField,
-    ToggleButton,
-    ToggleButtonGroup,
-    Typography,
+  Alert,
+  Avatar,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  Fade,
+  Grid,
+  IconButton,
+  List,
+  ListItemAvatar,
+  ListItemButton,
+  ListItemText,
+  Paper,
+  Snackbar,
+  Stack,
+  Tab,
+  Tabs,
+  TextField,
+  Tooltip,
+  Typography,
+  useMediaQuery,
+  useTheme
 } from "@mui/material";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ForgeCard } from "../components/ForgeUI";
+import { alpha } from "@mui/material/styles";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchIntegrations } from "../services/integrationsClient";
 import { fetchJournalEntries } from "../services/journalClient";
 import {
-    createTwitterDraft,
-    deleteTwitterDraft,
-    fetchTwitterDrafts,
-    generateTwitterFromEntry,
-    publishTwitterDraft,
-    updateTwitterDraft,
+  createTwitterDraft,
+  deleteTwitterDraft,
+  fetchTwitterDrafts,
+  generateTwitterFromEntry,
+  publishTwitterDraft,
+  updateTwitterDraft,
 } from "../services/twitterClient";
 
-const VARIANT_OPTIONS = [
-  { value: "tweet.simple", label: "Tweet Synthèse" },
-  { value: "thread.analysis", label: "Thread Analyse" },
-  { value: "thread.annonce", label: "Annonce / Lancement" },
+// --- CONFIGURATION ---
+const VIBES = [
+  { value: "tweet.simple", label: "Synthèse", icon: "📝" },
+  { value: "thread.analysis", label: "Analyse", icon: "🧠" },
+  { value: "thread.annonce", label: "Hype", icon: "🔥" },
 ];
 
-const STATUS_OPTIONS = [
-  { value: "draft", label: "En cours" },
-  { value: "ready", label: "Prêt" },
-  { value: "published", label: "Publié" },
-];
+const DEFAULT_TWEET = () => ({ id: `tweet-${Date.now()}`, text: "", media: [] });
 
-const DEFAULT_TWEET = () => ({
-  id: `tweet-${Date.now()}`,
-  text: "",
-  media: [],
-});
-
-const mapEntryImagesToAttachments = (entry) => {
-  if (!entry?.metadata?.images) return [];
-  return entry.metadata.images
-    .filter((image) => image?.src)
-    .map((image, index) => ({
-      id: image.id || `entry-${entry.id}-${index}-${Date.now()}`,
-      src: image.src,
-      caption: image.caption || entry.metadata?.title || `Image ${index + 1}`,
-    }));
-};
-
-const fileToDataUrl = (file) =>
-  new Promise((resolve, reject) => {
+// --- UTILS ---
+const fileToDataUrl = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
     reader.onerror = reject;
     reader.readAsDataURL(file);
-  });
-
-const ensureTweetMedia = (tweet) => ({
-  ...tweet,
-  media: Array.isArray(tweet.media) ? tweet.media : [],
 });
+
+const mapEntryImagesToAttachments = (entry) => {
+  if (!entry?.metadata?.images) return [];
+  return entry.metadata.images.filter(i => i?.src).map((img, idx) => ({
+      id: img.id || `entry-${entry.id}-${idx}-${Date.now()}`,
+      src: img.src,
+      caption: img.caption || entry.metadata?.title
+  }));
+};
 
 const hydrateDraft = (draft) => {
   if (!draft) return draft;
   const cloned = JSON.parse(JSON.stringify(draft));
   const tweets = Array.isArray(cloned?.payload?.tweets)
-    ? cloned.payload.tweets.map(ensureTweetMedia)
+    ? cloned.payload.tweets.map(t => ({ ...t, media: t.media || [] }))
     : [DEFAULT_TWEET()];
-  const legacyAttachments = Array.isArray(cloned?.payload?.attachments)
-    ? cloned.payload.attachments
-    : [];
-  if (legacyAttachments.length && tweets[0] && !tweets[0].media.length) {
-    tweets[0].media = legacyAttachments;
-  }
-  return {
-    ...cloned,
-    payload: {
-      ...cloned.payload,
-      tweets,
-      attachments: [],
-    },
-  };
+  return { ...cloned, payload: { ...cloned.payload, tweets } };
 };
 
-const TwitterStudio = () => {
-  const [drafts, setDrafts] = useState([]);
-  const [activeDraftId, setActiveDraftId] = useState(null);
-  const [editorDraft, setEditorDraft] = useState(null);
-  const [isDirty, setIsDirty] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [publishing, setPublishing] = useState(false);
-  const [error, setError] = useState(null);
-  const [integrationInfo, setIntegrationInfo] = useState(null);
-  const [integrationError, setIntegrationError] = useState(null);
-  const [journalEntries, setJournalEntries] = useState([]);
-  const [entriesLoading, setEntriesLoading] = useState(false);
-  const [entriesError, setEntriesError] = useState(null);
-  const [isEntryDialogOpen, setEntryDialogOpen] = useState(false);
-  const [entrySearch, setEntrySearch] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
-  const [draggingMedia, setDraggingMedia] = useState(null);
-  const [pendingTweetIndex, setPendingTweetIndex] = useState(null);
-  const fileInputRef = useRef(null);
+// --- COMPOSANT : PHONE PREVIEW ---
+const PhonePreview = ({ tweets, integrationInfo, theme }) => {
+  const currentTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const bgPhone = theme.palette.mode === 'dark' ? '#000000' : '#FFFFFF';
+  const textPhone = theme.palette.mode === 'dark' ? '#E7E9EA' : '#0F1419';
+  const borderPhone = theme.palette.mode === 'dark' ? '#2F3336' : '#EFF3F4';
+  const secondaryTextPhone = theme.palette.mode === 'dark' ? '#71767B' : '#536471';
 
-  const updateTweetMedia = (tweetIndex, updater) => {
-    setEditorDraft((prev) => {
-      if (!prev) return prev;
-      const tweets = prev.payload?.tweets ? [...prev.payload.tweets] : [];
-      if (!tweets[tweetIndex]) return prev;
-      const currentMedia = Array.isArray(tweets[tweetIndex].media) ? [...tweets[tweetIndex].media] : [];
-      const nextMedia = updater(currentMedia);
-      tweets[tweetIndex] = { ...tweets[tweetIndex], media: nextMedia };
-      return {
-        ...prev,
-        payload: {
-          ...prev.payload,
-          tweets,
-        },
-      };
-    });
-    setIsDirty(true);
-  };
-
-  const moveMediaItem = (sourceTweetIndex, mediaId, targetTweetIndex, targetMediaId = null) => {
-    setEditorDraft((prev) => {
-      if (!prev) return prev;
-      const tweets = prev.payload?.tweets ? [...prev.payload.tweets] : [];
-      const sourceTweet = tweets[sourceTweetIndex];
-      const targetTweet = tweets[targetTweetIndex];
-      if (!sourceTweet || !targetTweet) return prev;
-      const sourceMedia = Array.isArray(sourceTweet.media) ? [...sourceTweet.media] : [];
-      const sourceIndex = sourceMedia.findIndex((item) => item.id === mediaId);
-      if (sourceIndex === -1) return prev;
-      const [mediaItem] = sourceMedia.splice(sourceIndex, 1);
-      const targetMedia =
-        sourceTweetIndex === targetTweetIndex ? sourceMedia : Array.isArray(targetTweet.media) ? [...targetTweet.media] : [];
-      let insertIndex =
-        targetMediaId !== null ? targetMedia.findIndex((item) => item.id === targetMediaId) : targetMedia.length;
-      if (insertIndex < 0 || insertIndex > targetMedia.length) {
-        insertIndex = targetMedia.length;
-      }
-      if (sourceTweetIndex === targetTweetIndex && insertIndex >= sourceIndex) {
-        insertIndex = Math.min(insertIndex, targetMedia.length);
-      }
-      targetMedia.splice(insertIndex, 0, mediaItem);
-      tweets[sourceTweetIndex] = { ...sourceTweet, media: sourceMedia };
-      tweets[targetTweetIndex] = { ...targetTweet, media: targetMedia };
-      return {
-        ...prev,
-        payload: {
-          ...prev.payload,
-          tweets,
-        },
-      };
-    });
-    setIsDirty(true);
-  };
-
-  const loadDrafts = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    fetchTwitterDrafts()
-      .then((items) => {
-        const hydrated = items.map(hydrateDraft);
-        setDrafts(hydrated);
-        setActiveDraftId((prev) => {
-          if (prev) return prev;
-          if (hydrated.length) return hydrated[0].id;
-          return null;
-        });
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const loadIntegrations = () => {
-    setIntegrationError(null);
-    fetchIntegrations()
-      .then((data) => setIntegrationInfo(data.twitter || null))
-      .catch((err) => setIntegrationError(err.message));
-  };
-
-  const loadJournalEntries = useCallback(() => {
-    setEntriesLoading(true);
-    setEntriesError(null);
-    fetchJournalEntries()
-      .then((items) => setJournalEntries(items))
-      .catch((err) => setEntriesError(err.message))
-      .finally(() => setEntriesLoading(false));
-  }, []);
-
-  const pushNotification = (message, severity = "info") => {
-    if (!message) return;
-    setNotification({ open: true, message, severity });
-  };
-
-  useEffect(() => {
-    loadDrafts();
-    loadIntegrations();
-  }, [loadDrafts]);
-
-  useEffect(() => {
-    if (!activeDraftId) {
-      setEditorDraft(null);
-      setIsDirty(false);
-      return;
-    }
-    const selected = drafts.find((draft) => draft.id === activeDraftId);
-    setEditorDraft(selected ? hydrateDraft(selected) : null);
-    setIsDirty(false);
-  }, [activeDraftId, drafts]);
-
-  const handleCreateDraft = async () => {
-    try {
-      setCreating(true);
-      const draft = await createTwitterDraft({
-        title: "Nouveau brouillon",
-        status: "draft",
-        payload: { tweets: [DEFAULT_TWEET()] },
-      });
-      const hydrated = hydrateDraft(draft);
-      setDrafts((prev) => [hydrated, ...prev]);
-      setActiveDraftId(hydrated.id);
-      pushNotification("Brouillon créé.", "success");
-    } catch (err) {
-      setError(err.message);
-      pushNotification(err.message, "error");
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleDeleteDraft = async (id) => {
-    if (!id) return;
-    const confirmed = window.confirm("Supprimer définitivement ce brouillon ?");
-    if (!confirmed) return;
-    try {
-      await deleteTwitterDraft(id);
-      setDrafts((prev) => prev.filter((draft) => draft.id !== id));
-      if (activeDraftId === id) {
-        setActiveDraftId(null);
-      }
-      pushNotification("Brouillon supprimé.", "info");
-    } catch (err) {
-      setError(err.message);
-      pushNotification(err.message, "error");
-    }
-  };
-
-  const updateEditorField = (field, value) => {
-    setEditorDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
-    setIsDirty(true);
-  };
-
-  const updateTweet = (index, updates) => {
-    setEditorDraft((prev) => {
-      if (!prev) return prev;
-      const tweets = prev.payload?.tweets ? [...prev.payload.tweets] : [];
-      tweets[index] = { ...tweets[index], ...updates };
-      return {
-        ...prev,
-        payload: {
-          ...prev.payload,
-          tweets,
-        },
-      };
-    });
-    setIsDirty(true);
-  };
-
-  const addTweetBlock = () => {
-    setEditorDraft((prev) => {
-      if (!prev) return prev;
-      const tweets = prev.payload?.tweets ? [...prev.payload.tweets] : [];
-      tweets.push(DEFAULT_TWEET());
-      return {
-        ...prev,
-        payload: { ...prev.payload, tweets },
-      };
-    });
-    setIsDirty(true);
-  };
-
-  const removeTweetBlock = (index) => {
-    setEditorDraft((prev) => {
-      if (!prev) return prev;
-      const tweets = prev.payload?.tweets ? [...prev.payload.tweets] : [];
-      if (tweets.length <= 1) return prev;
-      tweets.splice(index, 1);
-      return {
-        ...prev,
-        payload: { ...prev.payload, tweets },
-      };
-    });
-    setIsDirty(true);
-  };
-
-  const handleOpenEntryDialog = () => {
-    if (!journalEntries.length && !entriesLoading) {
-      loadJournalEntries();
-    }
-    setEntryDialogOpen(true);
-  };
-
-  const handleAttachEntry = (entry) => {
-    if (!entry) return;
-    const attachments = mapEntryImagesToAttachments(entry);
-    setEditorDraft((prev) => {
-      if (!prev) return prev;
-      const tweets = prev.payload?.tweets ? [...prev.payload.tweets] : [];
-      if (attachments.length && tweets[0]) {
-        tweets[0] = { ...tweets[0], media: attachments };
-      }
-      return {
-        ...prev,
-        sourceEntryId: entry.id,
-        metadata: {
-          ...prev.metadata,
-          sourceTitle: entry.metadata?.title || entry.content?.slice(0, 60) || `Entrée #${entry.id}`,
-          sourceType: entry.type,
-          sourceDate: entry.metadata?.date || entry.createdAt,
-          sourceSymbol: entry.metadata?.symbol || "",
-        },
-        payload: {
-          ...prev.payload,
-          tweets,
-        },
-      };
-    });
-    setIsDirty(true);
-    setEntryDialogOpen(false);
-  };
-
-  const handleDetachEntry = () => {
-    setEditorDraft((prev) => {
-      if (!prev) return prev;
-      const { metadata = {} } = prev;
-      const { sourceTitle, sourceType, sourceDate, sourceSymbol, ...restMetadata } = metadata;
-      const tweets = (prev.payload?.tweets || []).map((tweet) => ({
-        ...tweet,
-        media: [],
-      }));
-      return {
-        ...prev,
-        sourceEntryId: null,
-        metadata: restMetadata,
-        payload: {
-          ...prev.payload,
-          tweets,
-        },
-      };
-    });
-    setIsDirty(true);
-  };
-
-  const handleRemoveAttachment = (tweetIndex, attachmentId) => {
-    if (!attachmentId) return;
-    updateTweetMedia(tweetIndex, (media) => media.filter((attachment) => attachment.id !== attachmentId));
-  };
-
-  const handleReorderAttachment = (tweetIndex, attachmentId, direction) => {
-    if (!attachmentId || !direction) return;
-    setEditorDraft((prev) => {
-      if (!prev) return prev;
-      const tweets = prev.payload?.tweets ? [...prev.payload.tweets] : [];
-      const targetTweet = tweets[tweetIndex];
-      if (!targetTweet) return prev;
-      const attachments = Array.isArray(targetTweet.media) ? [...targetTweet.media] : [];
-      const index = attachments.findIndex((item) => item.id === attachmentId);
-      if (index === -1) return prev;
-      const targetIndex = index + direction;
-      if (targetIndex < 0 || targetIndex >= attachments.length) return prev;
-      const [moved] = attachments.splice(index, 1);
-      attachments.splice(targetIndex, 0, moved);
-      tweets[tweetIndex] = { ...targetTweet, media: attachments };
-      return {
-        ...prev,
-        payload: {
-          ...prev.payload,
-          tweets,
-        },
-      };
-    });
-    setIsDirty(true);
-  };
-
-  const handleAddAttachmentFromSrc = (tweetIndex, src, name = "") => {
-    if (!src) return;
-    updateTweetMedia(tweetIndex, (media) => [
-      ...media,
-      {
-        id: `attachment-${Date.now()}`,
-        src,
-        caption: name || `Image ${media.length + 1}`,
-      },
-    ]);
-  };
-
-  const handleAttachmentFileChange = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const dataUrl = await fileToDataUrl(file);
-      const targetIndex = pendingTweetIndex ?? 0;
-      handleAddAttachmentFromSrc(targetIndex, dataUrl, file.name);
-      setPendingTweetIndex(null);
-      pushNotification("Image ajoutée au brouillon.", "success");
-    } catch (err) {
-      console.error("Erreur lecture image :", err);
-      pushNotification("Impossible de lire cette image.", "error");
-    } finally {
-      if (event?.target) {
-        event.target.value = "";
-      }
-    }
-  };
-
-  const handleAddAttachmentClick = (tweetIndex) => () => {
-    setPendingTweetIndex(tweetIndex);
-    fileInputRef.current?.click();
-  };
-
-  const handleMediaDragStart = (tweetIndex, mediaId) => () => {
-    setDraggingMedia({ tweetIndex, mediaId });
-  };
-
-  const handleMediaDragEnd = () => setDraggingMedia(null);
-
-  const handleMediaDrop = (tweetIndex, targetMediaId = null) => (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (draggingMedia) {
-      moveMediaItem(draggingMedia.tweetIndex, draggingMedia.mediaId, tweetIndex, targetMediaId);
-    }
-    setDraggingMedia(null);
-  };
-
-  const handleGenerateWithGemini = async () => {
-    if (!editorDraft) return;
-    if (!editorDraft.sourceEntryId) {
-      setError("Sélectionne une analyse ou un trade du journal avant de générer.");
-      return;
-    }
-    try {
-      setGenerating(true);
-      const variantValue = editorDraft.variant || "tweet.simple";
-      const data = await generateTwitterFromEntry({
-        entryId: editorDraft.sourceEntryId,
-        variant: variantValue,
-      });
-      const existingMedia = Array.isArray(editorDraft.payload?.tweets)
-        ? editorDraft.payload.tweets.map((tweet) => tweet.media || [])
-        : [];
-      const generatedTweets = (data?.tweets || []).map((tweet, index) => ({
-        id: tweet.id || `tweet-${Date.now()}-${index}`,
-        text: tweet.text || "",
-        media: existingMedia[index] ? [...existingMedia[index]] : [],
-      }));
-      if (!generatedTweets.length) {
-        throw new Error("Gemini n'a pas renvoyé de tweets.");
-      }
-      setEditorDraft((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          payload: {
-            ...prev.payload,
-            tweets: generatedTweets,
-          },
-        };
-      });
-      setIsDirty(true);
-      pushNotification("Contenu généré avec Gemini.", "success");
-    } catch (err) {
-      setError(err.message || "Impossible de générer le thread.");
-      pushNotification(err.message || "Génération impossible.", "error");
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleSaveDraft = async () => {
-    if (!editorDraft) return;
-    try {
-      setSaving(true);
-      setError(null);
-      const payload = {
-        title: editorDraft.title,
-        variant: editorDraft.variant,
-        status: editorDraft.status,
-        payload: editorDraft.payload,
-        sourceEntryId: editorDraft.sourceEntryId,
-        metadata: editorDraft.metadata,
-      };
-      const updated = await updateTwitterDraft(editorDraft.id, payload);
-      const hydrated = hydrateDraft(updated);
-      setDrafts((prev) => prev.map((draft) => (draft.id === hydrated.id ? hydrated : draft)));
-      setIsDirty(false);
-      pushNotification("Brouillon enregistré.", "success");
-    } catch (err) {
-      setError(err.message);
-      pushNotification(err.message, "error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handlePublishDraft = async () => {
-    if (!editorDraft) return;
-    if (editorDraft.payload?.tweets?.some((tweet) => !tweet.text.trim())) {
-      setError("Chaque tweet doit contenir du texte avant publication.");
-      return;
-    }
-    try {
-      setPublishing(true);
-      setError(null);
-      if (isDirty) {
-        await handleSaveDraft();
-      }
-      const { draft } = await publishTwitterDraft(editorDraft.id);
-      const hydrated = hydrateDraft(draft);
-      setDrafts((prev) => prev.map((item) => (item.id === hydrated.id ? hydrated : item)));
-      setActiveDraftId(hydrated.id);
-      loadIntegrations();
-      pushNotification("Thread publié sur Twitter.", "success");
-    } catch (err) {
-      setError(err.message);
-      pushNotification(err.message, "error");
-    } finally {
-      setPublishing(false);
-    }
-  };
-
-  const activeStatusProps = useMemo(() => {
-    if (!editorDraft) return {};
-    switch (editorDraft.status) {
-      case "ready":
-        return { color: "info", label: "Prêt" };
-      case "published":
-        return { color: "success", label: "Publié" };
-      default:
-        return { color: "default", label: "En cours" };
-    }
-  }, [editorDraft]);
-
-  const filteredEntries = useMemo(() => {
-    const search = entrySearch.trim().toLowerCase();
-    return journalEntries
-      .filter((entry) => entry.type === "trade" || entry.type === "analyse")
-      .filter((entry) => {
-        if (!search) return true;
-        const haystack = [
-          entry.metadata?.title,
-          entry.metadata?.symbol,
-          Array.isArray(entry.metadata?.tags) ? entry.metadata.tags.join(" ") : "",
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        return haystack.includes(search);
-      });
-  }, [journalEntries, entrySearch]);
-
-  const renderTweetEditor = (tweet, index) => {
-    const charCount = tweet.text?.length || 0;
-    const exceeds = charCount > 280;
-    return (
-      <Box key={tweet.id} sx={{ borderRadius: 2, border: (theme) => `1px solid ${theme.palette.divider}`, p: 2 }}>
-        <Stack spacing={1}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="subtitle2">Tweet #{index + 1}</Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="caption" color={exceeds ? "error.main" : "text.secondary"}>
-                {charCount} / 280
-              </Typography>
-              {editorDraft?.payload?.tweets?.length > 1 && (
-                <IconButton size="small" onClick={() => removeTweetBlock(index)}>
-                  <DeleteOutlineIcon fontSize="small" />
-                </IconButton>
-              )}
-            </Stack>
-          </Stack>
-          <TextField
-            multiline
-            minRows={3}
-            value={tweet.text}
-            placeholder="Texte du tweet..."
-            onChange={(event) => updateTweet(index, { text: event.target.value })}
-            fullWidth
-          />
-        </Stack>
+  return (
+    <Box sx={{
+        height: '100%', maxHeight: '820px', aspectRatio: '9/19.5', width: 'auto', maxWidth: '400px',
+        borderRadius: '44px', border: `8px solid ${theme.palette.mode === 'dark' ? '#2a2a2a' : '#111'}`,
+        backgroundColor: bgPhone, position: 'relative', overflow: 'hidden',
+        boxShadow: theme.palette.mode === 'dark' ? '0px 0px 50px -10px rgba(0,0,0,0.8)' : '0px 20px 60px -20px rgba(0,0,0,0.3)',
+        display: 'flex', flexDirection: 'column'
+    }}>
+      {/* Dynamic Island */}
+      <Box sx={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: '30%', height: 24, bgcolor: 'black', borderRadius: 20, zIndex: 10 }} />
+      
+      {/* Header */}
+      <Stack direction="row" justifyContent="space-between" alignItems="center" px={3} pt={1.5} pb={1} sx={{ color: textPhone }}>
+        <Typography variant="caption" fontWeight={600} sx={{ fontSize: 12 }}>{currentTime}</Typography>
+        <Stack direction="row" spacing={0.5} sx={{ opacity: 0.9 }}><SignalCellularAltIcon sx={{ fontSize: 16 }}/><WifiIcon sx={{ fontSize: 16 }}/><BatteryFullIcon sx={{ fontSize: 16 }}/></Stack>
+      </Stack>
+      <Box sx={{ px: 2, py: 1, display: 'flex', justifyContent: 'center', borderBottom: `1px solid ${alpha(borderPhone, 0.5)}` }}>
+         <Typography fontWeight={900} fontSize={20} sx={{ color: textPhone }}>𝕏</Typography>
       </Box>
-    );
-  };
 
-  const renderDraftList = () => {
-    if (loading) {
-      return (
-        <Stack alignItems="center" spacing={1} py={3}>
-          <CircularProgress size={24} />
-          <Typography variant="body2" color="text.secondary">
-            Chargement des brouillons...
-          </Typography>
-        </Stack>
-      );
-    }
-
-    if (!drafts.length) {
-      return (
-        <Stack spacing={2} alignItems="center" py={4}>
-          <Typography variant="body2" color="text.secondary" textAlign="center">
-            Aucun brouillon pour le moment. Crée ton premier tweet pour préparer tes publications.
-          </Typography>
-          <Button variant="contained" startIcon={<AddCommentIcon />} onClick={handleCreateDraft} disabled={creating}>
-            {creating ? "Création..." : "Nouveau brouillon"}
-          </Button>
-        </Stack>
-      );
-    }
-
-    return (
-      <Stack spacing={1.5}>
-        {drafts.map((draft) => (
-          <Box
-            key={draft.id}
-            onClick={() => setActiveDraftId(draft.id)}
-            sx={{
-              p: 2,
-              borderRadius: 2,
-              border: (theme) =>
-                `1px solid ${
-                  draft.id === activeDraftId ? theme.palette.primary.main : theme.palette.divider
-                }`,
-              backgroundColor: (theme) =>
-                draft.id === activeDraftId ? theme.palette.action.selected : theme.palette.background.paper,
-              cursor: "pointer",
-            }}
-          >
-            <Stack spacing={0.5}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography fontWeight={600}>{draft.title || "Sans titre"}</Typography>
-                <Chip
-                  size="small"
-                  label={draft.status === "published" ? "Publié" : draft.status === "ready" ? "Prêt" : "Brouillon"}
-                  color={
-                    draft.status === "published" ? "success" : draft.status === "ready" ? "info" : "default"
-                  }
-                />
-              </Stack>
-              <Typography variant="caption" color="text.secondary">
-                {draft.variant}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Mis à jour le {new Date(draft.updatedAt).toLocaleString("fr-FR")}
-              </Typography>
+      {/* Content */}
+      <Box sx={{ flex: 1, overflowY: 'auto', '&::-webkit-scrollbar': { display: 'none' } }}>
+        {tweets.map((tweet, index) => (
+          <Box key={tweet.id || index} sx={{ p: 2, borderBottom: `1px solid ${borderPhone}`, position: 'relative' }}>
+             {index < tweets.length - 1 && <Box sx={{ position: 'absolute', left: 36, top: 60, bottom: -10, width: '2px', backgroundColor: theme.palette.mode === 'dark' ? '#333' : '#CFD9DE', zIndex: 0 }} />}
+            <Stack direction="row" spacing={1.5}>
+              <Avatar src={integrationInfo?.avatar_url} sx={{ width: 40, height: 40, zIndex: 1, border: `1px solid ${bgPhone}` }} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                   <Typography variant="body2" fontWeight={700} sx={{ color: textPhone, maxWidth: '140px', noWrap: true }}>{integrationInfo?.name || "User"}</Typography>
+                   <VerifiedIcon sx={{ fontSize: 14, color: '#1D9BF0' }} />
+                   <Typography variant="body2" sx={{ color: secondaryTextPhone }}>@{integrationInfo?.handle || "handle"} · {index === 0 ? '2m' : ''}</Typography>
+                </Stack>
+                <Typography variant="body2" sx={{ color: textPhone, whiteSpace: 'pre-wrap', mt: 0.5, fontSize: '0.95rem', lineHeight: 1.45 }}>
+                  {tweet.text || <span style={{ opacity: 0.3 }}>...</span>}
+                </Typography>
+                {tweet.media?.length > 0 && (
+                  <Box sx={{ mt: 1.5, borderRadius: '16px', overflow: 'hidden', border: `1px solid ${theme.palette.mode === 'dark' ? '#333' : '#CFD9DE'}` }}>
+                    {tweet.media.map(m => <Box key={m.id} component="img" src={m.src} sx={{ width: '100%', maxHeight: 220, objectFit: 'cover', display: 'block' }} />)}
+                  </Box>
+                )}
+                <Stack direction="row" justifyContent="space-between" mt={1.5} sx={{ color: secondaryTextPhone, maxWidth: '85%' }}>
+                   <ChatBubbleOutlineIcon sx={{ fontSize: 18 }}/><RepeatIcon sx={{ fontSize: 18 }}/><FavoriteBorderIcon sx={{ fontSize: 18 }}/><IosShareIcon sx={{ fontSize: 18 }}/>
+                </Stack>
+              </Box>
             </Stack>
           </Box>
         ))}
-      </Stack>
+        <Box height={60} />
+      </Box>
+      <Box sx={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', width: '35%', height: 5, borderRadius: 10, backgroundColor: theme.palette.mode === 'dark' ? 'white' : 'black', opacity: 0.8 }} />
+    </Box>
+  );
+};
+
+// --- COMPOSANT : EDITOR TOOLBAR (Esthétique) ---
+const EditorToolbar = ({ currentVibe, onVibeChange, sourceEntry, onOpenSource, onGenerate, isGenerating }) => {
+    const theme = useTheme();
+    return (
+        <Paper elevation={0} sx={{ 
+            p: 1.5, mx: 2, mt: 2, mb: 0, border: `1px solid ${theme.palette.divider}`, borderRadius: '16px',
+            bgcolor: alpha(theme.palette.background.paper, 0.6), backdropFilter: 'blur(10px)',
+            display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap'
+        }}>
+            {/* Vibe Pills */}
+            <Stack direction="row" spacing={0.5} sx={{ p: 0.5, bgcolor: theme.palette.action.hover, borderRadius: '12px' }}>
+                {VIBES.map((v) => (
+                    <Button
+                        key={v.value} onClick={() => onVibeChange(v.value)} size="small"
+                        startIcon={<span style={{ fontSize: '1.1rem' }}>{v.icon}</span>}
+                        sx={{
+                            borderRadius: '8px', px: 2, py: 0.5, minWidth: 'auto',
+                            color: currentVibe === v.value ? 'white' : 'text.secondary',
+                            bgcolor: currentVibe === v.value ? 'primary.main' : 'transparent',
+                            fontWeight: currentVibe === v.value ? 700 : 500,
+                            boxShadow: currentVibe === v.value ? '0px 2px 8px rgba(0,0,0,0.15)' : 'none',
+                            '&:hover': { bgcolor: currentVibe === v.value ? 'primary.dark' : theme.palette.action.selected }
+                        }}
+                    >{v.label}</Button>
+                ))}
+            </Stack>
+
+            <Divider orientation="vertical" flexItem sx={{ height: 24, alignSelf: 'center' }} />
+
+            {/* Source Badge */}
+            {sourceEntry ? (
+                <Chip
+                    avatar={<Avatar src={sourceEntry.metadata?.images?.[0]?.src} sx={{ width: 24, height: 24 }}>{sourceEntry.metadata?.symbol?.[0]}</Avatar>}
+                    label={<Typography variant="caption" fontWeight={700}>{sourceEntry.metadata?.symbol || "Source"}</Typography>}
+                    onDelete={onOpenSource} deleteIcon={<EditIcon sx={{ fontSize: '14px !important' }} />}
+                    onClick={onOpenSource}
+                    sx={{
+                        bgcolor: alpha(theme.palette.success.main, 0.1), color: theme.palette.success.main,
+                        border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`, fontWeight: 700, cursor: 'pointer'
+                    }}
+                />
+            ) : (
+                <Button onClick={onOpenSource} startIcon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />} variant="outlined" size="small" sx={{
+                    borderStyle: 'dashed', color: 'text.secondary', borderColor: theme.palette.divider, borderRadius: '20px', textTransform: 'none', px: 2,
+                    '&:hover': { borderColor: 'primary.main', color: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.05) }
+                }}>Lier une analyse</Button>
+            )}
+
+            <Box flexGrow={1} />
+
+            {/* Magic Button */}
+            <Button
+                onClick={onGenerate} disabled={isGenerating || !sourceEntry}
+                startIcon={isGenerating ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
+                sx={{
+                    background: isGenerating || !sourceEntry ? theme.palette.action.disabledBackground : 'linear-gradient(135deg, #8B5CF6 0%, #3B82F6 100%)',
+                    color: 'white', borderRadius: '12px', textTransform: 'none', fontWeight: 700, px: 3,
+                    boxShadow: isGenerating ? 'none' : '0px 4px 12px rgba(59, 130, 246, 0.3)', transition: 'transform 0.2s',
+                    '&:hover': { transform: 'translateY(-1px)', boxShadow: '0px 6px 16px rgba(59, 130, 246, 0.4)' },
+                    '&.Mui-disabled': { color: 'rgba(255,255,255,0.5)' }
+                }}
+            >{isGenerating ? "Réflexion..." : "Magic Draft"}</Button>
+        </Paper>
     );
+};
+
+// --- MAIN COMPONENT ---
+
+const TwitterStudio = () => {
+  const theme = useTheme();
+  const isMobileOrTablet = useMediaQuery(theme.breakpoints.down('md'));
+  const fileInputRef = useRef(null);
+
+  // State
+  const [drafts, setDrafts] = useState([]);
+  const [activeDraftId, setActiveDraftId] = useState(null);
+  const [editorDraft, setEditorDraft] = useState(null);
+  const [mobileTab, setMobileTab] = useState(0);
+  
+  // Drag & Drop State
+  const [draggingMedia, setDraggingMedia] = useState(null);
+
+  // UI State
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [isEntryDialogOpen, setEntryDialogOpen] = useState(false);
+  const [journalEntries, setJournalEntries] = useState([]);
+  const [entrySearch, setEntrySearch] = useState("");
+  const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
+  const [integrationInfo, setIntegrationInfo] = useState(null);
+  const [pendingTweetIndex, setPendingTweetIndex] = useState(null);
+  const [isDirty, setIsDirty] = useState(false);
+
+  // --- LOADERS ---
+  const loadDrafts = useCallback(async () => {
+    setLoading(true);
+    try { setDrafts((await fetchTwitterDrafts()).map(hydrateDraft)); } catch (err) { console.error(err); } finally { setLoading(false); }
+  }, []);
+
+  const loadIntegrations = async () => { try { setIntegrationInfo((await fetchIntegrations()).twitter); } catch (err) { console.error(err); } };
+
+  useEffect(() => { loadDrafts(); loadIntegrations(); }, [loadDrafts]);
+
+  useEffect(() => {
+    if (activeDraftId) {
+      const found = drafts.find(d => d.id === activeDraftId);
+      if (found) setEditorDraft(hydrateDraft(found));
+      setMobileTab(0);
+    } else { setEditorDraft(null); }
+    setIsDirty(false);
+  }, [activeDraftId, drafts]);
+
+  // --- DRAG & DROP LOGIC ---
+
+  const handleDragStart = (e, tweetIndex, mediaId) => {
+    setDraggingMedia({ tweetIndex, mediaId });
+    e.dataTransfer.effectAllowed = "move";
   };
 
-  const previewTweets = editorDraft?.payload?.tweets || [];
-  const previewCount = Math.max(previewTweets.length, 1);
-  const sourceInfo = editorDraft?.sourceEntryId
-    ? {
-        title: editorDraft.metadata?.sourceTitle || `Entrée #${editorDraft.sourceEntryId}`,
-        type: editorDraft.metadata?.sourceType || "journal",
-        date: editorDraft.metadata?.sourceDate || "",
-        symbol: editorDraft.metadata?.sourceSymbol || "",
+  const handleDragOver = (e) => {
+    e.preventDefault(); // Permet le drop
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e, targetTweetIndex, targetMediaId = null) => {
+    e.preventDefault();
+    if (!draggingMedia) return;
+
+    const { tweetIndex: sourceTweetIndex, mediaId } = draggingMedia;
+    
+    // Optim: On ne fait rien si on lâche sur soi-même
+    if (sourceTweetIndex === targetTweetIndex && mediaId === targetMediaId) {
+        setDraggingMedia(null);
+        return;
+    }
+
+    moveMediaItem(sourceTweetIndex, mediaId, targetTweetIndex, targetMediaId);
+  };
+
+  const moveMediaItem = (sourceTweetIndex, mediaId, targetTweetIndex, targetMediaId) => {
+    setEditorDraft(prev => {
+        const newTweets = [...prev.payload.tweets];
+        
+        // 1. Retirer de la source
+        const sourceMedia = [...newTweets[sourceTweetIndex].media];
+        const itemIndex = sourceMedia.findIndex(m => m.id === mediaId);
+        if (itemIndex === -1) return prev;
+        const [movedItem] = sourceMedia.splice(itemIndex, 1);
+        
+        newTweets[sourceTweetIndex] = { ...newTweets[sourceTweetIndex], media: sourceMedia };
+
+        // 2. Préparer la cible
+        let targetMedia = sourceTweetIndex === targetTweetIndex 
+            ? sourceMedia 
+            : [...(newTweets[targetTweetIndex].media || [])];
+        
+        // 3. Trouver la position d'insertion
+        let insertIndex = targetMedia.length; // Par défaut: à la fin
+        if (targetMediaId) {
+            const targetIndex = targetMedia.findIndex(m => m.id === targetMediaId);
+            if (targetIndex !== -1) insertIndex = targetIndex;
+        }
+        
+        // 4. Insérer
+        targetMedia.splice(insertIndex, 0, movedItem);
+        
+        // 5. Mise à jour
+        newTweets[targetTweetIndex] = { ...newTweets[targetTweetIndex], media: targetMedia };
+
+        return { ...prev, payload: { ...prev.payload, tweets: newTweets } };
+    });
+    setIsDirty(true);
+    setDraggingMedia(null);
+  };
+
+
+  // --- ACTIONS ---
+  const handleCreateDraft = async () => {
+    try {
+      const newDraft = await createTwitterDraft({ title: "Nouveau Thread", status: "draft", payload: { tweets: [DEFAULT_TWEET()] } });
+      const hydrated = hydrateDraft(newDraft);
+      setDrafts(prev => [hydrated, ...prev]);
+      setActiveDraftId(hydrated.id);
+    } catch (err) { pushNotification(err.message, "error"); }
+  };
+
+  const handleSave = async () => {
+    if (!editorDraft) return;
+    setSaving(true);
+    try {
+      const updated = await updateTwitterDraft(editorDraft.id, { ...editorDraft, payload: editorDraft.payload });
+      setDrafts(prev => prev.map(d => d.id === updated.id ? hydrateDraft(updated) : d));
+      setIsDirty(false);
+      pushNotification("Sauvegardé", "success");
+    } catch (err) { pushNotification(err.message, "error"); } finally { setSaving(false); }
+  };
+
+  const handlePublish = async () => {
+    if(!editorDraft || !window.confirm("Publier sur Twitter maintenant ?")) return;
+    setPublishing(true);
+    try {
+        await handleSave();
+        await publishTwitterDraft(editorDraft.id);
+        pushNotification("Publié !", "success");
+        setActiveDraftId(null);
+        loadDrafts();
+    } catch (err) { pushNotification(err.message, "error"); } finally { setPublishing(false); }
+  };
+
+  const handleGenerateAI = async () => {
+    if(!editorDraft?.sourceEntryId) return pushNotification("Lier une entrée d'abord", "warning");
+    setGenerating(true);
+    try {
+        const data = await generateTwitterFromEntry({ entryId: editorDraft.sourceEntryId, variant: editorDraft.variant || "tweet.simple" });
+        const newTweets = (data.tweets || []).map((t, i) => ({ ...DEFAULT_TWEET(), text: t.text, media: editorDraft.payload.tweets[i]?.media || [] }));
+        updateDraftField('payload', { ...editorDraft.payload, tweets: newTweets });
+        pushNotification("Généré !", "success");
+    } catch(err) { pushNotification(err.message, "error"); } finally { setGenerating(false); }
+  };
+
+  const handleDelete = async (id, e) => {
+    if(e) e.stopPropagation();
+    if(!window.confirm("Supprimer définitivement ce brouillon ?")) return;
+    try {
+        await deleteTwitterDraft(id);
+        setDrafts(prev => prev.filter(d => d.id !== id));
+        if(activeDraftId === id) setActiveDraftId(null);
+        pushNotification("Supprimé", "info");
+    } catch (err) { pushNotification(err.message, "error"); }
+  };
+
+  // --- HELPERS ---
+  const updateDraftField = (f, v) => { setEditorDraft(p => ({ ...p, [f]: v })); setIsDirty(true); };
+  const updateTweetText = (i, txt) => { setEditorDraft(p => { const nt = [...p.payload.tweets]; nt[i].text = txt; return { ...p, payload: { ...p.payload, tweets: nt }}; }); setIsDirty(true); };
+  const addTweet = () => setEditorDraft(p => ({ ...p, payload: { ...p.payload, tweets: [...p.payload.tweets, DEFAULT_TWEET()] } }));
+  const removeTweet = (i) => setEditorDraft(p => { const nt = [...p.payload.tweets]; nt.splice(i, 1); return { ...p, payload: { ...p.payload, tweets: nt }}; });
+  
+  const handleAddImageClick = (i) => { setPendingTweetIndex(i); fileInputRef.current?.click(); };
+  const handleFileChange = async (e) => {
+      const file = e.target.files?.[0];
+      if(file && pendingTweetIndex !== null) {
+          const src = await fileToDataUrl(file);
+          setEditorDraft(p => { const nt = [...p.payload.tweets]; nt[pendingTweetIndex].media = [...(nt[pendingTweetIndex].media||[]), { id: Date.now(), src }]; return { ...p, payload: { ...p.payload, tweets: nt }}; });
+          setIsDirty(true);
       }
-    : null;
+      setPendingTweetIndex(null);
+  };
+  const removeMedia = (ti, mid) => setEditorDraft(p => { const nt = [...p.payload.tweets]; nt[ti].media = nt[ti].media.filter(m => m.id !== mid); return { ...p, payload: { ...p.payload, tweets: nt }}; });
 
-  return (
-    <Stack spacing={4}>
-      <Box>
-        <Typography variant="h2" fontWeight={700}>
-          Twitter Studio
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Prépare et révise tes posts Twitter avant publication. Tous les brouillons sont conservés côté TradeForge.
-        </Typography>
-      </Box>
+  const openJournalDialog = async () => { setEntryDialogOpen(true); if(journalEntries.length===0) setJournalEntries(await fetchJournalEntries()); };
+  const attachEntry = (e) => {
+      const att = mapEntryImagesToAttachments(e);
+      setEditorDraft(p => { const nt = [...p.payload.tweets]; if(nt[0] && nt[0].media.length===0) nt[0].media = att; return { ...p, sourceEntryId: e.id, metadata: { ...p.metadata, sourceSymbol: e.metadata?.symbol }, payload: { ...p.payload, tweets: nt } }; });
+      setEntryDialogOpen(false);
+  };
 
-      {integrationError && <Alert severity="error">{integrationError}</Alert>}
-      {integrationInfo && !integrationInfo.connected && (
-        <Alert severity="info">
-          Ajoute `TWITTER_ACCESS_TOKEN` et `TWITTER_ACCESS_SECRET` dans backend/.env (section Compte) pour connecter ton
-          profil Twitter.
-        </Alert>
-      )}
-      {integrationInfo && integrationInfo.connected && !integrationInfo.publishReady && (
-        <Alert severity="warning">
-          Les Access Token sont détectés mais pas les clés `TWITTER_API_KEY` / `TWITTER_API_SECRET`. Ajoute-les dans
-          backend/.env pour autoriser la publication automatique.
-        </Alert>
-      )}
+  const pushNotification = (message, severity="info") => setNotification({ open: true, message, severity });
 
-      {error && (
-        <Alert severity="error" onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={4}>
-          <ForgeCard
-            title="Brouillons"
-            subtitle="LISTE"
-            actions={
-              drafts.length > 0 && (
-                <Button variant="text" size="small" onClick={handleCreateDraft} disabled={creating}>
-                  {creating ? "Création..." : "Nouveau"}
-                </Button>
-              )
-            }
-          >
-            {renderDraftList()}
-          </ForgeCard>
-        </Grid>
+  // -----------------------------------------
+  // --- VUE 1: DASHBOARD (Liste avec Pudding) ---
+  // -----------------------------------------
+  if (!activeDraftId) {
+    return (
+      <Box sx={{ p: { xs: 2, md: 3 }, height: '100%', overflowY: 'auto', bgcolor: 'background.default' }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
+            <Box>
+                <Typography variant="h4" fontWeight={800} gutterBottom>Studio</Typography>
+                <Typography color="text.secondary">Tableau de bord de création</Typography>
+            </Box>
+            <Button variant="contained" size="large" startIcon={<AddPhotoAlternateIcon />} onClick={handleCreateDraft} sx={{ borderRadius: 3, px: 3 }}>
+                Nouveau
+            </Button>
+        </Stack>
 
-        <Grid item xs={12} md={8}>
-          {editorDraft ? (
-            <Stack spacing={3}>
-              <ForgeCard
-                title={editorDraft.title || "Sans titre"}
-                subtitle="EDITEUR"
-                helper="Rédige ton thread, vérifie la limite de caractères et décide quand publier."
-                actions={
-                  editorDraft.status !== "published" && (
-                    <Button
-                      color="error"
-                      variant="text"
-                      size="small"
-                      onClick={() => handleDeleteDraft(editorDraft.id)}
-                    >
-                      Supprimer
-                    </Button>
-                  )
-                }
-              >
-                <Stack spacing={3}>
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                    <TextField
-                      label="Titre interne"
-                      value={editorDraft.title}
-                      onChange={(event) => updateEditorField("title", event.target.value)}
-                      fullWidth
-                    />
-                    <TextField
-                      select
-                      SelectProps={{ native: true }}
-                      label="Format"
-                      value={editorDraft.variant || "tweet.simple"}
-                      onChange={(event) => updateEditorField("variant", event.target.value)}
-                      fullWidth
-                    >
-                      {VARIANT_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </TextField>
-                  </Stack>
+        {loading ? <CircularProgress sx={{ display:'block', mx: 'auto' }} /> : (
+            <Grid container spacing={2}>
+                {drafts.map(draft => (
+                    <Grid item xs={12} sm={6} md={4} lg={3} xl={2} key={draft.id}>
+                        <Paper 
+                            elevation={0}
+                            sx={{ 
+                                p: 2.5, cursor: 'pointer', borderRadius: 3, border: `1px solid ${theme.palette.divider}`, position: 'relative',
+                                transition: 'all 0.2s', '&:hover': { transform: 'translateY(-4px)', borderColor: theme.palette.primary.main, boxShadow: theme.shadows[2] },
+                                '&:hover .delete-btn': { opacity: 1 }
+                            }}
+                            onClick={() => setActiveDraftId(draft.id)}
+                        >
+                            <IconButton 
+                                className="delete-btn" size="small" onClick={(e) => handleDelete(draft.id, e)}
+                                sx={{ position: 'absolute', top: 8, right: 8, opacity: 0, transition: 'opacity 0.2s', color: 'text.secondary', '&:hover': { color: 'error.main', bgcolor: 'error.light' } }}
+                            >
+                                <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
 
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <Typography variant="subtitle2">Statut :</Typography>
-                    <ToggleButtonGroup
-                      size="small"
-                      value={editorDraft.status}
-                      exclusive
-                      onChange={(_, value) => value && updateEditorField("status", value)}
-                    >
-                      {STATUS_OPTIONS.map((option) => (
-                        <ToggleButton key={option.value} value={option.value}>
-                          {option.label}
-                        </ToggleButton>
-                      ))}
-                    </ToggleButtonGroup>
-                    <Chip size="small" {...activeStatusProps} />
-                  </Stack>
-
-                  <Stack spacing={1}>
-                    <Typography variant="subtitle2">Source journal</Typography>
-                    {sourceInfo ? (
-                      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                        <Typography fontWeight={600}>{sourceInfo.title}</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {(sourceInfo.type === "trade" ? "Trade" : "Analyse").toUpperCase()}
-                          {sourceInfo.symbol ? ` • ${sourceInfo.symbol}` : ""}
-                        </Typography>
-                        {sourceInfo.date && (
-                          <Typography variant="caption" color="text.secondary">
-                            {sourceInfo.date}
-                          </Typography>
-                        )}
-                      </Paper>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        Sélectionne une analyse ou un trade pour alimenter Gemini et récupérer les images associées.
-                      </Typography>
-                    )}
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        onClick={handleOpenEntryDialog}
-                        disabled={entriesLoading}
-                      >
-                        {entriesLoading ? "Chargement..." : "Choisir dans le journal"}
-                      </Button>
-                      {sourceInfo && (
-                        <Button variant="text" size="small" onClick={handleDetachEntry}>
-                          Retirer
-                        </Button>
-                      )}
-                    </Stack>
-                    {entriesError && (
-                      <Typography variant="caption" color="error.main">
-                        {entriesError}
-                      </Typography>
-                    )}
-                  </Stack>
-
-                  <Stack spacing={2}>
-                    <Typography variant="subtitle2">Thread</Typography>
-                    <Stack spacing={2}>
-                      {previewTweets.map((tweet, index) => renderTweetEditor(tweet, index))}
-                    </Stack>
-                    <Button
-                      variant="outlined"
-                      startIcon={<AddCommentIcon />}
-                      onClick={addTweetBlock}
-                      sx={{ alignSelf: "flex-start" }}
-                    >
-                      Ajouter un tweet
-                    </Button>
-                  </Stack>
-
-                  <Divider />
-
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                    <Button
-                      variant="contained"
-                      startIcon={<SaveIcon />}
-                      disabled={saving || !isDirty}
-                      onClick={handleSaveDraft}
-                    >
-                      {saving ? "Enregistrement..." : "Enregistrer"}
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      startIcon={<AutoAwesomeIcon />}
-                      onClick={handleGenerateWithGemini}
-                      disabled={generating || !sourceInfo}
-                      sx={{ flexShrink: 0 }}
-                    >
-                      {generating ? "Génération..." : "Générer avec Gemini"}
-                    </Button>
-                    <Box flexGrow={1} />
-                    <Button
-                      variant="contained"
-                      color="secondary"
-                      startIcon={<RocketLaunchIcon />}
-                      disabled={publishing || editorDraft.status === "published"}
-                      onClick={handlePublishDraft}
-                    >
-                      {publishing ? "Publication..." : editorDraft.status === "published" ? "Publié" : "Publier"}
-                    </Button>
-                  </Stack>
-                </Stack>
-              </ForgeCard>
-
-              <ForgeCard title="Prévisualisation" subtitle="APERÇU LIVE">
-                <Stack spacing={2}>
-                  {previewTweets.map((tweet, index) => {
-                    const tweetMedia = Array.isArray(tweet.media) ? tweet.media : [];
-                    return (
-                      <Box
-                        key={tweet.id}
-                        sx={{
-                          p: 2,
-                          borderRadius: 3,
-                          border: (theme) => `1px solid ${theme.palette.divider}`,
-                          background: (theme) =>
-                            theme.palette.mode === "dark"
-                              ? "linear-gradient(180deg, rgba(15,23,42,0.6), rgba(15,23,42,0.2))"
-                              : "linear-gradient(180deg, rgba(255,255,255,0.9), rgba(248,250,252,0.9))",
-                        }}
-                        onDragOver={(event) => {
-                          if (draggingMedia) {
-                            event.preventDefault();
-                          }
-                        }}
-                        onDrop={handleMediaDrop(index, null)}
-                      >
-                        <Stack spacing={1}>
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <Box
-                              sx={{
-                                width: 32,
-                                height: 32,
-                                borderRadius: "50%",
-                                background: (theme) => theme.palette.primary.main,
-                                opacity: 0.6,
-                              }}
-                            />
-                            <Stack>
-                              <Typography fontWeight={600}>{integrationInfo?.handle || "TradeForge"}</Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {integrationInfo?.handle || "@tradeforge"}
-                              </Typography>
+                            <Stack spacing={1.5}>
+                                <Stack direction="row" justifyContent="space-between">
+                                    <Chip label={draft.status === 'published' ? 'Publié' : 'Brouillon'} color={draft.status === 'published' ? 'success' : 'default'} size="small" sx={{ height: 20, fontSize: 10 }} />
+                                    <Typography variant="caption" color="text.secondary">{new Date(draft.updatedAt).toLocaleDateString()}</Typography>
+                                </Stack>
+                                <Typography variant="h6" fontWeight={700} noWrap sx={{ fontSize: '1rem', pr: 3 }}>{draft.title || "Sans titre"}</Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ height: 40, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                    {draft.payload?.tweets?.[0]?.text || "Aucun contenu..."}
+                                </Typography>
                             </Stack>
-                          </Stack>
-                          {tweet.text ? (
-                            <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
-                              {tweet.text}
-                            </Typography>
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              (Commence à écrire pour visualiser le rendu)
-                            </Typography>
-                          )}
-                          {tweetMedia.length > 0 && (
-                            <Grid
-                              container
-                              spacing={1}
-                              onDragOver={(event) => event.preventDefault()}
-                              onDrop={handleMediaDrop(index, null)}
-                            >
-                              {tweetMedia.map((attachment, attachIndex) => (
-                                <Grid item xs={tweetMedia.length > 1 ? 6 : 12} key={attachment.id}>
-                                  <Box
-                                    sx={{
-                                      position: "relative",
-                                      borderRadius: 2,
-                                      overflow: "hidden",
-                                      outline:
-                                        draggingMedia?.mediaId === attachment.id &&
-                                        draggingMedia?.tweetIndex === index
-                                          ? (theme) => `1px dashed ${theme.palette.primary.main}`
-                                          : "none",
-                                    }}
-                                    draggable
-                                    onDragStart={handleMediaDragStart(index, attachment.id)}
-                                    onDragEnd={handleMediaDragEnd}
-                                    onDragOver={(event) => event.preventDefault()}
-                                    onDrop={handleMediaDrop(index, attachment.id)}
-                                  >
-                                    <Box
-                                      component="img"
-                                      src={attachment.src}
-                                      alt={attachment.caption || "Image"}
-                                      sx={{
-                                        width: "100%",
-                                        height: 180,
-                                        objectFit: "cover",
-                                        display: "block",
-                                      }}
-                                    />
-                                    <Stack
-                                      direction="row"
-                                      spacing={0.5}
-                                      sx={{ position: "absolute", top: 8, right: 8 }}
-                                    >
-                                      <IconButton
-                                        size="small"
-                                        onClick={() => handleReorderAttachment(index, attachment.id, -1)}
-                                        disabled={attachIndex === 0}
-                                        sx={{
-                                          color: "#111",
-                                          backgroundColor: "rgba(255,255,255,0.85)",
-                                        }}
-                                      >
-                                        <ChevronLeftIcon fontSize="small" />
-                                      </IconButton>
-                                      <IconButton
-                                        size="small"
-                                        onClick={() => handleReorderAttachment(index, attachment.id, 1)}
-                                        disabled={attachIndex === tweetMedia.length - 1}
-                                        sx={{
-                                          color: "#111",
-                                          backgroundColor: "rgba(255,255,255,0.85)",
-                                        }}
-                                      >
-                                        <ChevronRightIcon fontSize="small" />
-                                      </IconButton>
-                                      <IconButton
-                                        size="small"
-                                        onClick={() => handleRemoveAttachment(index, attachment.id)}
-                                        sx={{
-                                          color: "#111",
-                                          backgroundColor: "rgba(255,255,255,0.85)",
-                                        }}
-                                      >
-                                        <DeleteOutlineIcon fontSize="small" />
-                                      </IconButton>
-                                    </Stack>
-                                  </Box>
-                                </Grid>
-                              ))}
-                            </Grid>
-                          )}
-                          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="center" mt={1}>
-                            <Button
-                              variant="outlined"
-                              startIcon={<AddPhotoAlternateIcon />}
-                              onClick={handleAddAttachmentClick(index)}
-                            >
-                              Ajouter une image
-                            </Button>
-                            <Typography variant="caption" color="text.secondary">
-                              Formats supportés : fichiers images ou captures copiées depuis le journal.
-                            </Typography>
-                          </Stack>
-                          <Typography variant="caption" color="text.secondary">
-                            {index + 1} / {previewCount}
-                          </Typography>
-                        </Stack>
-                      </Box>
-                    );
-                  })}
-                </Stack>
-              </ForgeCard>
-            </Stack>
-          ) : (
-            <ForgeCard title="Sélectionne un brouillon">
-              <Typography variant="body2" color="text.secondary">
-                Choisis un brouillon dans la liste ou crée-en un nouveau pour démarrer.
-              </Typography>
-            </ForgeCard>
-          )}
-        </Grid>
-      </Grid>
-      <input
-        type="file"
-        accept="image/*"
-        ref={fileInputRef}
-        style={{ display: "none" }}
-        onChange={handleAttachmentFileChange}
-      />
-      <Dialog open={isEntryDialogOpen} onClose={() => setEntryDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Sélectionner une entrée du journal</DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={2}>
-            <TextField
-              value={entrySearch}
-              onChange={(event) => setEntrySearch(event.target.value)}
-              placeholder="Rechercher par titre ou symbole..."
-              size="small"
-              fullWidth
-            />
-            {entriesLoading ? (
-              <Stack alignItems="center" py={4}>
-                <CircularProgress size={24} />
-              </Stack>
-            ) : filteredEntries.length ? (
-              <List dense disablePadding>
-                {filteredEntries.map((entry) => (
-                  <ListItemButton
-                    key={entry.id}
-                    onClick={() => handleAttachEntry(entry)}
-                    alignItems="flex-start"
-                  >
-                    <ListItemAvatar>
-                      <Avatar
-                        variant="rounded"
-                        src={entry.metadata?.images?.[0]?.src || undefined}
-                        alt={entry.metadata?.symbol || ""}
-                      >
-                        {(entry.metadata?.symbol || entry.type || "J")[0]}
-                      </Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={entry.metadata?.title || `Entrée #${entry.id}`}
-                      secondary={
-                        <>
-                          <Typography variant="caption" component="span" color="text.secondary">
-                            {(entry.type === "trade" ? "Trade" : "Analyse").toUpperCase()}
-                            {entry.metadata?.symbol ? ` • ${entry.metadata.symbol}` : ""}
-                          </Typography>
-                          {entry.metadata?.date && (
-                            <Typography
-                              variant="caption"
-                              component="div"
-                              color="text.secondary"
-                              sx={{ mt: 0.5 }}
-                            >
-                              {entry.metadata.date}
-                            </Typography>
-                          )}
-                        </>
-                      }
-                    />
-                  </ListItemButton>
+                        </Paper>
+                    </Grid>
                 ))}
-              </List>
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                {entriesError || "Aucune entrée disponible."}
-              </Typography>
+            </Grid>
+        )}
+      </Box>
+    );
+  }
+
+  // -----------------------------------------
+  // --- VUE 2: EDITOR (Avec Pudding + Toolbar + D&D) ---
+  // -----------------------------------------
+  return (
+    <Box sx={{ p: { xs: 1, md: 2 }, height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', overflow: 'hidden' }}>
+        
+        <Paper elevation={0} sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRadius: 3, border: `1px solid ${theme.palette.divider}`, bgcolor: 'background.paper' }}>
+            {/* Header */}
+            <Box sx={{ px: 3, py: 2, borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, bgcolor: 'background.paper' }}>
+                <IconButton onClick={() => setActiveDraftId(null)}><ArrowBackIcon /></IconButton>
+                <TextField 
+                    variant="standard" value={editorDraft?.title || ""} onChange={(e) => updateDraftField('title', e.target.value)}
+                    InputProps={{ disableUnderline: true, style: { fontSize: '1.2rem', fontWeight: 700 } }} placeholder="Nom du thread..." sx={{ flex: 1 }}
+                />
+                {isDirty && <Chip label="Modifié" color="warning" size="small" variant="outlined" />}
+                <Tooltip title="Supprimer le brouillon">
+                    <IconButton onClick={(e) => handleDelete(editorDraft.id, e)} color="error" size="small" sx={{ mr: 1 }}><DeleteOutlineIcon /></IconButton>
+                </Tooltip>
+                <Button startIcon={<SaveIcon />} onClick={handleSave} disabled={!isDirty || saving} variant="outlined" size="small">Sauver</Button>
+            </Box>
+
+            {/* Mobile Tabs */}
+            {isMobileOrTablet && (
+                <Tabs value={mobileTab} onChange={(_, v) => setMobileTab(v)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 48 }}>
+                    <Tab icon={<EditIcon fontSize="small" />} iconPosition="start" label="Éditer" sx={{ minHeight: 48 }} />
+                    <Tab icon={<VisibilityIcon fontSize="small" />} iconPosition="start" label="Aperçu" sx={{ minHeight: 48 }} />
+                </Tabs>
             )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEntryDialogOpen(false)}>Fermer</Button>
-        </DialogActions>
-      </Dialog>
-      <Snackbar
-        open={notification.open}
-        autoHideDuration={5000}
-        onClose={() => setNotification((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          severity={notification.severity}
-          sx={{ width: "100%" }}
-          onClose={() => setNotification((prev) => ({ ...prev, open: false }))}
-        >
-          {notification.message}
-        </Alert>
-      </Snackbar>
-    </Stack>
+
+            {/* Workspace */}
+            <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                
+                {/* Left: Editor */}
+                {(!isMobileOrTablet || mobileTab === 0) && (
+                    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: isMobileOrTablet ? 'none' : `1px solid ${theme.palette.divider}`, maxWidth: isMobileOrTablet ? '100%' : '60%', bgcolor: 'background.paper' }}>
+                        
+                        <EditorToolbar 
+                            currentVibe={editorDraft?.variant} onVibeChange={(v) => v && updateDraftField('variant', v)}
+                            sourceEntry={editorDraft?.sourceEntryId ? { id: editorDraft.sourceEntryId, metadata: { symbol: editorDraft.metadata?.sourceSymbol } } : null}
+                            onOpenSource={openJournalDialog} onGenerate={handleGenerateAI} isGenerating={generating}
+                        />
+
+                        <Box sx={{ flex: 1, overflowY: 'auto', p: 4 }}>
+                            <Stack spacing={6}>
+                                {editorDraft?.payload?.tweets.map((tweet, idx) => (
+                                    <Box key={idx} sx={{ pl: 3, borderLeft: `3px solid ${theme.palette.divider}` }}>
+                                        <Stack direction="row" justifyContent="space-between" mb={1}>
+                                            <Typography variant="caption" fontWeight="bold" color="text.secondary">TWEET {idx + 1}</Typography>
+                                            {idx > 0 && <IconButton size="small" onClick={() => removeTweet(idx)}><DeleteOutlineIcon fontSize="small"/></IconButton>}
+                                        </Stack>
+                                        <TextField
+                                            fullWidth multiline minRows={3} value={tweet.text} onChange={(e) => updateTweetText(idx, e.target.value)}
+                                            placeholder="Quoi de neuf ?" variant="filled" InputProps={{ disableUnderline: true, sx: { borderRadius: 2, fontSize: '1.05rem' } }}
+                                        />
+                                        {/* Media Area with Drag & Drop */}
+                                        <Stack 
+                                            direction="row" spacing={1} mt={1} 
+                                            sx={{ overflowX: 'auto', py: 1, minHeight: 50, alignItems: 'center' }}
+                                            onDragOver={handleDragOver}
+                                            onDrop={(e) => handleDrop(e, idx, null)} // Drop on empty space = append
+                                        >
+                                            {tweet.media?.map(m => (
+                                                <Box 
+                                                    key={m.id} 
+                                                    draggable
+                                                    onDragStart={(e) => handleDragStart(e, idx, m.id)}
+                                                    onDragOver={handleDragOver}
+                                                    onDrop={(e) => { e.stopPropagation(); handleDrop(e, idx, m.id); }} // Drop on item = insert before
+                                                    sx={{ 
+                                                        width: 70, height: 70, position: 'relative', flexShrink: 0, cursor: 'grab',
+                                                        opacity: draggingMedia?.mediaId === m.id ? 0.5 : 1, transition: 'all 0.2s',
+                                                        '&:hover': { transform: 'scale(1.05)' }
+                                                    }}
+                                                >
+                                                    <img src={m.src} alt="" style={{ width: '100%', height: '100%', borderRadius: 8, objectFit: 'cover' }} />
+                                                    <IconButton size="small" onClick={() => removeMedia(idx, m.id)} sx={{ position: 'absolute', top: -6, right: -6, bgcolor: 'background.paper', border: '1px solid #ccc', width: 20, height: 20 }}><CloseIcon sx={{ fontSize: 14 }} /></IconButton>
+                                                </Box>
+                                            ))}
+                                            <IconButton onClick={() => handleAddImageClick(idx)} sx={{ width: 70, height: 70, border: '1px dashed grey', borderRadius: 2 }}><AddPhotoAlternateIcon /></IconButton>
+                                        </Stack>
+                                        <Typography variant="caption" display="block" textAlign="right" sx={{ mt: 1 }} color={tweet.text.length > 280 ? "error" : "text.secondary"}>{tweet.text.length} / 280</Typography>
+                                    </Box>
+                                ))}
+                                <Button startIcon={<DragIndicatorIcon />} onClick={addTweet} sx={{ alignSelf: 'flex-start', ml: 3 }}>Ajouter un tweet</Button>
+                            </Stack>
+                        </Box>
+
+                        <Paper elevation={6} sx={{ p: 2, zIndex: 10, borderTop: `1px solid ${theme.palette.divider}` }}>
+                            <Button fullWidth variant="contained" color="primary" size="large" onClick={handlePublish} disabled={publishing} startIcon={publishing ? <CircularProgress size={20} color="inherit"/> : <RocketLaunchIcon/>}>
+                                {publishing ? "Publication en cours..." : "Publier le Thread"}
+                            </Button>
+                        </Paper>
+                    </Box>
+                )}
+
+                {/* Right: Preview */}
+                {(!isMobileOrTablet || mobileTab === 1) && (
+                    <Box sx={{ flex: 1, bgcolor: theme.palette.mode === 'dark' ? '#151a21' : '#f0f2f5', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 4, position: 'relative' }}>
+                        <Box sx={{ position: 'absolute', inset: 0, opacity: 0.05, backgroundImage: 'radial-gradient(#888 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+                        <Fade in={true} timeout={600}>
+                            <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                 <PhonePreview tweets={editorDraft?.payload?.tweets || []} integrationInfo={integrationInfo} theme={theme} />
+                            </Box>
+                        </Fade>
+                    </Box>
+                )}
+            </Box>
+        </Paper>
+
+        {/* UTILS */}
+        <input type="file" accept="image/*" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileChange} />
+        <Dialog open={isEntryDialogOpen} onClose={() => setEntryDialogOpen(false)} maxWidth="sm" fullWidth>
+            <DialogTitle>Source Journal</DialogTitle>
+            <DialogContent dividers>
+                <TextField fullWidth placeholder="Rechercher..." value={entrySearch} onChange={e => setEntrySearch(e.target.value)} sx={{ mb: 2 }} />
+                <List>
+                    {journalEntries.slice(0, 5).map(entry => (
+                        <ListItemButton key={entry.id} onClick={() => attachEntry(entry)}>
+                            <ListItemAvatar><Avatar src={entry.metadata?.images?.[0]?.src}>{entry.metadata?.symbol?.[0]}</Avatar></ListItemAvatar>
+                            <ListItemText primary={entry.metadata?.title || "Entrée"} secondary={entry.type} />
+                        </ListItemButton>
+                    ))}
+                </List>
+            </DialogContent>
+            <DialogActions><Button onClick={() => setEntryDialogOpen(false)}>Fermer</Button></DialogActions>
+        </Dialog>
+        <Snackbar open={notification.open} autoHideDuration={4000} onClose={() => setNotification(p => ({...p, open: false}))}>
+            <Alert severity={notification.severity} variant="filled">{notification.message}</Alert>
+        </Snackbar>
+    </Box>
   );
 };
 

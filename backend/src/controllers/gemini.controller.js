@@ -19,7 +19,17 @@ const generateStructured = async (req, res) => {
   }
 };
 
+const generateImage = async (req, res) => {
+  try {
+    const result = await geminiService.generateImage(req.body || {});
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 module.exports = {
   generateText,
   generateStructured,
+  generateImage,
 };

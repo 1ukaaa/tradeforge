@@ -8,6 +8,14 @@ const {
   DEFAULT_PROMPT_VARIANTS
 } = require("../config/prompts");
 
+const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+const DEFAULT_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
+const DEFAULT_IMAGE_MODEL =
+  process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
+
+const buildGeminiUrl = (model, method = "generateContent") =>
+  `${GEMINI_BASE_URL}/${model}:${method}?key=${process.env.GEMINI_API_KEY}`;
+
 // --- Utils ---
 
 const formatTemplate = (template = "", data = {}) =>
@@ -54,10 +62,7 @@ const buildStructuredPrompt = (rawText, entryType = "analyse", plan = "", varian
 
 const callGeminiAPI = async (payload) => {
   try {
-    const response = await axios.post(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + process.env.GEMINI_API_KEY,
-      payload
-    );
+    const response = await axios.post(buildGeminiUrl(DEFAULT_TEXT_MODEL), payload);
     
     const resultText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!resultText) {
@@ -71,6 +76,38 @@ const callGeminiAPI = async (payload) => {
     throw new Error(`Erreur API Gemini: ${apiError}`);
   }
 }
+
+const callGeminiImageAPI = async (prompt) => {
+  try {
+    const payload = {
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        response_modalities: ["TEXT", "IMAGE"],
+      },
+    };
+    const response = await axios.post(buildGeminiUrl(DEFAULT_IMAGE_MODEL), payload);
+    const candidates = response.data?.candidates || [];
+    const parts = candidates.flatMap((candidate) => candidate?.content?.parts || []);
+    const imagePart = parts.find((part) => part?.inline_data?.data || part?.inlineData?.data);
+    const inlineData = imagePart?.inline_data || imagePart?.inlineData;
+    if (!inlineData?.data) {
+      throw new Error("Aucune image renvoyée par Gemini.");
+    }
+    return {
+      image: inlineData.data,
+      mimeType: inlineData.mime_type || inlineData.mimeType || "image/png",
+    };
+  } catch (err) {
+    console.error("Erreur Gemini (image) :", err?.response?.data || err.message);
+    const apiError = err?.response?.data?.error?.message || err.message;
+    throw new Error(`Erreur API Gemini: ${apiError}`);
+  }
+};
 
 /**
  * Génère l'analyse texte (Markdown).
@@ -128,8 +165,26 @@ const generateStructuredAnalysis = async ({ rawText, entryType, plan, variant })
   return { structured: parsed };
 };
 
+const generateImage = async ({ prompt }) => {
+  if (!prompt || typeof prompt !== "string") {
+    throw new Error("Description d'image manquante.");
+  }
+
+  const cleanPrompt = prompt.trim();
+  if (!cleanPrompt) {
+    throw new Error("Description d'image manquante.");
+  }
+
+  const imageData = await callGeminiImageAPI(cleanPrompt);
+  return {
+    image: imageData.image,
+    mimeType: imageData.mimeType || "image/png",
+  };
+};
+
 
 module.exports = {
   generateAnalysis,
-  generateStructuredAnalysis
+  generateStructuredAnalysis,
+  generateImage,
 };

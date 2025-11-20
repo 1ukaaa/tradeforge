@@ -26,3 +26,16 @@ export const requestStructuredAnalysis = async ({ rawText, entryType = "analyse"
   const data = await ensureSuccess(response, "Impossible de générer l'analyse structurée.");
   return data.structured || null;
 };
+
+export const generateGeminiImage = async ({ prompt }) => {
+  const response = await fetch(`${GEMINI_ENDPOINT}/image`, {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ prompt }),
+  });
+  const data = await ensureSuccess(response, "Impossible de générer l'image.");
+  if (!data?.image) {
+    throw new Error("Gemini n'a pas renvoyé d'image.");
+  }
+  return data;
+};
