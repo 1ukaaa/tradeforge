@@ -133,7 +133,7 @@ const PhonePreview = ({ tweets, integrationInfo, theme }) => {
                 <Stack direction="row" spacing={0.5} alignItems="center">
                    <Typography variant="body2" fontWeight={700} sx={{ color: textPhone, maxWidth: '140px', noWrap: true }}>{integrationInfo?.name || "User"}</Typography>
                    <VerifiedIcon sx={{ fontSize: 14, color: '#1D9BF0' }} />
-                   <Typography variant="body2" sx={{ color: secondaryTextPhone }}>@{integrationInfo?.handle || "handle"} · {index === 0 ? '2m' : ''}</Typography>
+                   <Typography variant="body2" sx={{ color: secondaryTextPhone }}>{integrationInfo?.handle || "handle"} · {index === 0 ? '2m' : ''}</Typography>
                 </Stack>
                 <Typography variant="body2" sx={{ color: textPhone, whiteSpace: 'pre-wrap', mt: 0.5, fontSize: '0.95rem', lineHeight: 1.45 }}>
                   {tweet.text || <span style={{ opacity: 0.3 }}>...</span>}
