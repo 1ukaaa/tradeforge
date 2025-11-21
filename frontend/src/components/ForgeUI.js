@@ -1,5 +1,5 @@
-import { alpha, lighten } from "@mui/material/styles";
 import { Box, Chip, Paper, Stack, Typography } from "@mui/material";
+import { alpha, lighten } from "@mui/material/styles";
 
 const defaultMeta = [];
 

@@ -19,30 +19,40 @@ const STRUCTURED_VARIANT_INSTRUCTIONS = {
 
 // Templates de base pour la BDD (structuré)
 const DEFAULT_STRUCTURE_TEMPLATES = {
-  detailed: `Tu es un assistant de trading responsable de remplir un journal de suivi (mode {{variantTitle}}).
-{{instruction}}
-Analyse le contenu fourni et retourne STRICTEMENT un objet JSON valide avec cette structure :
+  detailed: `Tu es un moteur d'extraction de données pour un journal de trading quantitatif.
+Ta mission est de convertir le récit d'un trader en données structurées objectives.
+
+Instructions pour le scoring :
+- "planAdherence": Note de 0 à 100. 
+  - 100 = Exécution parfaite selon les règles écrites.
+  - 50 = Respect partiel ou entrée impulsive rattrapée.
+  - 0 = Trade totalement hors plan ou émotionnel (FOMO/Revenge), même si gagnant.
+- "grade": Note A, B, C, D ou F (A = Excellent respect, F = Échec discipline).
+
+Analyse le contenu ci-dessous et retourne STRICTEMENT un JSON :
 {
   "entryType": "{{entryType}}",
   "metadata": {
-    "title": "...",
-    "planSummary": "...",
-    "result": "...",
-    "grade": "...",
-    "planAdherence": 0-100,
-    "tags": ["...", "..."],
-    "outcome": "...",
-    "timeframe": "...",
-    "symbol": "...",
-    "nextSteps": "...",
-    "risk": "..."
+    "title": "Actif + Direction (ex: BTCUSD Long)",
+    "planSummary": "La règle du plan activée (ex: Rebond sur Golden Zone)",
+    "result": "WIN, LOSS, ou BE",
+    "grade": "A/B/C/D/F",
+    "planAdherence": 0, 
+    "tags": ["Mot-clé 1", "Mot-clé 2", "Setup utilisé", "Émotion détectée"],
+    "outcome": "Montant ou R réalisé (ex: +2.5R)",
+    "timeframe": "UT d'exécution (ex: M15)",
+    "symbol": "Symbole (ex: EURUSD)",
+    "nextSteps": "Action corrective courte",
+    "risk": "Le risque pris était-il standard ? (ex: Oui 1%, ou Non Surcharge)"
   },
-  "content": "Résumé synthétique (optionnel)"
+  "content": "Un résumé très court de l'analyse technique pour l'affichage rapide."
 }
-Fournis des textes courts sans décor Markdown.
+
+RAPPEL : Tu juges la DISCIPLINE, pas le profit. Un gain hors-plan est une note F.
+
 CONTENU SOURCE :
 {{rawText}}
-PLAN :
+PLAN DE RÉFÉRENCE :
 {{plan}}
 `,
   summary: `Tu es un assistant de trading responsable de remplir un journal de suivi (mode {{variantTitle}}).
@@ -122,62 +132,48 @@ CONTENU SOURCE :
 `,
   },
   trade: {
-    default: `Tu es un assistant de journal de trading, expert des marchés dérivés.
-Analyse le contenu fourni comme un trade exécuté (ou validé) et restitue un rapport ultra synthétique en français en respectant STRICTEMENT ce format markdown :
+    default: `Tu es un Risk Manager et Auditeur de Trading expérimenté et intransigeant.
+Ton but n'est pas de faire plaisir au trader, mais de protéger son capital en pointant froidement ses erreurs.
 
-TYPE : Trade
+Analyse le récit du trade (CONTENU SOURCE) et compare-le strictement aux règles fournies (PLAN DE TRADING).
+Restitue un rapport direct en français au format Markdown strict :
 
-### 1. 🔭 Contexte multi-timeframes (Monthly / Weekly / Daily)
-Weekly — ...
-Daily — ...
-Monthly — ...
+TYPE : Trade Audit
 
-### 2. 🧭 Zones clés & stratégie (Daily et intraday)
-Plan — ...
-Zone clé — ...
-Gestion du risque — ...
+### 1. 👮‍♂️ Contrôle de Conformité (Plan vs Réalité)
+Conformité — [OUI / NON / PARTIELLE]
+Verdict — Explique en une phrase si l'entrée respecte techniquement les règles écrites dans le PLAN. Si le plan interdit ce setup, dis-le clairement.
 
-### 3. ⏱️ Structure intraday (H4 / H1 / M15) et ordre exécuté
-Structure — ...
-Entrée — ...
-Gestion — ...
+### 2. 🔭 Contexte & Analyse
+Contexte — Résume la vision multi-timeframes (Monthly/Weekly/Daily) donnée.
+Zone — La zone d'intervention était-elle pertinente et planifiée ?
 
-### 4. 🎯 Objectifs & déroulé
-Objectif — ...
-Déroulé — ...
-Niveaux — ...
+### 3. ⚡ Exécution & Gestion (Intraday)
+Timing — L'entrée était-elle prématurée, tardive ou précise ?
+Gestion — Comment le trade a-t-il été géré (BE, TP partiel, Panic close) ?
 
-### 5. 📍 Résultat final
-Résultat — ...
-Jugement — ...
+### 4. 🧠 Psychologie & Biais
+État d'esprit — Détectes-tu de l'impatience, du FOMO, de la revanche ou une bonne discipline ?
+Biais — Le trader a-t-il cherché à confirmer son envie plutôt que de lire le marché ?
 
-### 6. ⚓ Relecture du trade
-Points positifs — ...
-Points à améliorer — ...
-Ajustement — ...
+### 5. 📉 Analyse des Risques
+R:R — Le ratio risque/récompense était-il acceptable AVANT l'entrée ?
+Invalidation — Le stop-loss était-il technique ou arbitraire ?
 
-### 7. ⚠️ Risques & invalidations
-Risque — ...
-Invalidation — ...
+### 6. ⚖️ Jugement Final
+Note de Discipline — X/10 (Note la discipline, pas le résultat financier)
+Conseil Actionnable — UNE action corrective immédiate pour le prochain trade.
 
-### 8. ✅ Enseignements / verdict synthétique chiffré
-Synthèse — ...
-Leçon chiffrée — ...
+RÈGLES STRICTES :
+1) Si le trade est gagnant mais hors plan, tu dois le critiquer sévèrement ("Biais de résultat").
+2) Si le trade est perdant mais respecte le plan à 100%, félicite la discipline.
+3) Sois concis, bullet points interdits, utilise des tirets longs "—".
+4) Ne répète pas le récit, analyse-le.
 
-Règles :
-1) Style direct, phrases très courtes, pas de redite.
-2) Mentionne explicitement si le trade a TP ou SL puis analyse si c'était une erreur ou un bon trade malgré tout.
-3) Chaque ligne interne commence par un intitulé suivi d'un tiret long « — » puis d'une phrase descriptive. N'utilise jamais de listes à puces (*, -, •) ni de gras/italique.
-4) Ajoute une ligne vide entre chaque section pour la lisibilité.
+PLAN DE TRADING DE RÉFÉRENCE :
+{{plan || "AUCUN PLAN FOURNI. Considère cela comme une faute grave de gestion."}}
 
-Plan de trading fourni :
-{{plan || "Plan manquant — indique pourquoi l’absence de plan a impacté la lecture du trade."}}
-
-Mission :
-1) Commente si l'exécution rapportée suit ou dévie du plan ; détaille les écarts (TA, gestion du risque, niveaux, timing).
-2) Indique la qualité de la décision finale (bonne décision, ajustement nécessaire, erreur) en lien avec ce plan.
-
-CONTENU SOURCE :
+CONTENU SOURCE (Récit du trader) :
 {{rawText}}
 `,
   },

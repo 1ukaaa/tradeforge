@@ -1,745 +1,431 @@
-import React, { memo, useCallback, useMemo } from "react";
-import AddIcon from "@mui/icons-material/Add";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
-import TrendingDownIcon from "@mui/icons-material/TrendingDown";
-import TrendingUpIcon from "@mui/icons-material/TrendingUp";
-import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
-import NoteAddOutlinedIcon from "@mui/icons-material/NoteAddOutlined";
 import {
   Box,
+  ButtonBase,
   Card,
-  CardContent,
   Chip,
   IconButton,
   LinearProgress,
   Pagination,
-  Paper,
   Stack,
-  ToggleButton,
-  ToggleButtonGroup,
+  Tooltip,
   Typography,
+  alpha,
+  useTheme
 } from "@mui/material";
-import { alpha } from "@mui/material/styles";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { useNavigate } from "react-router-dom";
+import { memo } from "react";
+import { useNavigate } from "react-router-dom"; // Import nécessaire pour la navigation
 import {
   Area,
   AreaChart,
   CartesianGrid,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
-  Tooltip as ChartTooltip,
   XAxis,
-  YAxis,
+  YAxis
 } from "recharts";
-import { formatCurrencyValue, formatSignedCurrency } from "../../utils/dashboardUtils";
 
-export const formatTradeDate = (input) => {
-  if (!input) return "-";
+// Icons
+import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
+import MoreHorizRoundedIcon from "@mui/icons-material/MoreHorizRounded";
+import TrendingDownRoundedIcon from "@mui/icons-material/TrendingDownRounded";
+import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
+// Nouvelles icônes pour le Journal
+import ArticleRoundedIcon from '@mui/icons-material/ArticleRounded';
+import NoteAddRoundedIcon from '@mui/icons-material/NoteAddRounded';
+
+// --- UTILS SECURISÉS ---
+const formatCurrency = (value, currency) => {
+  let safeCurrency = (currency && typeof currency === 'string') ? currency : "USD";
+  safeCurrency = safeCurrency.trim().toUpperCase();
   try {
-    const date = input instanceof Date ? input : new Date(input);
-    if (Number.isNaN(date.getTime())) return "-";
-    return format(date, "dd MMM yyyy • HH:mm", { locale: fr });
-  } catch {
-    return "-";
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: safeCurrency }).format(value || 0);
+  } catch (error) {
+    return `${Number(value || 0).toFixed(2)} ${safeCurrency}`;
   }
 };
 
-const METRIC_OPTIONS = [
-  { key: "equity", label: "Capital", shortLabel: "CAP" },
-  { key: "pnl", label: "PnL", shortLabel: "PnL" },
-];
-
-export const StatCard = memo(function StatCard({
-  title,
-  value = 0,
-  change = 0,
-  changePercent = 0,
-  icon: Icon,
-  color,
-  currency,
-}) {
-  const isPositive = change >= 0;
-  const percentLabel = Number.isFinite(changePercent)
-    ? `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}%`
-    : "N/A";
+// --- STYLED COMPONENTS ---
+const AdaptiveCard = ({ children, sx, ...props }) => {
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
 
   return (
     <Card
       elevation={0}
       sx={{
-        borderRadius: 4,
-        border: "1px solid",
-        borderColor: alpha(color, 0.2),
-        height: "100%",
-        position: "relative",
-        overflow: "hidden",
-        background: `linear-gradient(135deg, ${alpha(color, 0.08)}, #fff)`,
-        transition: "all 0.35s ease",
-        "&:before": {
-          content: '""',
-          position: "absolute",
-          inset: 0,
-          background: `radial-gradient(circle at top right, ${alpha(color, 0.25)}, transparent 55%)`,
-          opacity: 0.9,
-        },
-        "&:hover": {
-          transform: "translateY(-4px)",
-          boxShadow: `0 16px 32px ${alpha(color, 0.25)}`,
-        },
+        bgcolor: isDarkMode ? alpha(theme.palette.background.paper, 0.6) : '#FFFFFF',
+        backdropFilter: isDarkMode ? "blur(12px)" : "none",
+        border: `1px solid ${theme.palette.divider}`,
+        boxShadow: isDarkMode ? 'none' : '0px 2px 12px rgba(0, 0, 0, 0.03)',
+        borderRadius: 3,
+        ...sx,
       }}
+      {...props}
     >
-      <CardContent sx={{ p: 3, position: "relative", zIndex: 1 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-          <Box>
-            <Typography variant="overline" sx={{ color: alpha("#0f172a", 0.7), letterSpacing: 1 }}>
-              {title}
-            </Typography>
-            <Typography variant="h4" fontWeight={700}>
-              {formatCurrencyValue(value, currency)}
-            </Typography>
-          </Box>
-          <Box
-            sx={{
-              width: 48,
-              height: 48,
-              borderRadius: "18px",
-              bgcolor: alpha(color, 0.15),
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Icon sx={{ fontSize: 26, color }} />
-          </Box>
-        </Box>
-
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          {isPositive ? (
-            <TrendingUpIcon sx={{ fontSize: 18, color: "#10b981" }} />
-          ) : (
-            <TrendingDownIcon sx={{ fontSize: 18, color: "#ef4444" }} />
-          )}
-          <Typography
-            variant="body2"
-            sx={{ color: isPositive ? "#10b981" : "#ef4444", fontWeight: 600 }}
-          >
-            {formatSignedCurrency(change, currency)}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            ({percentLabel})
-          </Typography>
-        </Box>
-      </CardContent>
+      {children}
     </Card>
+  );
+};
+
+// --- WIDGETS ---
+
+export const StatCard = memo(({ label, value, type = "number", currency, trend, trendValue, suffix }) => {
+  const theme = useTheme();
+  const isPositive = trend === 'positive';
+  const isNegative = trend === 'negative';
+  
+  const trendColor = isPositive ? theme.palette.success.main 
+                   : isNegative ? theme.palette.error.main 
+                   : theme.palette.text.secondary;
+
+  let formattedValue = value;
+  if (type === 'currency') formattedValue = formatCurrency(value, currency);
+  if (type === 'percent') formattedValue = `${Number(value).toFixed(2)}%`;
+
+  return (
+    <AdaptiveCard sx={{ p: 2.5, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+        {label}
+      </Typography>
+      <Stack direction="row" alignItems="flex-end" justifyContent="space-between" sx={{ mt: 1 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
+          {formattedValue} 
+          {suffix && <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>{suffix}</Typography>}
+        </Typography>
+        
+        {(isPositive || isNegative) && (
+           <Stack direction="row" alignItems="center" spacing={0.5} sx={{ bgcolor: alpha(trendColor, 0.1), px: 1, py: 0.5, borderRadius: 1 }}>
+             {isPositive 
+               ? <TrendingUpRoundedIcon sx={{ fontSize: 16, color: trendColor }} /> 
+               : <TrendingDownRoundedIcon sx={{ fontSize: 16, color: trendColor }} />
+             }
+             {trendValue !== undefined && trendValue !== null && (
+               <Typography variant="caption" sx={{ color: trendColor, fontWeight: 700 }}>
+                 {Math.abs(trendValue).toFixed(1)}%
+               </Typography>
+             )}
+           </Stack>
+        )}
+      </Stack>
+    </AdaptiveCard>
   );
 });
 
-export const PerformanceChart = memo(function PerformanceChart({
-  history = [],
-  currency = "USD",
-  rangeKey = "30d",
-  onRangeChange,
-  rangeOptions = [],
-  metricOptions = METRIC_OPTIONS,
-  metricKey,
-  onMetricChange,
-}) {
-  const metricKeySafe = metricKey || metricOptions[0]?.key || "equity";
-  const hasMetricControl = Boolean(onMetricChange);
-  const selectedRange =
-    rangeOptions.find((option) => option.key === rangeKey) ||
-    rangeOptions[0] ||
-    { label: "30 derniers jours", shortLabel: "30J" };
-  const rangeLabel = selectedRange.label;
-  const handleRangeChange = (_, newValue) => {
-    if (!newValue || newValue === rangeKey) return;
-    onRangeChange?.(newValue);
-  };
-  const selectedMetric =
-    metricOptions.find((option) => option.key === metricKeySafe) ||
-    metricOptions[0] ||
-    { label: "Capital", shortLabel: "CAP" };
-  const handleMetricChange = (_, newMetric) => {
-    if (!newMetric || newMetric === metricKeySafe) return;
-    onMetricChange?.(newMetric);
-  };
-  const chartData = history.map((entry) => ({
-    ...entry,
-    plottedValue:
-      metricKeySafe === "pnl" ? entry.pnl ?? entry.value - (history[0]?.value || 0) : entry.value,
-  }));
-  const values = chartData.map((entry) => entry.plottedValue);
-  const startValue = values[0] || 0;
-  const endValue = values[values.length - 1] || 0;
-  const changeValue = endValue - startValue;
-  const changePercent =
-    metricKeySafe === "equity" && startValue ? (changeValue / startValue) * 100 : null;
-  const maxEntry =
-    chartData.length > 0
-      ? chartData.reduce(
-          (prev, curr) => (curr.plottedValue > prev.plottedValue ? curr : prev),
-          chartData[0]
-        )
-      : { plottedValue: 0, date: "-" };
-  const minEntry =
-    chartData.length > 0
-      ? chartData.reduce(
-          (prev, curr) => (curr.plottedValue < prev.plottedValue ? curr : prev),
-          chartData[0]
-        )
-      : { plottedValue: 0, date: "-" };
-  const formatMetricValue = (value) =>
-    metricKeySafe === "pnl"
-      ? formatSignedCurrency(value, currency)
-      : formatCurrencyValue(value, currency);
+export const PerformanceChart = memo(({ data, range, onRangeChange, rangeOptions, currentBalance, currency }) => {
+  const theme = useTheme();
+  
+  const startValue = data.length > 0 ? data[0].value : 0;
+  const endValue = data.length > 0 ? data[data.length - 1].value : 0;
+  const isProfit = endValue >= startValue;
+
+  const isDarkMode = theme.palette.mode === 'dark';
+  const chartColor = isProfit ? "#10b981" : "#ef4444"; 
+  const gradientStart = alpha(chartColor, isDarkMode ? 0.3 : 0.2);
+  const gradientEnd = alpha(chartColor, 0);
 
   return (
-    <Card
-      elevation={0}
-      sx={{
-        borderRadius: 4,
-        border: "1px solid",
-        borderColor: "divider",
-        background: "linear-gradient(180deg, #ffffff, rgba(99,102,241,0.02))",
-      }}
-    >
-      <CardContent sx={{ p: { xs: 3, md: 4 }, pb: { xs: 3, md: 4 } }}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: { xs: "flex-start", sm: "center" },
-            mb: 2.5,
-            flexDirection: { xs: "column", sm: "row" },
-            gap: { xs: 1.5, sm: 0 },
-          }}
-        >
-          <Box>
-            <Typography variant="h6" fontWeight={700}>
-              Performance du portefeuille
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {selectedMetric.label} • {rangeLabel}
-            </Typography>
-          </Box>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-            {hasMetricControl && (
-              <ToggleButtonGroup
-                value={metricKeySafe}
-                exclusive
-                size="small"
-                onChange={handleMetricChange}
-              >
-                {metricOptions.map((option) => (
-                  <ToggleButton key={option.key} value={option.key}>
-                    {option.shortLabel}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-            )}
-            <ToggleButtonGroup
-              value={rangeKey}
-              exclusive
-              size="small"
-              onChange={handleRangeChange}
-            >
-              {rangeOptions.map((option) => (
-                <ToggleButton key={option.key} value={option.key}>
-                  {option.shortLabel}
-                </ToggleButton>
-              ))}
-            </ToggleButtonGroup>
-          </Stack>
-        </Box>
-
-        {chartData.length === 0 ? (
-          <Stack sx={{ minHeight: 230, alignItems: "center", justifyContent: "center" }}>
-            <Typography color="text.secondary">Pas encore de données disponibles.</Typography>
-          </Stack>
-        ) : (
-          <ResponsiveContainer width="100%" height={230}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="date" stroke="#9ca3af" style={{ fontSize: 12 }} />
-              <YAxis
-                stroke="#9ca3af"
-                style={{ fontSize: 12 }}
-                tickFormatter={formatMetricValue}
-              />
-              <ChartTooltip
-                contentStyle={{
-                  backgroundColor: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 8,
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                }}
-                formatter={(value) => [formatMetricValue(value), selectedMetric.label]}
-              />
-              <Area type="monotone" dataKey="plottedValue" stroke="#6366f1" strokeWidth={2} fill="url(#colorValue)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
-
-        <Box
-          sx={{
-            mt: 2.5,
-            display: "grid",
-            gridTemplateColumns: { xs: "repeat(1, minmax(0, 1fr))", sm: "repeat(3, minmax(0, 1fr))" },
-            gap: 2,
-          }}
-        >
-          {[
-            {
-              label: `Variation ${selectedMetric.label.toLowerCase()} (${rangeLabel})`,
-              primary: formatSignedCurrency(changeValue, currency),
-              secondary:
-                changePercent === null
-                  ? "—"
-                  : `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}%`,
-              positive: changeValue >= 0,
-            },
-            {
-              label: "Plus haut",
-              primary: formatMetricValue(maxEntry?.plottedValue || 0),
-              secondary: maxEntry?.date || "-",
-              positive: true,
-            },
-            {
-              label: "Plus bas",
-              primary: formatMetricValue(minEntry?.plottedValue || 0),
-              secondary: minEntry?.date || "-",
-              positive: false,
-            },
-          ].map((stat) => (
-            <Box
-              key={stat.label}
+    <AdaptiveCard sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Box sx={{ p: 3, pb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6" fontWeight={700}>Évolution du Capital</Typography>
+        
+        <Stack direction="row" spacing={0.5} sx={{ bgcolor: theme.palette.action.hover, p: 0.5, borderRadius: 2 }}>
+          {rangeOptions.map((opt) => (
+            <ButtonBase
+              key={opt.key}
+              onClick={() => onRangeChange(opt.key)}
               sx={{
-                p: 2,
-                borderRadius: 3,
-                border: "1px solid",
-                borderColor: "rgba(226,232,240,0.8)",
-                backgroundColor: "#fff",
+                px: 1.5, py: 0.5, borderRadius: 1.5,
+                fontSize: '0.75rem', fontWeight: 600,
+                color: range === opt.key ? 'primary.contrastText' : 'text.secondary',
+                bgcolor: range === opt.key ? 'primary.main' : 'transparent',
+                transition: 'all 0.2s'
               }}
             >
-              <Typography variant="caption" color="text.secondary">
-                {stat.label}
-              </Typography>
-              <Typography
-                variant="h6"
-                fontWeight={700}
-                sx={{ color: stat.positive ? "#4338ca" : "#ef4444" }}
-              >
-                {stat.primary}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {stat.secondary}
-              </Typography>
-            </Box>
+              {opt.label}
+            </ButtonBase>
           ))}
-        </Box>
-      </CardContent>
-    </Card>
-  );
-});
-
-export const AccountsList = memo(function AccountsList({ accounts = [], selectedAccountId, onSelectAccount }) {
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        borderRadius: 4,
-        border: "1px solid",
-        borderColor: "divider",
-      }}
-    >
-      <CardContent sx={{ p: 3 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-          <Typography variant="h6" fontWeight={700}>
-            Mes comptes
-          </Typography>
-          <IconButton size="small">
-            <AddIcon />
-          </IconButton>
-        </Box>
-
-        <Stack spacing={2}>
-          {accounts.map((account) => {
-            const isSelected = selectedAccountId === account.id;
-            return (
-              <Paper
-                key={account.id}
-                elevation={0}
-                onClick={() => onSelectAccount(account.id)}
-                sx={{
-                  p: 2,
-                  borderRadius: 3,
-                  cursor: "pointer",
-                  border: "1px solid",
-                  borderColor: isSelected ? account.color : alpha(account.color, 0.15),
-                  bgcolor: alpha(account.color, isSelected ? 0.1 : 0.05),
-                  transition: "all 0.2s",
-                }}
-              >
-                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                    <Box
-                      sx={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        bgcolor: account.color,
-                      }}
-                    />
-                    <Box>
-                      <Typography variant="body2" fontWeight={600}>
-                        {account.name}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {formatCurrencyValue(account.currentBalance, account.currency)}
-                      </Typography>
-                    </Box>
-                  </Box>
-                  <Chip
-                    label={`${account.gainPercent >= 0 ? "+" : ""}${account.gainPercent.toFixed(2)}%`}
-                    size="small"
-                    sx={{
-                      bgcolor: account.gainPercent >= 0 ? alpha("#10b981", 0.1) : alpha("#ef4444", 0.1),
-                      color: account.gainPercent >= 0 ? "#10b981" : "#ef4444",
-                      fontWeight: 600,
-                    }}
-                  />
-                </Box>
-              </Paper>
-            );
-          })}
         </Stack>
-      </CardContent>
-    </Card>
-  );
-});
+      </Box>
 
-export const RecentActivity = memo(function RecentActivity({
-  trades = [],
-  page = 1,
-  pageSize = 5,
-  onPageChange,
-}) {
-  const navigate = useNavigate();
-  const { totalPages, currentPage, pageItems } = useMemo(() => {
-    const total = Math.max(1, Math.ceil(trades.length / pageSize));
-    const safePage = Math.min(page, total);
-    const startIndex = (safePage - 1) * pageSize;
-    const slice = trades.slice(startIndex, startIndex + pageSize);
-    return { totalPages: total, currentPage: safePage, pageItems: slice };
-  }, [trades, page, pageSize]);
-
-  const handlePageChange = useCallback((_, value) => {
-    if (value === currentPage) return;
-    onPageChange?.(value);
-  }, [currentPage, onPageChange]);
-
-  const handleTradeNavigate = useCallback(
-    (trade) => {
-      if (!trade) return;
-      if (trade.journalEntryId) {
-        navigate(`/journal?entryId=${trade.journalEntryId}`);
-      } else {
-        navigate("/journal");
-      }
-    },
-    [navigate]
-  );
-
-  const buildKeydownHandler = useCallback(
-    (trade) => (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        handleTradeNavigate(trade);
-      }
-    },
-    [handleTradeNavigate]
-  );
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        borderRadius: 4,
-        border: "1px solid",
-        borderColor: "divider",
-      }}
-    >
-      <CardContent sx={{ p: 3 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-          <Typography variant="h6" fontWeight={700}>
-            Activité récente
-          </Typography>
-          <IconButton size="small">
-            <MoreVertIcon />
-          </IconButton>
-        </Box>
-
-        <Stack spacing={1.5}>
-          {pageItems.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              Aucun trade n'a encore été enregistré.
-            </Typography>
-          ) : (
-            pageItems.map((trade) => {
-              const typeColor = trade.direction === "SELL" ? "#f59e0b" : "#10b981";
-              const amountColor = trade.pnl >= 0 ? "#10b981" : "#ef4444";
-              const isLinked = Boolean(trade.journalEntryId);
-              return (
-                <Paper
-                  key={trade.id}
-                  elevation={0}
-                  sx={{
-                    p: 1.75,
-                    borderRadius: 3,
-                    border: "1px solid",
-                    borderColor: "rgba(226, 232, 240, 0.8)",
-                    backgroundColor: "#fff",
-                    transition: "all 0.2s",
-                    cursor: "pointer",
-                    "&:hover": {
-                      borderColor: alpha("#6366f1", 0.4),
-                      boxShadow: "0 12px 24px rgba(15,23,42,0.08)",
-                    },
-                  }}
-                  onClick={() => handleTradeNavigate(trade)}
-                  onKeyDown={buildKeydownHandler(trade)}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Trade ${trade.asset} ${isLinked ? "journalisé" : "non journalisé"}`}
-                >
-                  <Box
-                    sx={{
-                      display: "grid",
-                      gridTemplateColumns: {
-                        xs: "1fr",
-                        sm: "1.6fr 0.9fr 0.8fr 1fr",
-                      },
-                      alignItems: "center",
-                      gap: { xs: 1.5, sm: 2 },
-                    }}
-                  >
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                      <Box
-                        sx={{
-                          width: 42,
-                          height: 42,
-                          borderRadius: 2,
-                          bgcolor: alpha(typeColor, 0.12),
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: typeColor,
-                        }}
-                      >
-                        <SwapHorizIcon />
-                      </Box>
-                      <Box>
-                        <Typography variant="subtitle2" fontWeight={700}>
-                          {trade.asset}
-                        </Typography>
-                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                          <Typography variant="caption" color="text.secondary">
-                            {formatTradeDate(trade.date)}
-                          </Typography>
-                          <Chip
-                            size="small"
-                            variant="filled"
-                            icon={
-                              isLinked ? (
-                                <TaskAltRoundedIcon sx={{ fontSize: 16 }} />
-                              ) : (
-                                <NoteAddOutlinedIcon sx={{ fontSize: 16 }} />
-                              )
-                            }
-                            label={isLinked ? "Journalisé" : "À documenter"}
-                            sx={{
-                              height: 24,
-                              bgcolor: isLinked ? alpha("#10b981", 0.15) : alpha("#f97316", 0.16),
-                              color: isLinked ? "#047857" : "#b45309",
-                              fontWeight: 600,
-                              "& .MuiChip-icon": { color: "inherit", mr: 0.5 },
-                            }}
-                          />
-                        </Stack>
-                      </Box>
-                    </Box>
-                    <Chip
-                      label={trade.direction === "SELL" ? "Vente" : "Achat"}
-                      size="small"
-                      sx={{
-                        justifySelf: { xs: "flex-start", sm: "center" },
-                        bgcolor: alpha(typeColor, 0.12),
-                        color: typeColor,
-                        fontWeight: 600,
-                      }}
-                    />
-                    <Typography
-                      variant="subtitle1"
-                      fontWeight={700}
-                      sx={{ color: amountColor, justifySelf: { xs: "flex-start", sm: "center" } }}
-                    >
-                      {formatSignedCurrency(trade.pnl, trade.currency)}
-                    </Typography>
-                    <Chip
-                      label={trade.pnl >= 0 ? "Gain confirmé" : "Perte"}
-                      size="small"
-                      sx={{
-                        justifySelf: { xs: "flex-start", sm: "flex-end" },
-                        bgcolor: trade.pnl >= 0 ? alpha("#10b981", 0.12) : alpha("#ef4444", 0.12),
-                        color: trade.pnl >= 0 ? "#047857" : "#b91c1c",
-                        fontWeight: 600,
-                      }}
-                    />
-                  </Box>
-                </Paper>
-              );
-            })
-          )}
-        </Stack>
-        {trades.length > pageSize && (
-          <Box sx={{ mt: 2, display: "flex", justifyContent: "center" }}>
-            <Pagination
-              count={totalPages}
-              page={currentPage}
-              onChange={handlePageChange}
-              color="primary"
-              size="small"
-              shape="rounded"
+      <Box sx={{ flex: 1, width: '100%', px: 1, mt: 1 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={gradientStart} stopOpacity={1} />
+                <stop offset="95%" stopColor={gradientEnd} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme.palette.divider} />
+            <XAxis 
+              dataKey="date" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fill: theme.palette.text.secondary, fontSize: 11 }} 
+              dy={10}
+              minTickGap={30}
             />
-          </Box>
-        )}
-      </CardContent>
-    </Card>
-  );
-});
-
-export const Goals = memo(function Goals({ goals = [] }) {
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        borderRadius: 4,
-        border: "1px solid",
-        borderColor: "divider",
-      }}
-    >
-      <CardContent sx={{ p: 3 }}>
-        <Typography variant="h6" fontWeight={700} sx={{ mb: 3 }}>
-          Objectifs
-        </Typography>
-
-        <Stack spacing={3}>
-          {goals.map((goal) => {
-            const progress = goal.target
-              ? Math.min(100, Math.max(0, (goal.current / (goal.target || 1)) * 100))
-              : 0;
-            return (
-              <Box key={goal.id}>
-                <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
-                  <Typography variant="body2" fontWeight={600}>
-                    {goal.title}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {goal.isPercent
-                      ? `${goal.current}% / ${goal.target}%`
-                      : `${formatCurrencyValue(goal.current, goal.currency)} / ${formatCurrencyValue(goal.target, goal.currency)}`}
-                  </Typography>
-                </Box>
-                <LinearProgress
-                  variant="determinate"
-                  value={progress}
-                  sx={{
-                    height: 8,
-                    borderRadius: 4,
-                    bgcolor: alpha(goal.color, 0.1),
-                    "& .MuiLinearProgress-bar": {
-                      bgcolor: goal.color,
-                      borderRadius: 4,
-                    },
-                  }}
-                />
-              </Box>
-            );
-          })}
-          {goals.length === 0 && (
-            <Typography variant="body2" color="text.secondary">
-              Configurez des objectifs pour suivre votre progression.
-            </Typography>
-          )}
-        </Stack>
-      </CardContent>
-    </Card>
-  );
-});
-
-export const GoalInsights = memo(function GoalInsights({ insights = [] }) {
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        borderRadius: 4,
-        border: "1px solid",
-        borderColor: "divider",
-      }}
-    >
-      <CardContent sx={{ p: 3 }}>
-        <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
-          Plan d'action
-        </Typography>
-        <Stack spacing={2.5}>
-          {insights.map((insight) => (
-            <Box
-              key={insight.id}
-              sx={{
-                p: 2,
-                borderRadius: 3,
-                border: "1px solid",
-                borderColor: alpha(insight.color, 0.2),
-                bgcolor: alpha(insight.color, 0.05),
+            <YAxis hide domain={['auto', 'auto']} />
+            <RechartsTooltip 
+              contentStyle={{ 
+                backgroundColor: theme.palette.background.paper, 
+                border: `1px solid ${theme.palette.divider}`, 
+                borderRadius: 8,
+                boxShadow: theme.shadows[3]
               }}
-            >
-              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
-                <Typography variant="subtitle2" fontWeight={700}>
-                  {insight.title}
+              formatter={(val) => [formatCurrency(val, currency), 'Solde']}
+              labelStyle={{ color: theme.palette.text.secondary }}
+            />
+            <Area 
+              type="monotone" 
+              dataKey="value" 
+              stroke={chartColor} 
+              strokeWidth={3}
+              fill="url(#chartGradient)" 
+              animationDuration={1000}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </Box>
+    </AdaptiveCard>
+  );
+});
+
+export const RecentActivity = memo(({ trades = [], page, setPage, pageSize }) => {
+  const theme = useTheme();
+  const navigate = useNavigate(); // Hook pour la navigation
+  const safeTrades = trades || [];
+  const totalPages = Math.ceil(safeTrades.length / pageSize);
+  const currentTrades = safeTrades.slice((page - 1) * pageSize, page * pageSize);
+
+  const handleTradeClick = (trade) => {
+    if (trade.journalEntryId) {
+      // Redirection vers l'analyse existante
+      navigate(`/journal?entryId=${trade.journalEntryId}`);
+    } else {
+      // Redirection vers le journal (pour créer potentiellement une analyse)
+      navigate('/journal');
+    }
+  };
+
+  return (
+    <AdaptiveCard>
+      <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6" fontWeight={700}>Activité Récente</Typography>
+        <IconButton size="small"><MoreHorizRoundedIcon /></IconButton>
+      </Box>
+      <Stack spacing={0}>
+        {currentTrades.length === 0 ? (
+          <Box sx={{ p: 6, textAlign: 'center' }}>
+            <Typography color="text.secondary">Aucun trade enregistré.</Typography>
+          </Box>
+        ) : (
+          currentTrades.map((trade, idx) => {
+             const isWin = trade.pnl >= 0;
+             const pnlColor = isWin ? theme.palette.success.main : theme.palette.error.main;
+             const hasAnalysis = Boolean(trade.journalEntryId);
+             
+             return (
+               <Box 
+                key={trade.id || idx}
+                onClick={() => handleTradeClick(trade)} // Rendre la ligne cliquable
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr auto', sm: '1.5fr 1fr 1fr auto' },
+                  gap: 2,
+                  p: 2.5,
+                  alignItems: 'center',
+                  borderBottom: `1px solid ${theme.palette.divider}`,
+                  cursor: 'pointer', // Curseur main
+                  transition: 'all 0.2s',
+                  '&:last-child': { borderBottom: 'none' },
+                  '&:hover': { 
+                    bgcolor: theme.palette.action.hover,
+                    transform: 'translateX(4px)' // Petit effet de glissement au survol
+                  }
+                }}
+               >
+                 <Box>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="subtitle2" fontWeight={700}>
+                        {trade.asset}
+                      </Typography>
+                      
+                      {/* Badge Vente/Achat */}
+                      <Chip 
+                        label={trade.direction === 'SELL' ? 'SELL' : 'BUY'} 
+                        size="small" 
+                        sx={{ 
+                          height: 20, 
+                          fontSize: '0.65rem', 
+                          fontWeight: 700, 
+                          bgcolor: alpha(trade.direction === 'SELL' ? theme.palette.warning.main : theme.palette.info.main, 0.1), 
+                          color: trade.direction === 'SELL' ? theme.palette.warning.main : theme.palette.info.main 
+                        }} 
+                      />
+
+                      {/* Indicateur d'Analyse Journal */}
+                      {hasAnalysis ? (
+                        <Tooltip title="Analyse disponible (cliquer pour voir)">
+                          <ArticleRoundedIcon sx={{ fontSize: 18, color: theme.palette.primary.main }} />
+                        </Tooltip>
+                      ) : (
+                        <Tooltip title="Pas encore d'analyse">
+                          <NoteAddRoundedIcon sx={{ fontSize: 18, color: theme.palette.action.disabled }} />
+                        </Tooltip>
+                      )}
+                    </Stack>
+
+                    <Typography variant="caption" color="text.secondary">
+                      {trade.date ? format(new Date(trade.date), "dd MMM • HH:mm", { locale: fr }) : '-'}
+                    </Typography>
+                 </Box>
+
+                 <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+                   <Typography variant="caption" color="text.secondary" display="block">Prix</Typography>
+                   <Typography variant="body2" fontWeight={500}>
+                     {trade.entryPrice ? Number(trade.entryPrice).toFixed(3) : "-"}
+                   </Typography>
+                 </Box>
+
+                 <Box sx={{ textAlign: 'right', display: { xs: 'none', sm: 'block' } }}>
+                    <Typography variant="caption" color="text.secondary" display="block">Gain %</Typography>
+                    <Typography variant="body2" sx={{ color: pnlColor, fontWeight: 600 }}>
+                      {trade.gainPercent ? `${trade.gainPercent > 0 ? '+' : ''}${Number(trade.gainPercent).toFixed(2)}%` : '-'}
+                    </Typography>
+                 </Box>
+
+                 <Box sx={{ textAlign: 'right' }}>
+                   <Typography variant="body2" sx={{ color: pnlColor, fontWeight: 700 }}>
+                     {trade.pnl > 0 ? '+' : ''}{formatCurrency(trade.pnl, trade.currency)}
+                   </Typography>
+                 </Box>
+               </Box>
+             );
+          })
+        )}
+      </Stack>
+      {safeTrades.length > pageSize && (
+         <Box sx={{ p: 2, display: 'flex', justifyContent: 'center', borderTop: `1px solid ${theme.palette.divider}` }}>
+            <Pagination count={totalPages} page={page} onChange={(_, p) => setPage(p)} size="small" shape="rounded" />
+         </Box>
+      )}
+    </AdaptiveCard>
+  );
+});
+
+export const AccountsList = memo(({ accounts = [], selectedId, onSelect }) => {
+  const theme = useTheme();
+  return (
+    <AdaptiveCard>
+       <Box sx={{ p: 3, pb: 1 }}>
+          <Typography variant="h6" fontWeight={700}>Comptes</Typography>
+       </Box>
+       <Stack spacing={1} sx={{ px: 2, pb: 2 }}>
+         {accounts.map(acc => {
+           const isSelected = selectedId === acc.id;
+           return (
+             <ButtonBase
+               key={acc.id}
+               onClick={() => onSelect(acc.id)}
+               sx={{
+                 width: '100%',
+                 justifyContent: 'space-between',
+                 p: 2, borderRadius: 2,
+                 bgcolor: isSelected ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
+                 border: `1px solid ${isSelected ? theme.palette.primary.main : 'transparent'}`,
+                 transition: 'all 0.2s',
+                 '&:hover': { bgcolor: theme.palette.action.hover }
+               }}
+             >
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Box sx={{ 
+                    width: 36, height: 36, borderRadius: '50%', 
+                    bgcolor: alpha(acc.color, 0.1), color: acc.color,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700
+                  }}>
+                    {acc.name.charAt(0)}
+                  </Box>
+                  <Box sx={{ textAlign: 'left' }}>
+                    <Typography variant="subtitle2" fontWeight={600}>{acc.name}</Typography>
+                    <Typography variant="caption" color="text.secondary">{acc.platform || 'MT5'}</Typography>
+                  </Box>
+                </Stack>
+                <Typography variant="body2" fontWeight={600}>
+                  {formatCurrency(acc.currentBalance, acc.currency)}
                 </Typography>
-                <Chip
-                  label={insight.tag}
-                  size="small"
-                  sx={{
-                    bgcolor: "#fff",
-                    border: "1px solid",
-                    borderColor: alpha(insight.color, 0.3),
-                    color: insight.color,
-                    fontWeight: 600,
-                  }}
-                />
-              </Box>
-              <Typography variant="body2" color="text.secondary">
-                {insight.description}
-              </Typography>
-            </Box>
-          ))}
-          {insights.length === 0 && (
-            <Typography variant="body2" color="text.secondary">
-              Les recommandations apparaîtront dès que des trades seront enregistrés.
-            </Typography>
-          )}
-        </Stack>
-      </CardContent>
-    </Card>
+             </ButtonBase>
+           )
+         })}
+       </Stack>
+    </AdaptiveCard>
+  )
+});
+
+export const Goals = memo(({ current = 0, target = 1, currency }) => {
+  const safeTarget = target || 1;
+  const progress = Math.min(100, Math.max(0, (current / safeTarget) * 100));
+  const theme = useTheme();
+  
+  return (
+    <AdaptiveCard sx={{ p: 3 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+        <Typography variant="h6" fontWeight={700}>Objectif Mensuel</Typography>
+        <Typography variant="caption" sx={{ fontWeight: 700, color: theme.palette.success.main, bgcolor: alpha(theme.palette.success.main, 0.1), px: 1, py: 0.5, borderRadius: 1 }}>
+          {progress.toFixed(0)}%
+        </Typography>
+      </Stack>
+      
+      <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 1.5 }}>
+        <Typography variant="h4" fontWeight={700}>
+          {formatCurrency(current, currency)}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+            / {formatCurrency(target, currency)}
+        </Typography>
+      </Stack>
+      <LinearProgress 
+        variant="determinate" 
+        value={progress} 
+        sx={{ 
+          height: 8, 
+          borderRadius: 4, 
+          bgcolor: theme.palette.action.hover,
+          '& .MuiLinearProgress-bar': { borderRadius: 4, bgcolor: theme.palette.success.main }
+        }} 
+      />
+    </AdaptiveCard>
+  );
+});
+
+export const GoalInsights = memo(({ stats, trades = [] }) => {
+  const theme = useTheme();
+  if (!trades.length) return null;
+
+  const lastTrade = trades[0];
+  const isWinStreak = trades.slice(0, 3).length === 3 && trades.slice(0, 3).every(t => t.pnl > 0);
+  
+  return (
+    <AdaptiveCard sx={{ 
+      p: 3, 
+      bgcolor: alpha(theme.palette.primary.main, 0.04),
+      border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`
+    }}>
+      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.5 }}>
+        <AutoAwesomeRoundedIcon color="primary" sx={{ fontSize: 20 }} />
+        <Typography variant="subtitle1" fontWeight={700} color="primary">Conseil IA</Typography>
+      </Stack>
+      <Typography variant="body2" sx={{ lineHeight: 1.6, color: 'text.secondary' }}>
+        {isWinStreak 
+          ? "Excellente dynamique ! Vous êtes sur une série de 3 gains consécutifs."
+          : lastTrade?.pnl < 0 
+            ? "Dernier trade perdant. Vérifiez votre plan avant de continuer."
+            : "La régularité est la clé. Continuez ainsi."
+        }
+      </Typography>
+    </AdaptiveCard>
   );
 });
 
