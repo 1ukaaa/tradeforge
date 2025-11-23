@@ -80,7 +80,7 @@ const SETTINGS_ITEM = {
 // (Le reste du fichier que vous m'avez fourni est inchangé)
 // ...
 
-const StyledNavItem = ({ to, label, icon }) => {
+const StyledNavItem = ({ to, label, icon, onNavigate = () => {} }) => {
   const location = useLocation();
   const theme = useTheme();
   // [MODIFICATION] Récupérer le mode pour le hover
@@ -99,6 +99,7 @@ const StyledNavItem = ({ to, label, icon }) => {
         // [MODIFICATION] 'end' est crucial pour le lien "/"
         end={to === "/"}
         selected={isActive}
+        onClick={onNavigate}
         sx={{
           borderRadius: 2,
           "&.Mui-selected": {
@@ -139,7 +140,7 @@ const StyledNavItem = ({ to, label, icon }) => {
   );
 };
 
-const NavigationMenu = () => {
+const NavigationMenu = ({ onNavigate = () => {}, showBrand = true }) => {
   const theme = useTheme();
   // [MODIFICATION] Récupérer le mode pour le style de la Box
   const { mode } = useThemeMode();
@@ -179,9 +180,11 @@ const NavigationMenu = () => {
           : { lg: "0 20px 50px rgba(15,23,42,0.1)" }, // Garde une ombre en mode clair
       }}
     >
-      <Box sx={{ px: 1.5, mb: 2 }}>
-        <BrandLogo glyphSize={40} />
-      </Box>
+      {showBrand && (
+        <Box sx={{ px: 1.5, mb: 2 }}>
+          <BrandLogo glyphSize={40} />
+        </Box>
+      )}
 
       <Box sx={{ px: 1.5, mb: 2 }}>
         <Button
@@ -191,6 +194,7 @@ const NavigationMenu = () => {
           color="primary"
           startIcon={<RocketLaunchRoundedIcon />}
           fullWidth
+          onClick={onNavigate}
           sx={{
             py: 1.2,
             fontSize: "0.95rem",
@@ -214,6 +218,7 @@ const NavigationMenu = () => {
               to={item.to}
               label={item.label}
               icon={item.icon}
+              onNavigate={onNavigate}
             />
           ))}
         </List>
@@ -242,6 +247,7 @@ const NavigationMenu = () => {
               to={item.to}
               label={item.label}
               icon={item.icon}
+              onNavigate={onNavigate}
             />
           ))}
         </List>
@@ -255,6 +261,7 @@ const NavigationMenu = () => {
             to={SETTINGS_ITEM.to}
             label={SETTINGS_ITEM.label}
             icon={SETTINGS_ITEM.icon}
+            onNavigate={onNavigate}
           />
         </List>
       </Box>
