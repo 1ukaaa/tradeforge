@@ -1,125 +1,98 @@
-// frontend/src/components/JournalEntryModal.js
-import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
-import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
-import DeleteForeverIcon from "@mui/icons-material/DeleteForever";
-import EditIcon from "@mui/icons-material/Edit";
-import LabelIcon from "@mui/icons-material/Label";
-import LinkIcon from "@mui/icons-material/Link";
-import ShowChartIcon from "@mui/icons-material/ShowChart";
-import StarBorderIcon from "@mui/icons-material/StarBorder";
-import TimerIcon from "@mui/icons-material/Timer";
-import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import {
   Alert,
+  alpha,
   Box,
   Button,
   Chip,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControlLabel,
   Grid,
+  IconButton,
   Paper,
   Stack,
-  Switch,
   Typography,
-  alpha,
+  useMediaQuery,
+  useTheme
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import {
-  deleteJournalEntry,
-  updateJournalEntry,
-} from "../services/journalClient";
-import { fetchBrokerSummary, fetchBrokerPositions } from "../services/brokerClient";
-import {
-  formatDate, // Récupère la 1ère image (qui sera l'image principale)
-  getEntryTitle,
-  isValidDate,
-  resultTone,
-  typeLabel
-} from "../utils/journalUtils";
+
+// Icons
+import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
+import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
+import CloseIcon from "@mui/icons-material/Close";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import EditIcon from "@mui/icons-material/Edit";
+import InsertLinkIcon from "@mui/icons-material/InsertLink";
+import ShowChartIcon from "@mui/icons-material/ShowChart";
+import TagIcon from "@mui/icons-material/Tag";
+import TimerIcon from "@mui/icons-material/Timer";
+import TrendingDownIcon from "@mui/icons-material/TrendingDown";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+
+// Services & Utils
+import { fetchBrokerPositions, fetchBrokerSummary } from "../services/brokerClient";
+import { deleteJournalEntry, updateJournalEntry } from "../services/journalClient";
 import { getCurrencySymbol } from "../utils/accountUtils";
-import {
-  normalizeTimeframes,
-  stringifyTimeframes,
-  formatTimeframesForDisplay,
-} from "../utils/timeframeUtils";
+import { formatDate, getEntryTitle, isValidDate } from "../utils/journalUtils";
+import { formatTimeframesForDisplay, normalizeTimeframes, stringifyTimeframes } from "../utils/timeframeUtils";
 import EditEntryForm from "./EditEntryForm";
 
-// --- Fonctions Utilitaires ---
+// --- Sub-Components ---
 
-const MetaItem = ({ icon, label, children }) => (
-  <Grid item xs={12} sm={6}>
-    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minHeight: 40 }}>
-      <Box sx={{ color: "text.secondary", mt: 0.5, alignSelf: 'flex-start' }}>{icon}</Box>
-      <Stack spacing={0}>
-        <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.3 }}>
-          {label}
-        </Typography>
-        <Box>{children}</Box>
-      </Stack>
+// Un petit composant pour les lignes de détails (Account, Symbol...)
+const DataRow = ({ icon, label, value, highlight = false }) => (
+  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ py: 1.2, borderBottom: '1px dashed', borderColor: 'divider' }}>
+    <Stack direction="row" alignItems="center" spacing={1.5} sx={{ color: 'text.secondary' }}>
+      {icon}
+      <Typography variant="caption" fontWeight={600} sx={{ letterSpacing: '0.05em' }}>{label.toUpperCase()}</Typography>
     </Stack>
-  </Grid>
+    <Typography variant="body2" fontWeight={highlight ? 700 : 500} color={highlight ? 'text.primary' : 'text.secondary'}>
+      {value || "-"}
+    </Typography>
+  </Stack>
 );
 
-const findBrokerTradeMatch = (trades, targetId) => {
-  if (!targetId) return null;
-  return (
-    trades.find(
-      (trade) =>
-        trade.id === targetId ||
-        (Array.isArray(trade.fillIds) && trade.fillIds.includes(targetId))
-    ) || null
-  );
-};
-
-const toInputDateTime = (dateString) => {
-  if (!dateString) return "";
-  try {
-    const date = new Date(dateString);
-    if (!isValidDate(date)) {
-      console.warn("Date invalide dans les métadonnées:", dateString);
-      return "";
-    }
-    const offset = date.getTimezoneOffset() * 60000;
-    const localISOTime = new Date(date.getTime() - offset).toISOString().slice(0, 16);
-    return localISOTime;
-    
-  } catch (e) {
-    return "";
-  }
-};
-
-// --- Composant Principal ---
+// --- Main Component ---
 
 const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
-  const [isMinimalView, setIsMinimalView] = useState(true);
+  const theme = useTheme();
+  const fullScreen = useMediaQuery(theme.breakpoints.down("md"));
+  const isDark = theme.palette.mode === "dark";
+
+  // States
   const [isEditing, setIsEditing] = useState(false);
   const [editedEntry, setEditedEntry] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [mutationState, setMutationState] = useState({
-    loading: false,
-    error: "",
-  });
-
+  const [mutationState, setMutationState] = useState({ loading: false, error: "" });
   const [previewImageSrc, setPreviewImageSrc] = useState(null);
+  
+  // Data
   const [accountOptions, setAccountOptions] = useState([]);
   const [brokerTrades, setBrokerTrades] = useState([]);
 
+  // Init Data
   useEffect(() => {
     if (entry) {
       const safeMetadata = entry.metadata || {};
       const displayDate = safeMetadata.date || entry.createdAt;
+      
+      const toInputDate = (d) => {
+          try {
+              const date = new Date(d);
+              if (!isValidDate(date)) return "";
+              const offset = date.getTimezoneOffset() * 60000;
+              return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+          } catch { return ""; }
+      };
 
       setEditedEntry({
         ...JSON.parse(JSON.stringify(entry)),
         metadata: {
           ...safeMetadata,
           timeframe: normalizeTimeframes(safeMetadata.timeframe),
-          date: toInputDateTime(displayDate)
+          date: toInputDate(displayDate)
         },
       });
     } else {
@@ -127,609 +100,336 @@ const JournalEntryModal = ({ entry, open, onClose, onUpdate, onDelete }) => {
     }
   }, [entry]);
 
-  const handleClose = () => {
-    setIsEditing(false);
-    setIsMinimalView(true);
-    setMutationState({ loading: false, error: "" });
-    onClose();
-  };
-
+  // Load Broker Data (for Edit Mode)
   useEffect(() => {
     let isMounted = true;
-    const loadBrokerData = async () => {
-      try {
-        const [summary, positions] = await Promise.all([
-          fetchBrokerSummary(),
-          fetchBrokerPositions(),
-        ]);
-        if (!isMounted) return;
-        setAccountOptions(summary.accounts || []);
-        setBrokerTrades(positions || []);
-      } catch (error) {
-        console.error("Impossible de charger les comptes broker:", error);
-      }
-    };
-    loadBrokerData();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    if (open) {
+      const load = async () => {
+        try {
+          const [summary, positions] = await Promise.all([fetchBrokerSummary(), fetchBrokerPositions()]);
+          if (isMounted) {
+            setAccountOptions(summary.accounts || []);
+            setBrokerTrades(positions || []);
+          }
+        } catch (e) { console.error(e); }
+      };
+      load();
+    }
+    return () => { isMounted = false; };
+  }, [open]);
+
+  // Actions
+  const handleClose = () => { setIsEditing(false); setMutationState({ loading: false, error: "" }); onClose(); };
 
   const handleUpdate = async () => {
     if (!editedEntry) return;
     setMutationState({ loading: true, error: "" });
-
-    const localDate = new Date(editedEntry.metadata.date);
-    const isoDate = isValidDate(localDate) ? localDate.toISOString() : new Date().toISOString();
-
-    const entryToSave = {
-      ...editedEntry,
-      metadata: {
-        ...editedEntry.metadata,
-        timeframe: stringifyTimeframes(editedEntry.metadata.timeframe),
-        date: isoDate,
-      },
-    };
-    
     try {
+      const localDate = new Date(editedEntry.metadata.date);
+      const isoDate = isValidDate(localDate) ? localDate.toISOString() : new Date().toISOString();
+      const entryToSave = {
+        ...editedEntry,
+        metadata: {
+          ...editedEntry.metadata,
+          timeframe: stringifyTimeframes(editedEntry.metadata.timeframe),
+          date: isoDate,
+        },
+      };
       const updated = await updateJournalEntry(entryToSave);
       onUpdate(updated);
       setIsEditing(false);
       setMutationState({ loading: false, error: "" });
-    } catch (err) {
-      setMutationState({ loading: false, error: err.message });
-    }
+    } catch (err) { setMutationState({ loading: false, error: err.message }); }
   };
 
   const handleDelete = async () => {
-    if (!entry) return;
     setMutationState({ loading: true, error: "" });
     try {
       await deleteJournalEntry(entry.id);
       onDelete(entry.id);
       setShowDeleteConfirm(false);
       handleClose();
-    } catch (err)
-      {
-      setMutationState({ loading: false, error: err.message });
-    }
+    } catch (err) { setMutationState({ loading: false, error: err.message }); }
   };
 
-  const handleImageDelete = (indexToDelete) => {
-    setEditedEntry(prev => ({
-      ...prev,
-      metadata: {
-        ...prev.metadata,
-        images: (prev.metadata.images || []).filter((_, index) => index !== indexToDelete)
-      }
-    }));
+  const handleImageDelete = (idx) => {
+    setEditedEntry(prev => ({ ...prev, metadata: { ...prev.metadata, images: (prev.metadata.images || []).filter((_, i) => i !== idx) } }));
   };
   
-  // Handler pour définir une image comme principale (en la déplaçant à l'index 0)
-  const handleSetMainImage = (indexToMakeMain) => {
-    setEditedEntry(prev => {
-      const images = [...(prev.metadata.images || [])];
-      if (indexToMakeMain < 0 || indexToMakeMain >= images.length) {
-        return prev; // Index invalide
-      }
-      // 1. Retire l'image de sa position actuelle
-      const [imageToMove] = images.splice(indexToMakeMain, 1);
-      // 2. Insère l'image au début
-      images.unshift(imageToMove);
-      return {
-        ...prev,
-        metadata: {
-          ...prev.metadata,
-          images: images
-        }
-      };
-    });
-  };
-
-
-  const handlePaste = (event) => {
+  const handlePaste = (e) => {
     if (!isEditing) return;
-
-    const items = event.clipboardData.items;
+    const items = e.clipboardData.items;
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf("image") !== -1) {
         const file = items[i].getAsFile();
-        if (!file) continue;
-
-        setMutationState({ loading: true, error: "Traitement de l'image..." });
-
         const reader = new FileReader();
-        reader.onload = (e) => {
-          const src = e.target.result;
-          setEditedEntry(prev => ({
-            ...prev,
-            metadata: {
-              ...prev.metadata,
-              images: [...(prev.metadata.images || []), { src }]
-            }
-          }));
-          setMutationState({ loading: false, error: "" });
-        };
-        reader.onerror = () => {
-           setMutationState({ loading: false, error: "Impossible de lire l'image." });
-        };
+        reader.onload = (ev) => setEditedEntry(p => ({ ...p, metadata: { ...p.metadata, images: [...(p.metadata.images || []), { src: ev.target.result }] } }));
         reader.readAsDataURL(file);
-        
-        event.preventDefault();
-        break; 
+        e.preventDefault();
+        break;
       }
     }
   };
 
-
   if (!entry) return null;
-  if (isEditing && !editedEntry) {
-    return (
-      <Dialog fullWidth maxWidth="md" open={open} onClose={handleClose}>
-        <DialogContent sx={{ p: 4, textAlign: "center" }}>
-          <CircularProgress />
-        </DialogContent>
-      </Dialog>
-    );
-  }
-  
   const displayEntry = isEditing ? editedEntry : entry;
-  const displayImages = displayEntry.metadata?.images || [];
-  const mainImage = displayImages[0]?.src || null;
-  const resolvedAccount = displayEntry?.metadata?.accountId
-    ? accountOptions.find((acc) => acc.id === displayEntry.metadata.accountId)
-    : null;
-  const accountLabel = displayEntry?.metadata?.accountName || resolvedAccount?.name;
-  const linkedBrokerTrade = displayEntry?.metadata?.brokerTradeId
-    ? findBrokerTradeMatch(brokerTrades, displayEntry.metadata.brokerTradeId)
-    : null;
+  if (!displayEntry) return null;
+
+  // READ VIEW VARS
+  const meta = displayEntry.metadata || {};
+  const isTrade = displayEntry.type === 'trade';
+  const pnlVal = Number(meta.pnlAmount);
+  const isWin = pnlVal > 0;
+  const isLoss = pnlVal < 0;
+  const pnlColor = isWin ? theme.palette.success.main : isLoss ? theme.palette.error.main : theme.palette.text.primary;
+  
+  // Design "Split View" Logic
+  const images = meta.images || [];
 
   return (
     <>
       <Dialog 
         fullWidth 
-        maxWidth="md" 
+        maxWidth="xl" // Large pour bien profiter du split view
         open={open} 
         onClose={handleClose}
+        fullScreen={fullScreen}
         onPaste={handlePaste}
+        PaperProps={{ sx: { borderRadius: fullScreen ? 0 : 3, bgcolor: theme.palette.background.paper, overflow: "hidden" } }}
       >
-        <DialogTitle sx={{ pr: { xs: 8, md: 8 } }}>
-          {isEditing ? "Modifier l'analyse" : getEntryTitle(displayEntry)}
+        {/* === HEADER (Commun) === */}
+        <DialogTitle sx={{ 
+            p: 2, 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            borderBottom: `1px solid ${theme.palette.divider}`,
+            bgcolor: alpha(theme.palette.background.default, 0.5)
+        }}>
+            <Stack direction="row" alignItems="center" spacing={2}>
+                 {/* Type Badge */}
+                 <Chip 
+                    label={meta.direction || displayEntry.type.toUpperCase()} 
+                    size="small" 
+                    sx={{ 
+                       fontWeight: 800, 
+                       borderRadius: 1,
+                       bgcolor: meta.direction === 'LONG' ? alpha(theme.palette.success.main, 0.1) : meta.direction === 'SHORT' ? alpha(theme.palette.error.main, 0.1) : 'action.selected',
+                       color: meta.direction === 'LONG' ? 'success.main' : meta.direction === 'SHORT' ? 'error.main' : 'text.primary'
+                    }} 
+                 />
+                 <Typography variant="h6" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+                    {getEntryTitle(displayEntry)}
+                 </Typography>
+            </Stack>
+
+            <Stack direction="row" spacing={1}>
+                {!isEditing && (
+                    <>
+                    <IconButton size="small" onClick={() => setIsEditing(true)}><EditIcon fontSize="small" /></IconButton>
+                    <IconButton size="small" onClick={() => setShowDeleteConfirm(true)} color="error"><DeleteOutlineIcon fontSize="small" /></IconButton>
+                    </>
+                )}
+                <IconButton size="small" onClick={handleClose}><CloseIcon fontSize="small" /></IconButton>
+            </Stack>
         </DialogTitle>
 
-        <DialogContent dividers sx={{ p: { xs: 2, md: 3 } }}>
-          {mutationState.error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {mutationState.error}
-            </Alert>
-          )}
-          {mutationState.loading && mutationState.error === "Traitement de l'image..." && (
-             <Alert severity="info" sx={{ mb: 2 }}>Traitement de l'image...</Alert>
-          )}
 
-          {isEditing ? (
-            // --- VUE ÉDITION ---
-            <EditEntryForm
-              entry={editedEntry}
-              accountOptions={accountOptions}
-              brokerTrades={brokerTrades}
-              onDataChange={setEditedEntry}
-              onImageDelete={handleImageDelete}
-              onImageClick={(src) => setPreviewImageSrc(src)}
-              onSetMainImage={handleSetMainImage}
-            />
-          ) : (
-            // --- VUE LECTURE ---
-            <>
-              {isMinimalView ? (
-                <Stack spacing={3}>
-                   {(displayEntry.metadata?.grade ||
-                    (displayEntry.type === "trade" && displayEntry.metadata?.result)) && (
-                    <Paper
-                      variant="outlined"
-                      sx={(theme) => ({
-                        p: 2.5,
-                        bgcolor:
-                          theme.palette.mode === "dark"
-                            ? alpha(theme.palette.primary.main, 0.05)
-                            : alpha(theme.palette.primary.main, 0.08),
-                        borderColor:
-                          theme.palette.mode === "dark"
-                            ? alpha(theme.palette.primary.main, 0.3)
-                            : alpha(theme.palette.primary.main, 0.2),
-                      })}
-                    >
-                      <Stack
-                        direction="row"
-                        spacing={1.5}
-                        alignItems="flex-start"
-                      >
-                        <StarBorderIcon
-                          sx={{ color: "primary.main", mt: 0.5 }}
-                        />
-                        <Stack>
-                          <Typography variant="overline" color="primary.main">
-                            Note / Verdict
-                          </Typography>
-                          <Typography
-                            variant="h6"
-                            fontWeight={600}
-                            sx={{ lineHeight: 1.4 }}
-                          >
-                            {displayEntry.metadata?.grade || displayEntry.metadata?.result}
-                          </Typography>
-                        </Stack>
-                      </Stack>
-                    </Paper>
-                  )}
-                  
-                  <Grid container spacing={3}>
-                    {displayImages.length > 0 && (
-                      <Grid item xs={12} md={6}>
-                        <Stack spacing={1.5}>
-                          {/* 1. Image Principale (1ère image) */}
-                          <Box
-                            component="img"
-                            src={mainImage}
-                            alt="Capture d'écran principale"
-                            onClick={() => setPreviewImageSrc(mainImage)}
-                            sx={{
-                              width: "100%",
-                              maxHeight: 250, // Hauteur réduite
-                              objectFit: "contain",
-                              borderRadius: 2,
-                              border: "1px solid",
-                              borderColor: "divider",
-                              cursor: 'zoom-in',
-                              bgcolor: 'rgba(0,0,0,0.02)'
-                            }}
-                          />
-                          
-                          {/* 2. Autres images en vignettes horizontales */}
-                          {displayImages.length > 1 && (
-                            <Stack direction="row" spacing={1} sx={{ overflowX: 'auto', pb: 0.5 }}>
-                              {displayImages.slice(1).map((image, index) => (
-                                <Paper
-                                  key={index}
-                                  variant="outlined"
-                                  onClick={() => setPreviewImageSrc(image.src)}
-                                  sx={{
-                                    flexShrink: 0,
-                                    cursor: 'zoom-in',
-                                    overflow: 'hidden',
-                                    width: 80, // Largeur fixe
-                                    height: 60, // Hauteur fixe
-                                    bgcolor: 'action.hover'
-                                  }}
-                                >
-                                  <Box
-                                    component="img"
-                                    src={image.src}
-                                    alt={`Aperçu ${index + 2}`}
-                                    sx={{
-                                      width: "100%",
-                                      height: "100%",
-                                      objectFit: "cover",
-                                    }}
-                                  />
-                                </Paper>
-                              ))}
-                            </Stack>
-                          )}
-                        </Stack>
-                      </Grid>
-                    )}
-                    <Grid
-                      item
-                      xs={12}
-                      md={displayImages.length > 0 ? 6 : 12}
-                    >
-                      <Grid container spacing={2}>
-                        <MetaItem
-                          icon={<LabelIcon fontSize="small" />}
-                          label="Type"
-                        >
-                          <Chip
-                            label={
-                              typeLabel[displayEntry.type]?.chip || displayEntry.type
-                            }
-                            size="small"
-                            color={
-                              typeLabel[displayEntry.type]?.color || "default"
-                            }
+        {/* =========================================================
+            CONTENT
+           ========================================================= */}
+        {isEditing ? (
+             <DialogContent sx={{ p: 0 }}>
+               <Box sx={{ p: 3 }}>
+                  <EditEntryForm 
+                    entry={editedEntry}
+                    accountOptions={accountOptions}
+                    brokerTrades={brokerTrades}
+                    onDataChange={setEditedEntry}
+                    onImageDelete={handleImageDelete}
+                  />
+               </Box>
+               <DialogActions sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+                  <Button onClick={() => setIsEditing(false)} color="inherit">Annuler</Button>
+                  <Button onClick={handleUpdate} variant="contained" disabled={mutationState.loading}>
+                    {mutationState.loading ? "Sauvegarde..." : "Enregistrer"}
+                  </Button>
+               </DialogActions>
+             </DialogContent>
+        ) : (
+          <DialogContent sx={{ p: 0, height: '100%' }}>
+            <Grid container sx={{ height: '100%' }}>
+                
+                {/* === LEFT PANEL: NARRATIVE (65%) === */}
+                <Grid item xs={12} md={8} sx={{ p: 4, overflowY: 'auto', borderRight: { md: `1px solid ${theme.palette.divider}` } }}>
+                    
+                    {/* Meta Header */}
+                    <Stack direction="row" spacing={2} sx={{ mb: 3 }} alignItems="center">
+                         <Chip 
+                            icon={<CalendarTodayIcon sx={{ fontSize: '14px !important' }} />}
+                            label={formatDate(meta.date || displayEntry.createdAt)} 
+                            size="small" 
                             variant="outlined"
-                            sx={{ fontWeight: 600 }}
-                          />
-                        </MetaItem>
-                        {displayEntry.type === "trade" && (
-                          <MetaItem
-                            icon={<CheckCircleOutlineIcon fontSize="small" />}
-                            label="Résultat"
-                          >
-                            <Chip
-                              label={displayEntry.metadata?.result || "N/A"}
-                              size="small"
-                              color={resultTone(displayEntry.metadata?.result)}
-                              sx={{ fontWeight: 600 }}
-                            />
-                          </MetaItem>
-                        )}
-                        {displayEntry.type === "trade" && (
-                          <MetaItem
-                            icon={<AccountBalanceWalletIcon fontSize="small" />}
-                            label="Compte"
-                          >
-                            <Typography variant="body1" fontWeight={600}>
-                              {accountLabel || "Non renseigné"}
-                            </Typography>
-                          </MetaItem>
-                        )}
-                        {displayEntry.type === "trade" && (displayEntry.metadata?.brokerTradeId || linkedBrokerTrade) && (
-                          <MetaItem
-                            icon={<LinkIcon fontSize="small" />}
-                            label="Trade relié"
-                          >
-                            <Stack spacing={0.5}>
-                              <Typography variant="body1" fontWeight={600}>
-                                #{linkedBrokerTrade?.externalTradeId || displayEntry.metadata?.brokerTradeId}
-                              </Typography>
-                              {linkedBrokerTrade && (
-                                <Typography variant="caption" color="text.secondary">
-                                  {formatDate(
-                                    linkedBrokerTrade.closedAt || linkedBrokerTrade.openedAt,
-                                    { dateStyle: "medium", timeStyle: "short" }
-                                  )}
-                                </Typography>
-                              )}
-                            </Stack>
-                          </MetaItem>
-                        )}
-                        {displayEntry.type === "trade" && (
-                          <MetaItem
-                            icon={<TrendingUpIcon fontSize="small" />}
-                            label="Gain / Perte"
-                          >
-                            <Typography
-                              variant="body1"
-                              fontWeight={700}
-                              sx={{ color: (Number(displayEntry.metadata?.pnlAmount) || 0) >= 0 ? "#10b981" : "#ef4444" }}
-                            >
-                              {(() => {
-                                const amount = Number(displayEntry.metadata?.pnlAmount);
-                                if (!Number.isFinite(amount)) return "N/A";
-                                const symbol = getCurrencySymbol(
-                                  displayEntry.metadata?.pnlCurrency || resolvedAccount?.currency
-                                );
-                                const formatted = Math.abs(amount).toLocaleString("fr-FR", {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                });
-                                const sign = amount >= 0 ? "+" : "-";
-                                const percent = displayEntry.metadata?.pnlPercent;
-                                return `${sign}${symbol}${formatted}` +
-                                  (percent ? ` (${percent}%)` : "");
-                              })()}
-                            </Typography>
-                          </MetaItem>
-                        )}
-                        <MetaItem
-                          icon={<ShowChartIcon fontSize="small" />}
-                          label="Symbole(s)"
-                        >
-                          <Typography variant="body1" fontWeight={600}>
-                            {displayEntry.metadata?.symbol || "N/A"}
-                          </Typography>
-                        </MetaItem>
-                        <MetaItem
-                          icon={<TimerIcon fontSize="small" />}
-                          label="Timeframe(s)"
-                        >
-                          <Typography variant="body1" fontWeight={600}>
-                            {formatTimeframesForDisplay(displayEntry.metadata?.timeframe) || "N/A"}
-                          </Typography>
-                        </MetaItem>
-                        <MetaItem
-                          icon={<CalendarTodayIcon fontSize="small" />}
-                          label="Date"
-                        >
-                          <Typography variant="body1" fontWeight={600}>
-                            {formatDate(
-                              displayEntry.metadata?.date || displayEntry.createdAt,
-                              { dateStyle: "long" }
-                            )}
-                          </Typography>
-                        </MetaItem>
-                      </Grid>
-                    </Grid>
-                  </Grid>
-                </Stack>
-              ) : (
-                // --- VUE COMPLÈTE (JSON) ---
-                <>
-                  <Typography variant="caption" color="text.secondary">
-                    {formatDate(
-                      displayEntry.metadata?.date || displayEntry.createdAt,
-                      { dateStyle: "full" }
-                    )}
-                  </Typography>
-                  
-                  <Stack direction="row" spacing={1} sx={{mt: 2, flexWrap: 'wrap'}}>
-                  {displayImages.map((img, idx) => (
-                    <Box
-                      key={idx}
-                      component="img"
-                      src={img.src}
-                      alt={`Capture ${idx + 1}`}
-                      onClick={() => setPreviewImageSrc(img.src)}
-                      sx={{
-                        height: 100,
-                        width: 'auto',
-                        borderRadius: 1,
-                        border: "1px solid",
-                        borderColor: "divider",
-                        cursor: 'zoom-in'
-                      }}
-                    />
-                  ))}
-                  </Stack>
-                  
-                  <Typography
-                    variant="body1"
-                    sx={{
-                      whiteSpace: "pre-wrap",
-                      mt: 2,
-                      fontFamily: "monospace",
-                      fontSize: "0.9rem",
-                    }}
-                  >
-                    {displayEntry?.content}
-                  </Typography>
-                  <Box
-                    component="pre"
-                    sx={{
-                      fontSize: "0.8rem",
-                      opacity: 0.7,
-                      maxHeight: 200,
-                      overflowY: "auto",
-                      bgcolor: "action.hover",
-                      p: 1,
-                      borderRadius: 1,
-                      mt: 2,
-                    }}
-                  >
-                    {JSON.stringify(displayEntry?.metadata, null, 2)}
-                  </Box>
-                </>
-              )}
-            </>
-          )}
-        </DialogContent>
+                         />
+                         {meta.tags && meta.tags.map(tag => (
+                            <Chip key={tag} icon={<TagIcon sx={{ fontSize: '14px !important' }} />} label={tag} size="small" variant="outlined" />
+                         ))}
+                    </Stack>
+                    
+                    {/* The Content */}
+                    <Typography 
+                        variant="body1" 
+                        sx={{ 
+                            whiteSpace: 'pre-wrap', 
+                            lineHeight: 1.8, 
+                            fontSize: '1rem',
+                            color: 'text.primary',
+                            fontFamily: theme.typography.fontFamily
+                        }}
+                    >
+                        {displayEntry.content || "Aucune analyse rédigée."}
+                    </Typography>
 
-        <DialogActions
-          sx={{
-            justifyContent: "space-between",
-            p: { xs: 1, md: 2 },
-            pt: { xs: 1, md: 1.5 },
-          }}
-        >
-          {isEditing ? (
-            <Stack direction="row" spacing={1} justifyContent="space-between" width="100%">
-              <Button
-                variant="outlined"
-                color="secondary"
-                onClick={() => setIsEditing(false)}
-                disabled={mutationState.loading}
-              >
-                Annuler
-              </Button>
-              <Button
-                variant="contained"
-                onClick={handleUpdate}
-                disabled={mutationState.loading}
-                startIcon={mutationState.loading ? <CircularProgress size={16} color="inherit" /> : null}
-              >
-                {mutationState.loading ? "Sauvegarde..." : "Sauvegarder"}
-              </Button>
-            </Stack>
-          ) : (
-            <>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={!isMinimalView}
-                      onChange={() => setIsMinimalView((prev) => !prev)}
-                    />
-                  }
-                  label="Vue JSON"
-                  sx={{ color: "text.secondary", mr: 1 }}
-                />
-                <Button
-                  variant="outlined"
-                  color="error"
-                  size="small"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  startIcon={<DeleteForeverIcon />}
-                >
-                  Supprimer
-                </Button>
-              </Stack>
-              <Stack direction="row" spacing={1}>
-                <Button onClick={handleClose}>Fermer</Button>
-                <Button
-                  variant="contained"
-                  onClick={() => setIsEditing(true)}
-                  startIcon={<EditIcon />}
-                >
-                  Modifier
-                </Button>
-              </Stack>
-            </>
-          )}
-        </DialogActions>
+                </Grid>
+
+
+                {/* === RIGHT PANEL: FACTS & DATA (35%) === */}
+                <Grid item xs={12} md={4} sx={{ bgcolor: alpha(theme.palette.background.default, 0.4), display: 'flex', flexDirection: 'column' }}>
+                    
+                    {/* 1. FINANCIAL CARD (Top) */}
+                    {isTrade && (
+                        <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                            <Paper 
+                                elevation={0}
+                                sx={{ 
+                                    p: 2.5, 
+                                    borderRadius: 3, 
+                                    background: isWin 
+                                        ? `linear-gradient(135deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)` 
+                                        : isLoss
+                                            ? `linear-gradient(135deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%)`
+                                            : theme.palette.action.disabledBackground,
+                                    color: 'white',
+                                    boxShadow: theme.shadows[4],
+                                    position: 'relative',
+                                    overflow: 'hidden'
+                                }}
+                            >
+                                {/* Decorative Icon BG */}
+                                <Box sx={{ position: 'absolute', right: -10, top: -10, opacity: 0.2, transform: 'rotate(-10deg)' }}>
+                                    {isWin ? <TrendingUpIcon sx={{ fontSize: 100 }} /> : <TrendingDownIcon sx={{ fontSize: 100 }} />}
+                                </Box>
+
+                                <Typography variant="caption" fontWeight={600} sx={{ opacity: 0.9 }}>RÉSULTAT NET</Typography>
+                                <Stack direction="row" alignItems="baseline" spacing={1}>
+                                    <Typography variant="h4" fontWeight={800}>
+                                        {pnlVal >= 0 ? "+" : ""}{pnlVal} {getCurrencySymbol(meta.pnlCurrency)}
+                                    </Typography>
+                                </Stack>
+                                {meta.pnlPercent && (
+                                    <Typography variant="body2" fontWeight={600} sx={{ opacity: 0.9, mt: 0.5 }}>
+                                        {meta.pnlPercent}% du capital
+                                    </Typography>
+                                )}
+                            </Paper>
+
+                            <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+                                <Paper sx={{ flex: 1, p: 1, textAlign: 'center', bgcolor: 'background.paper' }}>
+                                    <Typography variant="caption" color="text.secondary">R:R</Typography>
+                                    <Typography variant="subtitle1" fontWeight={700}>{meta.rr || "-"}</Typography>
+                                </Paper>
+                                <Paper sx={{ flex: 1, p: 1, textAlign: 'center', bgcolor: 'background.paper' }}>
+                                    <Typography variant="caption" color="text.secondary">LOTS</Typography>
+                                    <Typography variant="subtitle1" fontWeight={700}>{meta.lotSize || "-"}</Typography>
+                                </Paper>
+                            </Stack>
+                        </Box>
+                    )}
+
+                    {/* 2. TECHNICAL SPECS (List) */}
+                    <Box sx={{ p: 3, flex: 1, overflowY: 'auto' }}>
+                        <Typography variant="overline" color="text.secondary" fontWeight={800}>DÉTAILS TECHNIQUES</Typography>
+                        
+                        <Stack spacing={0.5} sx={{ mt: 1, mb: 3 }}>
+                            <DataRow icon={<ShowChartIcon fontSize="small" />} label="Symbole" value={meta.symbol} highlight />
+                            <DataRow icon={<TimerIcon fontSize="small" />} label="Timeframe" value={formatTimeframesForDisplay(meta.timeframe)} />
+                            <DataRow icon={<InsertLinkIcon fontSize="small" />} label="Setup" value={meta.setup} />
+                            <DataRow icon={<AccountBalanceIcon fontSize="small" />} label="Compte" value={meta.accountName} />
+                        </Stack>
+                        
+                        {(meta.entryPrice || meta.exitPrice) && (
+                            <>
+                                <Typography variant="overline" color="text.secondary" fontWeight={800}>EXÉCUTION</Typography>
+                                <Stack spacing={0.5} sx={{ mt: 1 }}>
+                                    <DataRow icon={<Typography variant="caption" fontWeight={900} sx={{ width: 20, textAlign: 'center' }}>IN</Typography>} label="Entrée" value={meta.entryPrice} />
+                                    <DataRow icon={<Typography variant="caption" fontWeight={900} sx={{ width: 20, textAlign: 'center' }}>OUT</Typography>} label="Sortie" value={meta.exitPrice} />
+                                </Stack>
+                            </>
+                        )}
+                        
+                        {/* 3. MEDIA GALLERY (Bottom of Sidebar) */}
+                        {images.length > 0 && (
+                             <Box sx={{ mt: 4 }}>
+                                <Typography variant="overline" color="text.secondary" fontWeight={800} sx={{ mb: 1, display: 'block' }}>
+                                    PREUVES VISUELLES ({images.length})
+                                </Typography>
+                                <Grid container spacing={1}>
+                                    {images.map((img, idx) => (
+                                        <Grid item xs={6} key={idx}>
+                                            <Box 
+                                                component="img" 
+                                                src={img.src} 
+                                                onClick={() => setPreviewImageSrc(img.src)}
+                                                sx={{ 
+                                                    width: '100%', 
+                                                    aspectRatio: '16/9', 
+                                                    objectFit: 'cover', 
+                                                    borderRadius: 2, 
+                                                    cursor: 'zoom-in',
+                                                    border: `1px solid ${theme.palette.divider}`,
+                                                    transition: 'transform 0.2s',
+                                                    '&:hover': { transform: 'scale(1.02)' }
+                                                }} 
+                                            />
+                                        </Grid>
+                                    ))}
+                                </Grid>
+                             </Box>
+                        )}
+                    </Box>
+
+                </Grid>
+            </Grid>
+          </DialogContent>
+        )}
       </Dialog>
 
-      <Dialog
-        open={showDeleteConfirm}
-        onClose={() => setShowDeleteConfirm(false)}
-        maxWidth="xs"
-      >
-        <DialogTitle>Confirmer la suppression</DialogTitle>
+      {/* --- CONFIRMATION DELETE --- */}
+      <Dialog open={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)}>
+        <DialogTitle>Supprimer cette entrée ?</DialogTitle>
         <DialogContent>
-          <Typography>
-            Voulez-vous vraiment supprimer cette entrée ? Cette action est
-            irréversible.
-          </Typography>
-          {mutationState.error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {mutationState.error}
-            </Alert>
-          )}
+          <Typography>Cette action est irréversible. Êtes-vous sûr ?</Typography>
+          {mutationState.error && <Alert severity="error" sx={{ mt: 2 }}>{mutationState.error}</Alert>}
         </DialogContent>
         <DialogActions>
-          <Button
-            onClick={() => setShowDeleteConfirm(false)}
-            disabled={mutationState.loading}
-          >
-            Annuler
-          </Button>
-          <Button
-            onClick={handleDelete}
-            color="error"
-            variant="contained"
-            disabled={mutationState.loading}
-            startIcon={mutationState.loading ? <CircularProgress size={16} color="inherit" /> : null}
-          >
-            {mutationState.loading ? "Suppression..." : "Supprimer"}
-          </Button>
+          <Button onClick={() => setShowDeleteConfirm(false)}>Annuler</Button>
+          <Button onClick={handleDelete} color="error" variant="contained">Supprimer</Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog
-        open={Boolean(previewImageSrc)}
-        onClose={() => setPreviewImageSrc(null)}
-        maxWidth="lg"
-        PaperProps={{
-          sx: {
-            bgcolor: 'transparent',
-            boxShadow: 'none',
-            overflow: 'hidden'
-          }
-        }}
+      {/* --- IMAGE PREVIEW MODAL --- */}
+      <Dialog 
+         open={!!previewImageSrc} 
+         onClose={() => setPreviewImageSrc(null)}
+         maxWidth="xl"
+         PaperProps={{ sx: { bgcolor: 'transparent', boxShadow: 'none' } }}
       >
-        <Box
-          component="img"
-          src={previewImageSrc || ""}
-          alt="Aperçu"
-          onClick={() => setPreviewImageSrc(null)}
-          sx={{
-            width: '100%',
-            height: 'auto',
-            maxHeight: '90vh',
-            objectFit: 'contain',
-            cursor: 'zoom-out'
-          }}
-        />
+         <Box 
+            component="img" 
+            src={previewImageSrc} 
+            onClick={() => setPreviewImageSrc(null)}
+            sx={{ maxWidth: '95vw', maxHeight: '95vh', objectFit: 'contain', cursor: 'zoom-out' }} 
+         />
       </Dialog>
     </>
   );

@@ -1,64 +1,90 @@
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
 import DoneRoundedIcon from "@mui/icons-material/DoneRounded";
+import LabelIcon from "@mui/icons-material/Label";
+import NumbersIcon from "@mui/icons-material/Numbers";
 import SaveIcon from "@mui/icons-material/Save";
-import { Alert, alpha, Autocomplete, Box, Button, Chip, CircularProgress, Divider, IconButton, InputAdornment, MenuItem, Paper, Stack, TextField, Tooltip, Typography } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import BrandLogo from "./BrandLogo";
-import { getCurrencySymbol } from "../utils/accountUtils";
+import TrendingDownIcon from "@mui/icons-material/TrendingDown";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 
-// Simule un rendu Markdown simple (identique à l'ancien AnalysisDisplay)
+import {
+  Alert,
+  alpha,
+  Autocomplete,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Divider,
+  InputAdornment,
+  MenuItem,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+  useMediaQuery,
+  useTheme
+} from "@mui/material";
+import { useEffect, useMemo, useState } from "react";
+import { getCurrencySymbol } from "../utils/accountUtils";
+import BrandLogo from "./BrandLogo";
+
+// --- Visualisateur Markdown (Clean & Minimaliste) ---
 const SimpleMarkdownViewer = ({ content }) => {
+  const theme = useTheme();
   const blocks = content.split("\n").reduce((acc, line) => {
     const trimmed = line.trim();
     if (trimmed === "") {
-      if (acc.length > 0 && acc[acc.length - 1].type !== "space") {
-        acc.push({ type: "space", content: "" });
-      }
+      if (acc.length > 0 && acc[acc.length - 1].type !== "space") acc.push({ type: "space" });
     } else if (trimmed.match(/^(\d+\.|-|\*)\s/)) {
-      if (acc.length > 0 && acc[acc.length - 1].type === "list") {
-        acc[acc.length - 1].items.push(trimmed.replace(/^(\d+\.|-|\*)\s/, ""));
-      } else {
-        acc.push({
-          type: "list",
-          items: [trimmed.replace(/^(\d+\.|-|\*)\s/, "")],
-        });
-      }
+      const listType = acc.length > 0 && acc[acc.length - 1].type === "list";
+      if (listType) acc[acc.length - 1].items.push(trimmed.replace(/^(\d+\.|-|\*)\s/, ""));
+      else acc.push({ type: "list", items: [trimmed.replace(/^(\d+\.|-|\*)\s/, "")] });
     } else if (trimmed.match(/^(#+)\s/)) {
       acc.push({ type: "heading", content: trimmed.replace(/^(#+)\s/, "") });
     } else {
-      if (acc.length > 0 && acc[acc.length - 1].type === "paragraph") {
-        acc[acc.length - 1].content += " " + trimmed;
-      } else {
-        acc.push({ type: "paragraph", content: trimmed });
-      }
+      const paraType = acc.length > 0 && acc[acc.length - 1].type === "paragraph";
+      if (paraType) acc[acc.length - 1].content += " " + trimmed;
+      else acc.push({ type: "paragraph", content: trimmed });
     }
     return acc;
   }, []);
 
   return (
-    <Stack spacing={1.5}>
+    <Stack spacing={1.5} sx={{ color: "text.primary" }}>
       {blocks.map((block, index) => {
         if (block.type === "paragraph") {
           return (
-            <Typography key={index} variant="body1" sx={{ fontFamily: `"JetBrains Mono","Fira Code",monospace`, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+            <Typography key={index} variant="body2" sx={{ 
+              fontFamily: theme.typography.fontFamily, 
+              lineHeight: 1.8, 
+              fontSize: "0.95rem",
+              color: alpha(theme.palette.text.primary, 0.9)
+            }}>
               {block.content}
             </Typography>
           );
         }
         if (block.type === "heading") {
           return (
-            <Typography key={index} variant="h6" sx={{ fontWeight: 600, mt: 2 }}>
+            <Typography key={index} variant="h6" sx={{ 
+              fontWeight: 700, 
+              mt: 2, 
+              fontSize: "1rem", 
+              color: theme.palette.secondary.main,
+              letterSpacing: "0.02em"
+            }}>
               {block.content}
             </Typography>
           );
         }
         if (block.type === "list") {
           return (
-            <Box component="ul" key={index} sx={{ pl: 3, m: 0 }}>
-              {block.items.map((item, itemIndex) => (
-                <Typography component="li" key={itemIndex} sx={{ fontFamily: `"JetBrains Mono","Fira Code",monospace`, lineHeight: 1.7 }}>
+            <Box component="ul" key={index} sx={{ pl: 2.5, m: 0 }}>
+              {block.items.map((item, idx) => (
+                <Typography component="li" key={idx} variant="body2" sx={{ lineHeight: 1.7, mb: 0.5 }}>
                   {item}
                 </Typography>
               ))}
@@ -71,33 +97,17 @@ const SimpleMarkdownViewer = ({ content }) => {
   );
 };
 
-/**
- * Affiche la réponse de l'IA ET les métadonnées éditables.
- * Remplace AnalysisDisplay.js
- */
 const formatBrokerTradeOption = (trade) => {
   if (!trade) return "";
-  const date = trade.closedAt || trade.openedAt;
-  const dateLabel = date
-    ? new Date(date).toLocaleString("fr-FR", {
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "";
-  const legsLabel = trade.fillsCount > 1 ? ` (${trade.fillsCount} ordres)` : "";
   const pnlValue = Number(trade.pnl);
-  const pnlLabel = Number.isFinite(pnlValue)
-    ? ` • ${pnlValue >= 0 ? "+" : "-"}${Math.abs(pnlValue).toFixed(2)} ${trade.currency || ""}`
-    : "";
-  return `${trade.symbol || "Trade"} • ${trade.direction || ""}${legsLabel} • ${dateLabel}${pnlLabel}`;
+  const pnlStr = Number.isFinite(pnlValue) ? `${pnlValue >= 0 ? "+" : ""}${pnlValue.toFixed(2)}` : "";
+  return `${trade.symbol} • ${trade.direction} • ${pnlStr}`;
 };
 
 const EditableAnalysis = ({
   content,
-  initialMetadata, // Reçoit les métadonnées brutes de l'IA
-  onSave, // Renvoie le 'content' et les 'metadata' finales
+  initialMetadata,
+  onSave,
   saving,
   saveError,
   saveSuccess,
@@ -107,334 +117,312 @@ const EditableAnalysis = ({
   brokerTrades = [],
 }) => {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isDark = theme.palette.mode === "dark";
-  const [copied, setCopied] = useState(false);
   
-  // État local pour les champs éditables
+  const [copied, setCopied] = useState(false);
   const [editableMeta, setEditableMeta] = useState(initialMetadata || {});
 
-  // Synchroniser l'état local si les métadonnées initiales changent
-  useEffect(() => {
-    setEditableMeta(initialMetadata || {});
-  }, [initialMetadata]);
+  useEffect(() => { setEditableMeta(initialMetadata || {}); }, [initialMetadata]);
+  useEffect(() => { if (copied) setTimeout(() => setCopied(false), 2000); }, [copied]);
 
-  useEffect(() => {
-    setCopied(false);
-  }, [content]);
-
-  useEffect(() => {
-    if (!copied) return undefined;
-    const timeout = setTimeout(() => setCopied(false), 1800);
-    return () => clearTimeout(timeout);
-  }, [copied]);
-
-  // Préselectionner un compte si nécessaire
+  // Auto-select account logic
   useEffect(() => {
     if (editableMeta.accountId || accountOptions.length === 0) return;
     const fallbackId = defaultAccountId || accountOptions[0]?.id;
-    if (!fallbackId) return;
-    const fallbackAccount = accountOptions.find((acc) => acc.id === fallbackId);
-    setEditableMeta((prev) => ({
-      ...prev,
-      accountId: fallbackId,
-      accountName: fallbackAccount?.name,
-      pnlCurrency: fallbackAccount?.currency || prev.pnlCurrency,
-    }));
+    if (fallbackId) {
+      const acc = accountOptions.find((a) => a.id === fallbackId);
+      setEditableMeta((prev) => ({
+        ...prev,
+        accountId: fallbackId,
+        accountName: acc?.name,
+        pnlCurrency: acc?.currency || prev.pnlCurrency,
+      }));
+    }
   }, [accountOptions, defaultAccountId, editableMeta.accountId]);
 
-  const selectedAccount = accountOptions.find(
-    (acc) => acc.id === (editableMeta.accountId || defaultAccountId)
-  ) || (accountOptions.length === 1 ? accountOptions[0] : null);
-
+  const selectedAccount = accountOptions.find(a => a.id === (editableMeta.accountId || defaultAccountId));
+  
   const availableBrokerTrades = useMemo(() => {
-    if (!brokerTrades.length) return [];
-    if (!selectedAccount) return brokerTrades;
-    return brokerTrades.filter((trade) => trade.brokerAccountId === selectedAccount.id);
+    if (!brokerTrades.length || !selectedAccount) return brokerTrades;
+    return brokerTrades.filter((t) => t.brokerAccountId === selectedAccount.id);
   }, [brokerTrades, selectedAccount]);
 
   const selectedBrokerTrade = useMemo(() => {
     if (!editableMeta.brokerTradeId) return null;
-    return (
-      availableBrokerTrades.find(
-        (trade) =>
-          trade.id === editableMeta.brokerTradeId ||
-          (Array.isArray(trade.fillIds) && trade.fillIds.includes(editableMeta.brokerTradeId))
-      ) || null
-    );
+    return availableBrokerTrades.find(t => t.id === editableMeta.brokerTradeId || (t.fillIds || []).includes(editableMeta.brokerTradeId)) || null;
   }, [availableBrokerTrades, editableMeta.brokerTradeId]);
 
-  const handleCopy = useCallback(() => {
-    if (!content) return;
-    navigator.clipboard.writeText(content).then(() => {
-      setCopied(true);
-    });
-  }, [content]);
-
-  // Gérer les changements de champs
-  const handleMetaChange = (field) => (event) => {
-    setEditableMeta(prev => ({ ...prev, [field]: event.target.value }));
-  };
-
-  const handleTagsChange = (event, newValue) => {
-    setEditableMeta(prev => ({
-      ...prev,
-      // Gère l'ajout de nouvelles étiquettes à la volée
-      tags: newValue.map(value => (typeof value === 'string' ? value : value.inputValue)),
-    }));
-  };
-
-  const handleAccountChange = (event) => {
-    const nextAccount = accountOptions.find((acc) => acc.id === event.target.value);
-    setEditableMeta((prev) => ({
-      ...prev,
-      accountId: nextAccount?.id,
-      accountName: nextAccount?.name,
-      pnlCurrency: nextAccount?.currency || prev.pnlCurrency,
-      brokerTradeId: undefined,
-      brokerTradeLabel: undefined,
-    }));
-  };
-
+  const handleMetaChange = (field) => (e) => setEditableMeta(prev => ({ ...prev, [field]: e.target.value }));
+  const handleTagsChange = (e, v) => setEditableMeta(prev => ({ ...prev, tags: v.map(val => (typeof val === 'string' ? val : val.inputValue)) }));
+  
   const handleBrokerTradeChange = (_, newTrade) => {
     if (!newTrade) {
-      setEditableMeta((prev) => ({
-        ...prev,
-        brokerTradeId: undefined,
-        brokerTradeLabel: undefined,
-      }));
+      setEditableMeta(prev => ({ ...prev, brokerTradeId: undefined, brokerTradeLabel: undefined }));
       return;
     }
-    setEditableMeta((prev) => ({
+    setEditableMeta(prev => ({
       ...prev,
       brokerTradeId: newTrade.id,
       brokerTradeLabel: formatBrokerTradeOption(newTrade),
       accountId: newTrade.brokerAccountId,
-      accountName: newTrade.accountName,
       pnlAmount: newTrade.pnl,
-      pnlCurrency: newTrade.currency,
       symbol: prev.symbol || newTrade.symbol,
     }));
   };
 
-  // Appeler onSave avec le contenu et les métadonnées finales
-  const handleSaveClick = () => {
-    onSave(content, editableMeta);
-  };
+  const handleCopy = () => { navigator.clipboard.writeText(content).then(() => setCopied(true)); };
+  const handleSave = () => { onSave(content, editableMeta); };
 
-  const normalizedEntryType = (editableMeta.entryType || entryType || "analyse").toLowerCase();
-  const isTradeEntry = normalizedEntryType === "trade";
-
-  const allTags = editableMeta.tags || [];
+  const isTrade = (editableMeta.entryType || entryType || "analyse").toLowerCase() === "trade";
+  const pnlVal = Number(editableMeta.pnlAmount);
+  const isWin = pnlVal > 0;
+  const isLoss = pnlVal < 0;
+  const pnlColor = isWin ? theme.palette.success.main : isLoss ? theme.palette.error.main : theme.palette.text.secondary;
 
   return (
-    <Stack direction="row" spacing={2} sx={{ width: "100%" }}>
-      {/* Avatar IA */}
-      <Box
-        sx={{
-          width: 40,
-          height: 40,
-          borderRadius: "50%",
-          bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-        }}
-      >
-        <BrandLogo glyphSize={24} showText={false} />
+    <Stack direction="row" spacing={2} sx={{ width: "100%", alignItems: "flex-start" }}>
+      
+      {/* Avatar (Sticky on Desktop) */}
+      <Box sx={{ 
+        position: isMobile ? "static" : "sticky", 
+        top: 20,
+        mt: 1.5
+      }}>
+         <Box sx={{
+            width: 36, height: 36, borderRadius: "12px",
+            bgcolor: alpha(theme.palette.primary.main, 0.1),
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: theme.palette.primary.main
+         }}>
+            <BrandLogo glyphSize={20} showText={false} />
+         </Box>
       </Box>
 
-      {/* Bulle de Contenu */}
-      <Paper
-        sx={{
+      {/* Main Card Container - SPLIT VIEW */}
+      <Paper elevation={0} sx={{
+        flex: 1,
+        display: "flex",
+        flexDirection: { xs: "column", md: "row" }, // COLUMN on Mobile, ROW on Desktop
+        borderRadius: 3,
+        overflow: "hidden",
+        border: `1px solid ${theme.palette.divider}`,
+        bgcolor: theme.palette.background.paper,
+        boxShadow: isDark ? "0 8px 30px rgba(0,0,0,0.3)" : "0 8px 30px rgba(0,0,0,0.05)"
+      }}>
+
+        {/* === LEFT PANEL: CONTENT (65%) === */}
+        <Box sx={{ 
+          flex: { md: "1 1 65%" }, 
           p: { xs: 2, md: 3 },
-          flex: 1,
-          borderRadius: 4,
-          borderTopLeftRadius: 0, // Style "bulle"
-          background: isDark
-            ? "linear-gradient(160deg, rgba(8,13,28,0.96) 0%, rgba(5,8,18,0.9) 100%)"
-            : alpha(theme.palette.common.white, 0.7),
-          border: `1px solid ${theme.palette.divider}`,
-          boxShadow: isDark
-            ? "0 20px 40px rgba(0,0,0,0.4)"
-            : "0 20px 40px rgba(15,23,42,0.1)",
-        }}
-      >
-        <Stack spacing={2.5}>
-          {/* 1. L'analyse texte (non éditable) */}
+          borderRight: { md: `1px solid ${theme.palette.divider}` }
+        }}>
+          {/* Header Title */}
+          <TextField
+            fullWidth
+            variant="standard"
+            placeholder="Titre de l'analyse..."
+            value={editableMeta.title || ""}
+            onChange={handleMetaChange("title")}
+            InputProps={{
+              disableUnderline: true,
+              sx: { 
+                fontSize: "1.25rem", 
+                fontWeight: 700, 
+                mb: 2,
+                color: theme.palette.text.primary 
+              }
+            }}
+          />
+          
+          <Divider sx={{ mb: 3, borderColor: alpha(theme.palette.divider, 0.5) }} />
+
+          {/* Content Viewer */}
           <SimpleMarkdownViewer content={content} />
           
-          <Divider />
+          {/* Copy Action (Inline for left panel) */}
+          <Box sx={{ mt: 4, display: "flex", gap: 1 }}>
+            <Button 
+              size="small" 
+              startIcon={copied ? <DoneRoundedIcon /> : <ContentCopyRoundedIcon />}
+              onClick={handleCopy}
+              sx={{ color: "text.secondary", fontSize: "0.75rem" }}
+            >
+              {copied ? "Texte copié" : "Copier le texte"}
+            </Button>
+          </Box>
+        </Box>
+
+        {/* === RIGHT PANEL: INSPECTOR / METADATA (35%) === */}
+        <Box sx={{ 
+          flex: { md: "0 0 320px" }, // Fixed width on desktop
+          bgcolor: isDark ? alpha(theme.palette.background.default, 0.4) : alpha(theme.palette.background.default, 0.6),
+          p: 2.5,
+          display: "flex",
+          flexDirection: "column",
+          gap: 2.5
+        }}>
           
-          {/* 2. Le formulaire de métadonnées éditable */}
+          <Typography variant="overline" sx={{ color: "text.secondary", fontWeight: 700, letterSpacing: "0.1em" }}>
+            Propriétés
+          </Typography>
+
+          {/* 1. Context Fields */}
           <Stack spacing={2}>
-            <Typography variant="overline" color="text.secondary">
-              Valider les métadonnées
-            </Typography>
-            <TextField
-              label="Titre de l'analyse"
-              variant="outlined"
-              size="small"
-              fullWidth
-              value={editableMeta.title || ""}
-              onChange={handleMetaChange("title")}
-            />
-          <Stack direction={{xs: "column", sm: "row"}} spacing={2}>
-            <TextField
-              label="Symbole(s)"
-                variant="outlined"
+             <TextField
+                label="Symbole"
                 size="small"
+                variant="outlined"
+                fullWidth
                 value={editableMeta.symbol || ""}
                 onChange={handleMetaChange("symbol")}
-                sx={{flex: 1}}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start"><NumbersIcon fontSize="inherit" /></InputAdornment>,
+                  sx: { bgcolor: theme.palette.background.paper }
+                }}
               />
               <TextField
-                label="Timeframe(s)"
-                variant="outlined"
+                label="Timeframe"
                 size="small"
+                variant="outlined"
+                fullWidth
                 value={editableMeta.timeframe || ""}
                 onChange={handleMetaChange("timeframe")}
-                sx={{flex: 1}}
-            />
+                InputProps={{
+                  startAdornment: <InputAdornment position="start"><CalendarTodayIcon fontSize="inherit" /></InputAdornment>,
+                  sx: { bgcolor: theme.palette.background.paper }
+                }}
+              />
           </Stack>
-          {isTradeEntry && accountOptions.length > 0 && (
+
+          <Divider sx={{ borderStyle: "dashed" }} />
+
+          {/* 2. Financials (Only if Trade) */}
+          {isTrade && (
             <Stack spacing={2}>
-              <TextField
-                select
-                label="Compte associé"
-                value={editableMeta.accountId || selectedAccount?.id || ""}
-                onChange={handleAccountChange}
-                size="small"
-                fullWidth
-              >
-                {accountOptions.map((account) => (
-                  <MenuItem key={account.id} value={account.id}>
-                    {account.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              {availableBrokerTrades.length > 0 && (
+               <TextField
+                  select
+                  label="Compte"
+                  size="small"
+                  fullWidth
+                  value={editableMeta.accountId || selectedAccount?.id || ""}
+                  onChange={(e) => {
+                    const acc = accountOptions.find(a => a.id === e.target.value);
+                    setEditableMeta(prev => ({ ...prev, accountId: acc?.id, accountName: acc?.name, pnlCurrency: acc?.currency }));
+                  }}
+                  InputProps={{ sx: { bgcolor: theme.palette.background.paper } }}
+                >
+                  {accountOptions.map((acc) => <MenuItem key={acc.id} value={acc.id}>{acc.name}</MenuItem>)}
+               </TextField>
+
+               {/* PnL Highlight Box */}
+               <Paper variant="outlined" sx={{ 
+                 p: 1.5, 
+                 bgcolor: alpha(pnlColor, 0.05), 
+                 borderColor: alpha(pnlColor, 0.3),
+                 display: "flex",
+                 flexDirection: "column",
+                 gap: 1
+               }}>
+                 <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="caption" color="text.secondary">Résultat (PnL)</Typography>
+                    {isWin ? <TrendingUpIcon sx={{ color: pnlColor, fontSize: 18 }} /> : isLoss ? <TrendingDownIcon sx={{ color: pnlColor, fontSize: 18 }} /> : <AccountBalanceWalletIcon sx={{ color: "text.disabled", fontSize: 18 }} />}
+                 </Stack>
+                 <Stack direction="row" spacing={1}>
+                   <TextField
+                      variant="standard"
+                      placeholder="0.00"
+                      type="number"
+                      value={editableMeta.pnlAmount ?? ""}
+                      onChange={handleMetaChange("pnlAmount")}
+                      InputProps={{
+                        disableUnderline: true,
+                        sx: { fontSize: "1.4rem", fontWeight: 700, color: pnlColor }
+                      }}
+                      sx={{ flex: 1 }}
+                   />
+                   <Typography sx={{ alignSelf: "center", color: pnlColor, fontWeight: 600 }}>
+                      {getCurrencySymbol(editableMeta.pnlCurrency)}
+                   </Typography>
+                 </Stack>
+               </Paper>
+
+               {availableBrokerTrades.length > 0 && (
                 <Autocomplete
                   options={availableBrokerTrades}
                   value={selectedBrokerTrade}
                   onChange={handleBrokerTradeChange}
                   getOptionLabel={formatBrokerTradeOption}
-                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  isOptionEqualToValue={(o, v) => o.id === v.id}
                   renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Associer une position importée"
-                      size="small"
-                      helperText="Reliez cette analyse à une position importée"
-                    />
+                    <TextField {...params} label="Lier import broker" size="small" sx={{ bgcolor: theme.palette.background.paper }} />
                   )}
                 />
-              )}
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                <TextField
-                  label="Gain / Perte"
-                  variant="outlined"
-                  size="small"
-                  type="number"
-                  value={editableMeta.pnlAmount ?? ""}
-                  onChange={handleMetaChange("pnlAmount")}
-                  helperText="Utilisez un montant positif pour un gain, négatif pour une perte."
-                  fullWidth
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <Box sx={{ pr: 0.5, fontWeight: 500, color: "text.secondary" }}>
-                          {getCurrencySymbol(editableMeta.pnlCurrency || selectedAccount?.currency)}
-                        </Box>
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-                <TextField
-                  label="% net (optionnel)"
-                  variant="outlined"
-                  size="small"
-                  type="number"
-                  value={editableMeta.pnlPercent ?? ""}
-                  onChange={handleMetaChange("pnlPercent")}
-                  helperText="Par rapport au capital du compte"
-                  fullWidth
-                />
-              </Stack>
+               )}
             </Stack>
           )}
-          <Autocomplete
+
+          {/* 3. Tags */}
+          <Box sx={{ flex: 1 }}>
+            <Autocomplete
               multiple
-              freeSolo // Permet d'ajouter des tags qui ne sont pas dans la liste
-              options={[]} // On pourrait charger les tags existants ici
-              value={allTags}
+              freeSolo
+              options={[]}
+              value={editableMeta.tags || []}
               onChange={handleTagsChange}
               renderTags={(value, getTagProps) =>
                 value.map((option, index) => (
-                  <Chip variant="outlined" label={option} size="small" {...getTagProps({ index })} />
+                  <Chip 
+                    label={option} 
+                    size="small" 
+                    {...getTagProps({ index })} 
+                    sx={{ bgcolor: alpha(theme.palette.secondary.main, 0.1), color: theme.palette.secondary.main, border: "none", borderRadius: 1 }}
+                  />
                 ))
               }
               renderInput={(params) => (
-                <TextField
-                  {...params}
-                  variant="outlined"
-                  label="Tags"
+                <TextField 
+                  {...params} 
+                  label="Tags" 
+                  placeholder="Stratégie, Psy..." 
                   size="small"
-                  placeholder="Ajouter des tags..."
+                  InputProps={{ ...params.InputProps, startAdornment: (
+                    <>
+                      <InputAdornment position="start"><LabelIcon fontSize="inherit" sx={{ opacity: 0.5 }} /></InputAdornment>
+                      {params.InputProps.startAdornment}
+                    </>
+                  ), sx: { bgcolor: theme.palette.background.paper } }}
                 />
               )}
             />
-          </Stack>
+          </Box>
 
-          <Divider />
-          
-          {/* 3. Les actions */}
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Tooltip title={copied ? "Copié !" : "Copier l'analyse"}>
-              <IconButton onClick={handleCopy} size="small">
-                {copied ? <DoneRoundedIcon fontSize="small" color="success" /> : <ContentCopyRoundedIcon fontSize="small" />}
-              </IconButton>
-            </Tooltip>
-            
+          {/* 4. Action Button (Bottom of Sidebar) */}
+          <Box sx={{ mt: "auto", pt: 2 }}>
+            {saveError && <Alert severity="error" sx={{ mb: 2, fontSize: "0.8rem" }}>{saveError}</Alert>}
             <Button
+              fullWidth
               variant="contained"
-              color="primary"
-              size="small"
-              startIcon={
-                saving ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : saveSuccess ? (
-                  <CheckCircleIcon fontSize="small" />
-                ) : (
-                  <SaveIcon fontSize="small" />
-                )
-              }
-              onClick={handleSaveClick} // Utilise le nouveau handler
+              size="large"
+              onClick={handleSave}
               disabled={saving || !!saveSuccess}
+              startIcon={saving ? <CircularProgress size={20} color="inherit" /> : saveSuccess ? <CheckCircleIcon /> : <SaveIcon />}
               sx={{
-                borderRadius: 99,
-                bgcolor: saveSuccess ? "success.main" : "primary.main",
+                bgcolor: saveSuccess ? "success.main" : theme.palette.primary.main,
+                color: theme.palette.primary.contrastText,
+                py: 1.2,
+                fontWeight: 600,
+                boxShadow: `0 4px 14px ${alpha(saveSuccess ? theme.palette.success.main : theme.palette.primary.main, 0.4)}`,
                 "&:hover": {
                   bgcolor: saveSuccess ? "success.dark" : "primary.dark",
                 }
               }}
             >
-              {saving
-                ? "Sauvegarde..."
-                : saveSuccess
-                ? "Enregistré !"
-                : "Enregistrer au Journal"}
+              {saveSuccess ? "Enregistré !" : "Valider l'entrée"}
             </Button>
-          </Stack>
-          
-          {/* Feedback de sauvegarde */}
-          {saveError && (
-            <Alert severity="error" sx={{ borderRadius: 2, mt: 1 }}>
-              {saveError}
-            </Alert>
-          )}
+          </Box>
 
-        </Stack>
+        </Box>
       </Paper>
     </Stack>
   );
