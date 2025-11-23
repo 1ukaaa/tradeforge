@@ -6,7 +6,8 @@ const generateText = async (req, res) => {
     const result = await geminiService.generateAnalysis(req.body);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ result: err.message });
+    const status = err?.status || (err?.name === "RateLimitError" ? 429 : 500);
+    res.status(status).json({ error: err.message });
   }
 };
 
@@ -15,7 +16,8 @@ const generateStructured = async (req, res) => {
     const result = await geminiService.generateStructuredAnalysis(req.body);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    const status = err?.status || (err?.name === "RateLimitError" ? 429 : 500);
+    res.status(status).json({ error: err.message });
   }
 };
 
@@ -24,7 +26,8 @@ const generateImage = async (req, res) => {
     const result = await geminiService.generateImage(req.body || {});
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    const status = err?.status || (err?.name === "RateLimitError" ? 429 : 500);
+    res.status(status).json({ error: err.message });
   }
 };
 

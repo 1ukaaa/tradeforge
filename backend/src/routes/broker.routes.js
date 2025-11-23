@@ -4,7 +4,11 @@ const multer = require('multer');
 const brokerController = require('../controllers/broker.controller');
 
 const router = Router();
-const upload = multer();
+const upload = multer({
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5 Mo max
+  },
+});
 
 router.get('/summary', brokerController.getBrokerSummary);
 router.get('/accounts', brokerController.getBrokerAccounts);

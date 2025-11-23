@@ -1,5 +1,6 @@
 // backend/src/services/gemini.service.js
 const axios = require("axios");
+const { enforceRateLimit } = require("../core/rateLimiter");
 const { getPromptVariant, getStructuredTemplate, getSetting } = require("./settings.service");
 const { 
   DEFAULT_STRUCTURED_VARIANT, 
@@ -12,6 +13,11 @@ const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models
 const DEFAULT_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
 const DEFAULT_IMAGE_MODEL =
   process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
+const GEMINI_LIMITS = {
+  RPM: 10, // requêtes/min
+  RPD: 250, // requêtes/jour
+  TPM: 250_000, // tokens/min (approx)
+};
 
 const buildGeminiUrl = (model, method = "generateContent") =>
   `${GEMINI_BASE_URL}/${model}:${method}?key=${process.env.GEMINI_API_KEY}`;
@@ -26,15 +32,35 @@ const getActiveVariant = (type, overrideVariant) =>
   getSetting(`${type}_variant`)?.value ||
   "default";
 
+const resolvePromptTemplate = (type, variant) => {
+  const stored = getPromptVariant(type, variant)?.prompt;
+  if (stored && stored.trim()) {
+    return stored;
+  }
+  const fallback =
+    DEFAULT_PROMPT_VARIANTS[type]?.[variant] ||
+    DEFAULT_PROMPT_VARIANTS[type]?.default ||
+    DEFAULT_PROMPT_VARIANTS.analysis?.default ||
+    "";
+
+  if (fallback && fallback.trim()) {
+    return fallback;
+  }
+
+  throw new Error(`Aucun template configuré pour le type "${type}" et la variante "${variant || "default"}".`);
+};
+
+const estimateTokens = (payload = {}) => {
+  // Approximation: ~4 caractères par token
+  const text = JSON.stringify(payload || {});
+  return Math.ceil(text.length / 4);
+};
+
 // --- Prompt Builders ---
 
 const buildPrompt = (type, rawText, plan = "", overrideVariant = null) => {
   const variant = getActiveVariant(type, overrideVariant);
-  const storedTemplate =
-    getPromptVariant(type, variant)?.prompt ||
-    DEFAULT_PROMPT_VARIANTS[type]?.[variant] ||
-    DEFAULT_PROMPT_VARIANTS[type]?.default ||
-    "";
+  const storedTemplate = resolvePromptTemplate(type, variant);
   return formatTemplate(storedTemplate, {
     rawText,
     plan,
@@ -61,6 +87,24 @@ const buildStructuredPrompt = (rawText, entryType = "analyse", plan = "", varian
 // --- API Call Logic ---
 
 const callGeminiAPI = async (payload) => {
+  // Limites: requêtes/minute, requêtes/jour et tokens/minute
+  enforceRateLimit("gemini:rpm", {
+    windowMs: 60 * 1000,
+    max: GEMINI_LIMITS.RPM,
+    message: "Limite Gemini atteinte : 10 requêtes par minute.",
+  });
+  enforceRateLimit("gemini:rpd", {
+    windowMs: 24 * 60 * 60 * 1000,
+    max: GEMINI_LIMITS.RPD,
+    message: "Limite Gemini atteinte : 250 requêtes par jour.",
+  });
+  const tokens = estimateTokens(payload);
+  enforceRateLimit("gemini:tpm", {
+    windowMs: 60 * 1000,
+    max: GEMINI_LIMITS.TPM,
+    weight: tokens,
+    message: "Limite Gemini atteinte : 250k tokens par minute.",
+  });
   try {
     const response = await axios.post(buildGeminiUrl(DEFAULT_TEXT_MODEL), payload);
     
@@ -78,6 +122,16 @@ const callGeminiAPI = async (payload) => {
 }
 
 const callGeminiImageAPI = async (prompt) => {
+  enforceRateLimit("gemini:rpm", {
+    windowMs: 60 * 1000,
+    max: GEMINI_LIMITS.RPM,
+    message: "Limite Gemini atteinte : 10 requêtes par minute.",
+  });
+  enforceRateLimit("gemini:rpd", {
+    windowMs: 24 * 60 * 60 * 1000,
+    max: GEMINI_LIMITS.RPD,
+    message: "Limite Gemini atteinte : 250 requêtes par jour.",
+  });
   try {
     const payload = {
       contents: [
@@ -161,7 +215,18 @@ const generateStructuredAnalysis = async ({ rawText, entryType, plan, variant })
   };
 
   const resultText = await callGeminiAPI(payload);
-  const parsed = JSON.parse(resultText);
+  let parsed;
+  try {
+    parsed = JSON.parse(resultText);
+  } catch {
+    throw new Error("Réponse Gemini invalide (JSON non parsable).");
+  }
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Réponse Gemini invalide (format JSON).");
+  }
+  if (!parsed.metadata || typeof parsed.metadata !== "object") {
+    throw new Error("Réponse Gemini invalide (champ metadata manquant).");
+  }
   return { structured: parsed };
 };
 

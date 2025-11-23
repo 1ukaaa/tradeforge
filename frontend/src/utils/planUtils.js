@@ -43,10 +43,10 @@ export const buildPlanDescription = (plan) => {
     `2. Style : ${styleLabel}`,
     `3. Instruments : ${pairs}`,
     `4. Trading pendant annonces : ${news}`,
-    `5. Entrées : ${plan.entryStrategy || "Non définie"}`,
-    `6. Gestion du risque : ${plan.risk || "Non défini"}`,
-    `7. Sorties : ${plan.management || "Non définie"}`,
-    `8. Notes supplémentaires : ${plan.notes || "Aucune"}`,
+    `5. Entrées : ${safePlan.entryStrategy || "Non définie"}`,
+    `6. Gestion du risque : ${safePlan.risk || "Non défini"}`,
+    `7. Sorties : ${safePlan.management || "Non définie"}`,
+    `8. Notes supplémentaires : ${safePlan.notes || "Aucune"}`,
   ].join("\n");
 };
 

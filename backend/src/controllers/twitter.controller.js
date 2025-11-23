@@ -3,6 +3,7 @@ const twitterDraftsService = require("../services/twitterDrafts.service");
 const { publishThread } = require("../services/twitterPublisher.service");
 const journalService = require("../services/journal.service");
 const { generateAnalysis } = require("../services/gemini.service");
+const { enforceRateLimit } = require("../core/rateLimiter");
 
 const formatEntryContext = (entry) => {
   if (!entry) return "";
@@ -153,6 +154,18 @@ const publishDraft = async (req, res) => {
     if (!draft) {
       return res.status(404).json({ error: "Brouillon introuvable." });
     }
+    // Rate limit : 10/jour et 50/semaine pour la publication Twitter
+    enforceRateLimit("twitter:publish:day", {
+      windowMs: 24 * 60 * 60 * 1000,
+      max: 10,
+      message: "Quota Twitter atteint : 10 publications par jour.",
+    });
+    enforceRateLimit("twitter:publish:week", {
+      windowMs: 7 * 24 * 60 * 60 * 1000,
+      max: 50,
+      message: "Quota Twitter atteint : 50 publications par semaine.",
+    });
+
     const publishResult = await publishThread(draft.payload);
     const publishedAt = new Date().toISOString();
     const updatedDraft = twitterDraftsService.markPublished(id, {
@@ -165,7 +178,8 @@ const publishDraft = async (req, res) => {
     });
   } catch (error) {
     console.error("Erreur publishDraft :", error);
-    res.status(500).json({ error: error.message || "Publication impossible." });
+    const status = error?.status || (error?.name === "RateLimitError" ? 429 : 500);
+    res.status(status).json({ error: error.message || "Publication impossible." });
   }
 };
 
