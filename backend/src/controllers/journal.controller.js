@@ -1,30 +1,26 @@
 // backend/src/controllers/journal.controller.js
 const journalService = require('../services/journal.service');
 
-// Ce helper est pour createEntry et updateEntry
-// Il renvoie { entry: ... } comme l'ancien code
-const handleEntryServiceCall = (res, serviceFn, ...args) => {
+// Helper mis à jour pour gérer l'async/await
+const handleEntryServiceCall = async (res, serviceFn, ...args) => {
   try {
-    // Note: on n'utilise pas 'await' car les fonctions de service BDD sont synchrones
-    const result = serviceFn(...args);
+    // AJOUT CRUCIAL : await
+    const result = await serviceFn(...args);
+    
     if (result === null) {
       return res.status(404).json({ error: "Entrée introuvable." });
     }
-    // On encapsule la réponse dans { entry: ... }
     res.json({ entry: result });
-  } catch (err) { // <-- LA CORRECTION EST ICI (ajout du ')')
+  } catch (err) {
     console.error("Erreur contrôleur journal (service):", err);
     res.status(500).json({ error: err.message || "Impossible de traiter la demande." });
   }
 };
 
-// ---
-// Cette route a une forme de réponse spécifique { entries: [...] }
-// On n'utilise pas de helper générique.
-const getAllEntries = (req, res) => {
+const getAllEntries = async (req, res) => { // <-- Ajout de async
   try {
-    const entries = journalService.getJournalEntries();
-    // On respecte le contrat de l'API d'origine en renvoyant { entries: ... }
+    // AJOUT CRUCIAL : await
+    const entries = await journalService.getJournalEntries();
     res.json({ entries }); 
   } catch (err) {
     console.error("Erreur contrôleur journal (getAll):", err);
@@ -32,14 +28,15 @@ const getAllEntries = (req, res) => {
   }
 };
 
-const createEntry = (req, res) => {
+const createEntry = async (req, res) => { // <-- Ajout de async
   const { type, content, plan, transcript, metadata } = req.body;
   if (!content || typeof content !== "string") {
     return res.status(400).json({ error: "Contenu de l'entrée manquant." });
   }
   const normalizedType = type === "trade" ? "trade" : "analyse";
   
-  handleEntryServiceCall(res, journalService.insertJournalEntry, {
+  // On passe await devant le helper
+  await handleEntryServiceCall(res, journalService.insertJournalEntry, {
     type: normalizedType,
     content,
     plan,
@@ -48,7 +45,7 @@ const createEntry = (req, res) => {
   });
 };
 
-const updateEntry = (req, res) => {
+const updateEntry = async (req, res) => { // <-- Ajout de async
   const { id } = req.params;
   const { type, content, plan, transcript, metadata } = req.body;
   
@@ -57,7 +54,7 @@ const updateEntry = (req, res) => {
   }
   const normalizedType = type === "trade" ? "trade" : "analyse";
   
-  handleEntryServiceCall(res, journalService.updateJournalEntry, {
+  await handleEntryServiceCall(res, journalService.updateJournalEntry, {
     id: Number(id),
     type: normalizedType,
     content,
@@ -67,10 +64,10 @@ const updateEntry = (req, res) => {
   });
 };
 
-const deleteEntry = (req, res) => {
+const deleteEntry = async (req, res) => { // <-- Ajout de async
   const { id } = req.params;
   try {
-    const deleted = journalService.deleteJournalEntry(Number(id));
+    const deleted = await journalService.deleteJournalEntry(Number(id)); // <-- Ajout de await
     if (!deleted) {
       return res.status(404).json({ error: "Entrée introuvable." });
     }

@@ -1,31 +1,23 @@
-// backend/src/controllers/plan.controller.js
 const planService = require('../services/plan.service');
 
-const getPlan = (req, res) => {
+const getPlan = async (req, res) => {
   try {
-    const config = planService.getPlanConfig();
-    res.json(config);
+    const plan = await planService.getPlan();
+    res.json(plan);
   } catch (err) {
-    console.error("Erreur plan:", err);
-    res.status(500).json({ error: "Impossible de charger le plan." });
+    console.error(err);
+    res.status(500).json({ error: "Erreur lecture plan" });
   }
 };
 
-const updatePlan = (req, res) => {
-  const { plan } = req.body;
-  if (!plan || typeof plan !== "object") {
-    return res.status(400).json({ error: "Plan manquant." });
-  }
+const updatePlan = async (req, res) => {
   try {
-    const saved = planService.upsertPlanConfig(plan);
-    res.json(saved);
+    const plan = await planService.updatePlan(req.body);
+    res.json(plan);
   } catch (err) {
-    console.error("Erreur plan:", err);
-    res.status(500).json({ error: "Impossible d'enregistrer le plan." });
+    console.error(err);
+    res.status(500).json({ error: "Erreur mise à jour plan" });
   }
 };
 
-module.exports = {
-  getPlan,
-  updatePlan,
-};
+module.exports = { getPlan, updatePlan };
