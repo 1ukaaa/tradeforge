@@ -4,10 +4,10 @@ const {
   getSettings,
   updateSettings,
   getPromptVariants,
-  updatePromptVariant,
+  upsertPromptVariant,
   deletePromptVariant,
   getStructuredTemplates,
-  updateStructuredTemplate,
+  upsertStructuredTemplate,
 } = require('../controllers/settings.controller');
 
 const settingsRouter = Router();
@@ -16,12 +16,12 @@ settingsRouter.put('/', updateSettings);
 
 const promptVariantsRouter = Router();
 promptVariantsRouter.get('/', getPromptVariants);
-promptVariantsRouter.put('/', updatePromptVariant);
+promptVariantsRouter.put('/', upsertPromptVariant);
 promptVariantsRouter.delete('/', deletePromptVariant);
 
 const structuredTemplatesRouter = Router();
 structuredTemplatesRouter.get('/', getStructuredTemplates);
-structuredTemplatesRouter.put('/', updateStructuredTemplate);
+structuredTemplatesRouter.put('/', upsertStructuredTemplate);
 
 module.exports = {
   settingsRouter,

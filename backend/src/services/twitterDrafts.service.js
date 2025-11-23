@@ -76,19 +76,20 @@ const mapDraftRow = (row) => {
   };
 };
 
-const listDrafts = () => {
-  const rows = db
-    .prepare("SELECT * FROM twitter_drafts ORDER BY datetime(updatedAt) DESC")
-    .all();
-  return rows.map(mapDraftRow);
+const listDrafts = async () => {
+  const result = await db.execute("SELECT * FROM twitter_drafts ORDER BY datetime(updatedAt) DESC");
+  return result.rows.map(mapDraftRow);
 };
 
-const getDraftById = (id) => {
-  const row = db.prepare("SELECT * FROM twitter_drafts WHERE id = ?").get(id);
-  return mapDraftRow(row);
+const getDraftById = async (id) => {
+  const result = await db.execute({
+    sql: "SELECT * FROM twitter_drafts WHERE id = ?",
+    args: [id],
+  });
+  return mapDraftRow(result.rows[0]);
 };
 
-const createDraft = ({
+const createDraft = async ({
   title = "",
   variant = "tweet.simple",
   status = "draft",
@@ -100,25 +101,27 @@ const createDraft = ({
   const serializedPayload = JSON.stringify(normalizedPayload);
   const serializedMetadata = serializeMetadata(metadata);
   const timestamp = getTimestamp();
-  const stmt = db.prepare(`
-    INSERT INTO twitter_drafts (title, variant, status, payload, sourceEntryId, metadata, createdAt, updatedAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const info = stmt.run(
-    title,
-    variant,
-    status,
-    serializedPayload,
-    sourceEntryId,
-    serializedMetadata,
-    timestamp,
-    timestamp
-  );
-  return getDraftById(info.lastInsertRowid);
+  const result = await db.execute({
+    sql: `
+      INSERT INTO twitter_drafts (title, variant, status, payload, sourceEntryId, metadata, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      title,
+      variant,
+      status,
+      serializedPayload,
+      sourceEntryId,
+      serializedMetadata,
+      timestamp,
+      timestamp,
+    ],
+  });
+  return getDraftById(Number(result.lastInsertRowid));
 };
 
-const updateDraft = (id, updates = {}) => {
-  const existing = getDraftById(id);
+const updateDraft = async (id, updates = {}) => {
+  const existing = await getDraftById(id);
   if (!existing) {
     throw new Error("Draft introuvable.");
   }
@@ -130,46 +133,50 @@ const updateDraft = (id, updates = {}) => {
     updates.metadata !== undefined
       ? serializeMetadata(updates.metadata)
       : serializeMetadata(existing.metadata);
-  const stmt = db.prepare(
-    `
-    UPDATE twitter_drafts
-    SET title = ?, variant = ?, status = ?, payload = ?, sourceEntryId = ?, metadata = ?, updatedAt = ?
-    WHERE id = ?
-  `
-  );
   const timestamp = getTimestamp();
-  stmt.run(
-    updates.title !== undefined ? updates.title : existing.title,
-    updates.variant !== undefined ? updates.variant : existing.variant,
-    updates.status !== undefined ? updates.status : existing.status,
-    nextPayload,
-    updates.sourceEntryId !== undefined ? updates.sourceEntryId : existing.sourceEntryId,
-    nextMetadata,
-    timestamp,
-    id
-  );
+  await db.execute({
+    sql: `
+      UPDATE twitter_drafts
+      SET title = ?, variant = ?, status = ?, payload = ?, sourceEntryId = ?, metadata = ?, updatedAt = ?
+      WHERE id = ?
+    `,
+    args: [
+      updates.title !== undefined ? updates.title : existing.title,
+      updates.variant !== undefined ? updates.variant : existing.variant,
+      updates.status !== undefined ? updates.status : existing.status,
+      nextPayload,
+      updates.sourceEntryId !== undefined ? updates.sourceEntryId : existing.sourceEntryId,
+      nextMetadata,
+      timestamp,
+      id,
+    ],
+  });
   return getDraftById(id);
 };
 
-const markPublished = (id, { tweetId, publishedAt }) => {
-  const existing = getDraftById(id);
+const markPublished = async (id, { tweetId, publishedAt }) => {
+  const existing = await getDraftById(id);
   if (!existing) {
     throw new Error("Draft introuvable.");
   }
   const timestamp = getTimestamp();
-  db.prepare(
-    `
-    UPDATE twitter_drafts
-    SET status = ?, publishedTweetId = ?, publishedAt = ?, updatedAt = ?
-    WHERE id = ?
-  `
-  ).run("published", tweetId, publishedAt, timestamp, id);
+  await db.execute({
+    sql: `
+      UPDATE twitter_drafts
+      SET status = ?, publishedTweetId = ?, publishedAt = ?, updatedAt = ?
+      WHERE id = ?
+    `,
+    args: ["published", tweetId, publishedAt, timestamp, id],
+  });
   return getDraftById(id);
 };
 
-const deleteDraft = (id) => {
-  const info = db.prepare("DELETE FROM twitter_drafts WHERE id = ?").run(id);
-  return info.changes > 0;
+const deleteDraft = async (id) => {
+  const result = await db.execute({
+    sql: "DELETE FROM twitter_drafts WHERE id = ?",
+    args: [id],
+  });
+  return result.rowsAffected > 0;
 };
 
 module.exports = {

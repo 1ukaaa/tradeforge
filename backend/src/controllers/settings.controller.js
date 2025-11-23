@@ -1,132 +1,113 @@
 // backend/src/controllers/settings.controller.js
 const settingsService = require('../services/settings.service');
 
-const getSettings = (req, res) => {
+// --- Prompts ---
+
+const getPromptVariant = async (req, res) => { // ASYNC
+  const { type, variant } = req.params;
   try {
-    const settings = settingsService.getSettings();
+    const data = await settingsService.getPromptVariant(type, variant); // AWAIT
+    if (!data) return res.status(404).json({ error: "Variant introuvable" });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Erreur récupération variant" });
+  }
+};
+
+const upsertPromptVariant = async (req, res) => { // ASYNC
+  const { type, variant } = req.params;
+  const { prompt } = req.body;
+  try {
+    const result = await settingsService.upsertPromptVariant(type, variant, prompt); // AWAIT
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "Erreur sauvegarde variant" });
+  }
+};
+
+const deletePromptVariant = async (req, res) => { // ASYNC
+  const { type, variant } = req.params;
+  try {
+    const success = await settingsService.deletePromptVariant(type, variant); // AWAIT
+    if (!success) return res.status(404).json({ error: "Introuvable" });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: "Erreur suppression" });
+  }
+};
+
+const getPromptVariants = async (req, res) => { // ASYNC
+  try {
+    const variants = await settingsService.getPromptVariants(); // AWAIT
+    res.json(variants);
+  } catch (err) {
+    res.status(500).json({ error: "Erreur listing variants" });
+  }
+};
+
+// --- Structured Templates ---
+
+const getStructuredTemplate = async (req, res) => { // ASYNC
+  const { variant } = req.params;
+  try {
+    const data = await settingsService.getStructuredTemplate(variant); // AWAIT
+    if (!data) return res.status(404).json({ error: "Template introuvable" });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Erreur récupération template" });
+  }
+};
+
+const upsertStructuredTemplate = async (req, res) => { // ASYNC
+  const { variant } = req.params;
+  const { prompt } = req.body;
+  try {
+    const result = await settingsService.upsertStructuredTemplate(variant, prompt); // AWAIT
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "Erreur sauvegarde template" });
+  }
+};
+
+const getStructuredTemplates = async (req, res) => { // ASYNC
+  try {
+    const templates = await settingsService.getStructuredTemplates(); // AWAIT
+    res.json(templates);
+  } catch (err) {
+    res.status(500).json({ error: "Erreur listing templates" });
+  }
+};
+
+// --- App Settings ---
+
+const getSettings = async (req, res) => { // ASYNC
+  try {
+    const settings = await settingsService.getSettings(); // AWAIT
     res.json(settings);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Erreur récupération settings" });
   }
 };
 
-const updateSettings = (req, res) => {
-  // Inclure les nouveaux champs de devises
-  const { 
-    structuredVariant, 
-    analysisVariant, 
-    tradeVariant,
-    accountName,
-    capitalForex,
-    capitalCrypto,
-    capitalForexCurrency, // NOUVEAU
-    capitalCryptoCurrency // NOUVEAU
-  } = req.body;
-  
-  const updates = { 
-    structuredVariant, 
-    analysisVariant, 
-    tradeVariant,
-    accountName,
-    capitalForex,
-    capitalCrypto,
-    capitalForexCurrency, // NOUVEAU
-    capitalCryptoCurrency // NOUVEAU
-  };
-
-  // Filtrer les clés undefined pour que la vérification ci-dessous fonctionne
-  const definedUpdates = Object.entries(updates).reduce((acc, [key, value]) => {
-    if (value !== undefined) {
-      acc[key] = value;
-    }
-    return acc;
-  }, {});
-
-  if (Object.keys(definedUpdates).length === 0) {
-    return res.status(400).json({ error: "Aucun champ à mettre à jour." });
-  }
-  
+const updateSettings = async (req, res) => { // ASYNC
   try {
-    const newSettings = settingsService.updateSettings(definedUpdates);
-    res.json(newSettings);
+    const settings = await settingsService.updateSettings(req.body); // AWAIT
+    res.json(settings);
   } catch (err) {
-    console.error("Erreur settings :", err);
-    res.status(500).json({ error: "Impossible de mettre à jour les paramètres." });
-  }
-};
-
-const getPromptVariants = (req, res) => {
-  try {
-    const variants = settingsService.getPromptVariants();
-    res.json({ variants });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-const updatePromptVariant = (req, res) => {
-  const { type, variant, prompt } = req.body;
-  if (!type || !variant || !prompt) {
-    return res.status(400).json({ error: "Type, variant ou prompt manquant." });
-  }
-  try {
-    const updated = settingsService.upsertPromptVariant(type, variant, prompt);
-    res.json({ variant: updated });
-  } catch (err) {
-    console.error("Erreur prompt variant :", err);
-    res.status(500).json({ error: "Impossible de mettre à jour le template." });
-  }
-};
-
-const deletePromptVariant = (req, res) => {
-  const { type, variant } = req.body;
-  if (!type || !variant) {
-    return res.status(400).json({ error: "Type ou variant manquant." });
-  }
-  if (variant === "default") {
-    return res.status(400).json({ error: "La variante ‘default’ est système et ne peut pas être supprimée." });
-  }
-  try {
-    const deleted = settingsService.deletePromptVariant(type, variant);
-    if (!deleted) {
-      return res.status(404).json({ error: "Variante introuvable." });
-    }
-    res.json({ success: true });
-  } catch (err) {
-    console.error("Erreur suppression variante :", err);
-    res.status(500).json({ error: "Impossible de supprimer la variante." });
-  }
-};
-
-const getStructuredTemplates = (req, res) => {
-  try {
-    const templates = settingsService.getStructuredTemplates();
-    res.json({ templates });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-const updateStructuredTemplate = (req, res) => {
-  const { variant, prompt } = req.body;
-  if (!variant || !prompt) {
-    return res.status(400).json({ error: "Variant ou prompt manquant." });
-  }
-  try {
-    const updated = settingsService.upsertStructuredTemplate(variant, prompt);
-    res.json({ structuredTemplate: updated });
-  } catch (err) {
-    console.error("Erreur template :", err);
-    res.status(500).json({ error: "Impossible d’enregistrer le template." });
+    console.error(err);
+    res.status(500).json({ error: "Erreur mise à jour settings" });
   }
 };
 
 module.exports = {
+  getPromptVariant,
+  upsertPromptVariant,
+  deletePromptVariant,
+  getPromptVariants,
+  getStructuredTemplate,
+  upsertStructuredTemplate,
+  getStructuredTemplates,
   getSettings,
   updateSettings,
-  getPromptVariants,
-  updatePromptVariant,
-  deletePromptVariant,
-  getStructuredTemplates,
-  updateStructuredTemplate,
 };

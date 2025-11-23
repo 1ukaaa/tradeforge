@@ -15,7 +15,7 @@ let isFetching = false;
 const CACHE_DURATION = 4 * 60 * 60 * 1000; // 4 heures
 const UPSERT_EVENT_SQL = `
   INSERT INTO economic_events (event_id, title, currency, impact, date, payload, createdAt, updatedAt)
-  VALUES (@event_id, @title, @currency, @impact, @date, @payload, @createdAt, @updatedAt)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(event_id) DO UPDATE SET
     title = excluded.title,
     currency = excluded.currency,
@@ -30,8 +30,7 @@ const SELECT_EVENTS_SQL = `
   ORDER BY date ASC, id ASC
 `;
 
-const upsertEconomicEventStmt = db.prepare(UPSERT_EVENT_SQL);
-const selectEconomicEventsStmt = db.prepare(SELECT_EVENTS_SQL);
+let cacheWarm = false;
 
 const parseStoredPayload = (payload) => {
   try {
@@ -42,10 +41,10 @@ const parseStoredPayload = (payload) => {
   }
 };
 
-const getStoredEconomicEvents = () => {
+const getStoredEconomicEvents = async () => {
   try {
-    return selectEconomicEventsStmt
-      .all()
+    const result = await db.execute(SELECT_EVENTS_SQL);
+    return result.rows
       .map(({ payload }) => parseStoredPayload(payload))
       .filter(Boolean);
   } catch (err) {
@@ -54,7 +53,7 @@ const getStoredEconomicEvents = () => {
   }
 };
 
-const persistEconomicEvents = (events) => {
+const persistEconomicEvents = async (events) => {
   if (!Array.isArray(events) || events.length === 0) {
     return;
   }
@@ -77,14 +76,32 @@ const persistEconomicEvents = (events) => {
     return;
   }
 
-  const insertMany = db.transaction((records) => {
-    records.forEach((record) => upsertEconomicEventStmt.run(record));
-  });
+  const statements = rows.map((record) => ({
+    sql: UPSERT_EVENT_SQL,
+    args: [
+      record.event_id,
+      record.title,
+      record.currency,
+      record.impact,
+      record.date,
+      record.payload,
+      record.createdAt,
+      record.updatedAt,
+    ],
+  }));
 
-  insertMany(rows);
+  try {
+    await db.batch(statements, "write");
+  } catch (err) {
+    console.error("Service éco: Erreur lors de la persistance:", err.message);
+  }
 };
 
-cache.data = getStoredEconomicEvents();
+const ensureCacheWarm = async () => {
+  if (cacheWarm) return;
+  cache.data = await getStoredEconomicEvents();
+  cacheWarm = true;
+};
 
 /**
  * Transforme les événements JSON bruts de Forex Factory
@@ -147,6 +164,7 @@ const mapEvents = (events) => {
 
 const getEconomicEvents = async () => {
   const now = Date.now();
+  await ensureCacheWarm();
   
   // 1. Le cache est-il valide ?
   if (now - cache.lastFetch < CACHE_DURATION && cache.data.length > 0) {
@@ -169,7 +187,7 @@ const getEconomicEvents = async () => {
     console.warn("URL FOREX_FACTORY_URL non définie dans .env");
     isFetching = false; // Libère le verrou
     if (!cache.data.length) {
-      cache.data = getStoredEconomicEvents();
+      cache.data = await getStoredEconomicEvents();
     }
     return cache.data;
   }
@@ -180,7 +198,7 @@ const getEconomicEvents = async () => {
     console.warn("URL FOREX_FACTORY_URL invalide:", url);
     isFetching = false;
     if (!cache.data.length) {
-      cache.data = getStoredEconomicEvents();
+      cache.data = await getStoredEconomicEvents();
     }
     return cache.data;
   }
@@ -193,9 +211,9 @@ const getEconomicEvents = async () => {
     const allEvents = mapEvents(jsonEvents); // Appel de la fonction corrigée
 
     // Persiste les événements pour conserver l'historique
-    persistEconomicEvents(allEvents);
+    await persistEconomicEvents(allEvents);
 
-    const storedEvents = getStoredEconomicEvents();
+    const storedEvents = await getStoredEconomicEvents();
 
     // Met à jour le cache
     cache = {
@@ -209,7 +227,7 @@ const getEconomicEvents = async () => {
   } catch (err) {
     console.error("Erreur lors de la récupération du calendrier JSON:", err.message);
     // En cas d'erreur (ex: 429), on renvoie les événements persistés
-    const storedEvents = getStoredEconomicEvents();
+    const storedEvents = await getStoredEconomicEvents();
     if (storedEvents.length) {
       console.log("Service éco : Renvoi des événements persistés en base.");
     }

@@ -224,18 +224,7 @@ const fetchHyperliquidFromScript = (address, lastSyncAt) => {
   });
 };
 
-const getBrokerAccounts = () => {
-  const rows = db.prepare("SELECT * FROM broker_accounts").all();
-  return rows.map((row) => ({
-    ...row,
-    initialBalance: toNumber(row.initialBalance),
-    currentBalance: toNumber(row.currentBalance),
-    metadata: parseMetadata(row.metadata),
-  }));
-};
-
-const getBrokerAccountById = (id) => {
-  const row = db.prepare("SELECT * FROM broker_accounts WHERE id = ?").get(id);
+const mapAccountRow = (row) => {
   if (!row) return null;
   return {
     ...row,
@@ -245,24 +234,45 @@ const getBrokerAccountById = (id) => {
   };
 };
 
-const getTradeCountForAccount = (accountId) => {
-  const { count } = db
-    .prepare("SELECT COUNT(*) as count FROM broker_trades WHERE brokerAccountId = ?")
-    .get(accountId);
+const getBrokerAccounts = async () => {
+  const result = await db.execute("SELECT * FROM broker_accounts");
+  return result.rows.map(mapAccountRow);
+};
+
+const getBrokerAccountById = async (id) => {
+  const result = await db.execute({
+    sql: "SELECT * FROM broker_accounts WHERE id = ?",
+    args: [id],
+  });
+  return mapAccountRow(result.rows[0]);
+};
+
+const getTradeCountForAccount = async (accountId) => {
+  const result = await db.execute({
+    sql: "SELECT COUNT(*) as count FROM broker_trades WHERE brokerAccountId = ?",
+    args: [accountId],
+  });
+  const count = result.rows[0]?.count ?? 0;
   return Number(count) || 0;
 };
 
-const accountHasTrades = (accountId) => getTradeCountForAccount(accountId) > 0;
+const accountHasTrades = async (accountId) => (await getTradeCountForAccount(accountId)) > 0;
 
-const getRealizedPnlForAccount = (accountId) => {
-  const { totalPnl } = db
-    .prepare("SELECT IFNULL(SUM(pnl), 0) as totalPnl FROM broker_trades WHERE brokerAccountId = ?")
-    .get(accountId);
+const getRealizedPnlForAccount = async (accountId) => {
+  const result = await db.execute({
+    sql: "SELECT IFNULL(SUM(pnl), 0) as totalPnl FROM broker_trades WHERE brokerAccountId = ?",
+    args: [accountId],
+  });
+  const totalPnl = result.rows[0]?.totalPnl ?? 0;
   return toNumber(totalPnl);
 };
 
-const getIntegrationByAccountId = (accountId) => {
-  const row = db.prepare("SELECT * FROM broker_integrations WHERE brokerAccountId = ?").get(accountId);
+const getIntegrationByAccountId = async (accountId) => {
+  const result = await db.execute({
+    sql: "SELECT * FROM broker_integrations WHERE brokerAccountId = ?",
+    args: [accountId],
+  });
+  const row = result.rows[0];
   if (!row) return null;
   return {
     ...row,
@@ -270,12 +280,11 @@ const getIntegrationByAccountId = (accountId) => {
   };
 };
 
-const getJournalLinksMap = () => {
-  const rows = db
-    .prepare(
-      "SELECT id, metadata FROM entries WHERE json_extract(metadata, '$.brokerTradeId') IS NOT NULL"
-    )
-    .all();
+const getJournalLinksMap = async () => {
+  const result = await db.execute(
+    "SELECT id, metadata FROM entries WHERE json_extract(metadata, '$.brokerTradeId') IS NOT NULL"
+  );
+  const rows = result.rows || [];
   const map = new Map();
   rows.forEach((row) => {
     const metadata = parseMetadata(row.metadata);
@@ -318,7 +327,7 @@ const resolveJournalEntryId = (journalLinksMap, entity) => {
   return null;
 };
 
-const getBrokerTrades = ({
+const getBrokerTrades = async ({
   accountId = null,
   limit = null,
   order = "desc",
@@ -343,10 +352,11 @@ const getBrokerTrades = ({
     ${limitClause}
   `;
 
-  const rows = db.prepare(query).all(...params);
+  const result = await db.execute({ sql: query, args: params });
+  const rows = result.rows || [];
   const map =
-    accountsMap || new Map(getBrokerAccounts().map((account) => [account.id, account]));
-  const journalMap = journalLinksMap || getJournalLinksMap();
+    accountsMap || new Map((await getBrokerAccounts()).map((account) => [account.id, account]));
+  const journalMap = journalLinksMap || (await getJournalLinksMap());
 
   return rows.map((row) => {
     const account = map.get(row.brokerAccountId);
@@ -554,11 +564,11 @@ const sortByTimestamp = (items, { order = "desc", getter }) => {
   return sorted;
 };
 
-const getBrokerPositions = ({ accountId = null, order = "desc" } = {}) => {
-  const accounts = getBrokerAccounts();
+const getBrokerPositions = async ({ accountId = null, order = "desc" } = {}) => {
+  const accounts = await getBrokerAccounts();
   const accountsMap = new Map(accounts.map((account) => [account.id, account]));
-  const journalLinksMap = getJournalLinksMap();
-  const tradesAsc = getBrokerTrades({ accountId, order: "asc", accountsMap, journalLinksMap });
+  const journalLinksMap = await getJournalLinksMap();
+  const tradesAsc = await getBrokerTrades({ accountId, order: "asc", accountsMap, journalLinksMap });
 
   const manualTrades = [];
   const regularTrades = [];
@@ -630,8 +640,8 @@ const buildTradesForSummary = (positionsDesc) =>
     };
   });
 
-const getDashboardSummary = () => {
-  const accounts = getBrokerAccounts();
+const getDashboardSummary = async () => {
+  const accounts = await getBrokerAccounts();
   if (!accounts.length) {
     return {
       accounts: [],
@@ -640,7 +650,7 @@ const getDashboardSummary = () => {
     };
   }
 
-  const positionsAsc = getBrokerPositions({ order: "asc" });
+  const positionsAsc = await getBrokerPositions({ order: "asc" });
   const positionsDesc = [...positionsAsc].reverse();
   const enrichedAccounts = accounts.map((account) =>
     computeAccountMetrics(account, positionsAsc)
@@ -675,12 +685,12 @@ const getDashboardSummary = () => {
   };
 };
 
-const upsertBrokerAccount = (account) => {
+const upsertBrokerAccount = async (account) => {
   const timestamp = new Date().toISOString();
-  const stmt = db.prepare(`
+  const sql = `
     INSERT INTO broker_accounts
     (externalId, name, provider, type, currency, color, initialBalance, currentBalance, status, lastSyncAt, metadata, createdAt, updatedAt)
-    VALUES (@externalId, @name, @provider, @type, @currency, @color, @initialBalance, @currentBalance, @status, @lastSyncAt, @metadata, @createdAt, @updatedAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(externalId) DO UPDATE SET
       name=excluded.name,
       provider=excluded.provider,
@@ -693,7 +703,7 @@ const upsertBrokerAccount = (account) => {
       lastSyncAt=excluded.lastSyncAt,
       metadata=excluded.metadata,
       updatedAt=excluded.updatedAt
-  `);
+  `;
 
   const payload = {
     externalId: account.externalId,
@@ -711,13 +721,39 @@ const upsertBrokerAccount = (account) => {
     updatedAt: timestamp,
   };
 
-  stmt.run(payload);
-  return getBrokerAccounts().find((acc) => acc.externalId === account.externalId);
+  await db.execute({
+    sql,
+    args: [
+      payload.externalId,
+      payload.name,
+      payload.provider,
+      payload.type,
+      payload.currency,
+      payload.color,
+      payload.initialBalance,
+      payload.currentBalance,
+      payload.status,
+      payload.lastSyncAt,
+      payload.metadata,
+      payload.createdAt,
+      payload.updatedAt,
+    ],
+  });
+
+  const result = await db.execute({
+    sql: "SELECT * FROM broker_accounts WHERE externalId = ?",
+    args: [payload.externalId],
+  });
+  return mapAccountRow(result.rows[0]);
 };
 
-const bulkUpsertBrokerTrades = (accountId, trades = []) => {
-  const beforeCount = getTradeCountForAccount(accountId);
-  const stmt = db.prepare(`
+const bulkUpsertBrokerTrades = async (accountId, trades = []) => {
+  const beforeCount = await getTradeCountForAccount(accountId);
+  if (!Array.isArray(trades) || trades.length === 0) {
+    return 0;
+  }
+
+  const sql = `
     INSERT INTO broker_trades
     (brokerAccountId, externalTradeId, symbol, direction, volume, entryPrice, exitPrice, pnl, pnlCurrency, openedAt, closedAt, metadata)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -732,19 +768,20 @@ const bulkUpsertBrokerTrades = (accountId, trades = []) => {
       openedAt=excluded.openedAt,
       closedAt=excluded.closedAt,
       metadata=excluded.metadata
-  `);
+  `;
 
-  const insert = db.transaction((items) => {
-    items.forEach((trade) => {
-      const openedAt = toIsoTimestamp(trade.openedAt);
-      const closedAt = toIsoTimestamp(trade.closedAt);
-      const metadata = {
-        ...(trade.metadata || {}),
-      };
-      if (trade.raw && !metadata.raw) {
-        metadata.raw = trade.raw;
-      }
-      stmt.run(
+  const statements = trades.map((trade) => {
+    const openedAt = toIsoTimestamp(trade.openedAt);
+    const closedAt = toIsoTimestamp(trade.closedAt);
+    const metadata = {
+      ...(trade.metadata || {}),
+    };
+    if (trade.raw && !metadata.raw) {
+      metadata.raw = trade.raw;
+    }
+    return {
+      sql,
+      args: [
         accountId,
         trade.externalTradeId || null,
         trade.symbol,
@@ -756,23 +793,26 @@ const bulkUpsertBrokerTrades = (accountId, trades = []) => {
         trade.pnlCurrency,
         openedAt,
         closedAt,
-        serializeMetadata(metadata)
-      );
-    });
+        serializeMetadata(metadata),
+      ],
+    };
   });
 
-  insert(trades);
-  const afterCount = getTradeCountForAccount(accountId);
+  await db.batch(statements, "write");
+  const afterCount = await getTradeCountForAccount(accountId);
   return Math.max(afterCount - beforeCount, 0);
 };
 
-const saveIntegration = (accountId, { type, status, credentials, metadata, lastSyncAt, error }) => {
+const saveIntegration = async (
+  accountId,
+  { type, status, credentials, metadata, lastSyncAt, error }
+) => {
   const timestamp = new Date().toISOString();
-  const existing = getIntegrationByAccountId(accountId);
-  const stmt = db.prepare(`
+  const existing = await getIntegrationByAccountId(accountId);
+  const sql = `
     INSERT INTO broker_integrations
     (brokerAccountId, type, status, credentials, metadata, lastSyncAt, error, createdAt, updatedAt)
-    VALUES (@brokerAccountId, @type, @status, @credentials, @metadata, @lastSyncAt, @error, @createdAt, @updatedAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(brokerAccountId) DO UPDATE SET
       type=excluded.type,
       status=excluded.status,
@@ -781,61 +821,67 @@ const saveIntegration = (accountId, { type, status, credentials, metadata, lastS
       lastSyncAt=excluded.lastSyncAt,
       error=excluded.error,
       updatedAt=excluded.updatedAt
-  `);
+  `;
 
-  stmt.run({
-    brokerAccountId: accountId,
-    type,
-    status: status || "connected",
-    credentials: credentials || null,
-    metadata: serializeMetadata(metadata || {}),
-    lastSyncAt: lastSyncAt || null,
-    error: error || null,
-    createdAt: existing?.createdAt || timestamp,
-    updatedAt: timestamp,
+  await db.execute({
+    sql,
+    args: [
+      accountId,
+      type,
+      status || "connected",
+      credentials || null,
+      serializeMetadata(metadata || {}),
+      lastSyncAt || null,
+      error || null,
+      existing?.createdAt || timestamp,
+      timestamp,
+    ],
   });
 
   return getIntegrationByAccountId(accountId);
 };
 
-const createManualFtmoAccount = ({ name, currency, color, initialBalance }) => {
+const createManualFtmoAccount = async ({ name, currency, color, initialBalance }) => {
   const timestamp = new Date().toISOString();
   const suffix = Math.floor(Math.random() * 100000);
   const externalId = `ftmo-${Date.now()}-${suffix}`;
-  const insertStmt = db.prepare(`
-    INSERT INTO broker_accounts
-    (externalId, name, provider, type, currency, color, initialBalance, currentBalance, status, lastSyncAt, metadata, createdAt, updatedAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
   const accountName = name || `FTMO #${suffix}`;
-  const info = insertStmt.run(
-    externalId,
-    accountName,
-    "ftmo",
-    "forex",
-    currency || "EUR",
-    color || "#6366f1",
-    toNumber(initialBalance) || 0,
-    toNumber(initialBalance) || 0,
-    "pending",
-    null,
-    serializeMetadata({ importMode: "csv" }),
-    timestamp,
-    timestamp
-  );
+  const result = await db.execute({
+    sql: `
+      INSERT INTO broker_accounts
+      (externalId, name, provider, type, currency, color, initialBalance, currentBalance, status, lastSyncAt, metadata, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      externalId,
+      accountName,
+      "ftmo",
+      "forex",
+      currency || "EUR",
+      color || "#6366f1",
+      toNumber(initialBalance) || 0,
+      toNumber(initialBalance) || 0,
+      "pending",
+      null,
+      serializeMetadata({ importMode: "csv" }),
+      timestamp,
+      timestamp,
+    ],
+  });
 
-  saveIntegration(info.lastInsertRowid, {
+  const accountId = Number(result.lastInsertRowid);
+
+  await saveIntegration(accountId, {
     type: "ftmo_csv",
     status: "pending",
     credentials: null,
     metadata: { importMode: "csv" },
   });
 
-  return getBrokerAccountById(info.lastInsertRowid);
+  return getBrokerAccountById(accountId);
 };
 
-const createMt5Account = ({
+const createMt5Account = async ({
   name,
   currency,
   color,
@@ -849,43 +895,46 @@ const createMt5Account = ({
   }
   const timestamp = new Date().toISOString();
   const externalId = `mt5-${login}`;
-  const insertStmt = db.prepare(`
-    INSERT INTO broker_accounts
-    (externalId, name, provider, type, currency, color, initialBalance, currentBalance, status, lastSyncAt, metadata, createdAt, updatedAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const info = insertStmt.run(
-    externalId,
-    name || `MT5 #${login}`,
-    "mt5",
-    "forex",
-    currency || "EUR",
-    color || "#6366f1",
-    toNumber(initialBalance) || 0,
-    toNumber(initialBalance) || 0,
-    "connected",
-    null,
-    serializeMetadata({}),
-    timestamp,
-    timestamp
-  );
+  const result = await db.execute({
+    sql: `
+      INSERT INTO broker_accounts
+      (externalId, name, provider, type, currency, color, initialBalance, currentBalance, status, lastSyncAt, metadata, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      externalId,
+      name || `MT5 #${login}`,
+      "mt5",
+      "forex",
+      currency || "EUR",
+      color || "#6366f1",
+      toNumber(initialBalance) || 0,
+      toNumber(initialBalance) || 0,
+      "connected",
+      null,
+      serializeMetadata({}),
+      timestamp,
+      timestamp,
+    ],
+  });
 
   const credentialsPayload = encrypt(
     JSON.stringify({ login, password, server })
   );
 
-  saveIntegration(info.lastInsertRowid, {
+  const accountId = Number(result.lastInsertRowid);
+
+  await saveIntegration(accountId, {
     type: "mt5",
     status: "connected",
     credentials: credentialsPayload,
     metadata: { server },
   });
 
-  return getBrokerAccountById(info.lastInsertRowid);
+  return getBrokerAccountById(accountId);
 };
 
-const createHyperliquidAccount = ({
+const createHyperliquidAccount = async ({
   name,
   currency,
   color,
@@ -897,44 +946,47 @@ const createHyperliquidAccount = ({
   }
   const timestamp = new Date().toISOString();
   const externalId = `hyper-${address}`;
-  const insertStmt = db.prepare(`
-    INSERT INTO broker_accounts
-    (externalId, name, provider, type, currency, color, initialBalance, currentBalance, status, lastSyncAt, metadata, createdAt, updatedAt)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  const result = await db.execute({
+    sql: `
+      INSERT INTO broker_accounts
+      (externalId, name, provider, type, currency, color, initialBalance, currentBalance, status, lastSyncAt, metadata, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      externalId,
+      name || `HyperLiquid ${address.substring(0, 6)}...`,
+      "hyperliquid",
+      "crypto",
+      currency || "USDT",
+      color || "#8b5cf6",
+      toNumber(initialBalance) || 0,
+      toNumber(initialBalance) || 0,
+      "connected",
+      null,
+      serializeMetadata({}),
+      timestamp,
+      timestamp,
+    ],
+  });
 
-  const info = insertStmt.run(
-    externalId,
-    name || `HyperLiquid ${address.substring(0, 6)}...`,
-    "hyperliquid",
-    "crypto",
-    currency || "USDT",
-    color || "#8b5cf6",
-    toNumber(initialBalance) || 0,
-    toNumber(initialBalance) || 0,
-    "connected",
-    null,
-    serializeMetadata({}),
-    timestamp,
-    timestamp
-  );
+  const accountId = Number(result.lastInsertRowid);
 
-  saveIntegration(info.lastInsertRowid, {
+  await saveIntegration(accountId, {
     type: "hyperliquid",
     status: "connected",
     credentials: null,
     metadata: { address },
   });
 
-  return getBrokerAccountById(info.lastInsertRowid);
+  return getBrokerAccountById(accountId);
 };
 
 const syncBrokerAccount = async (accountId) => {
-  const account = getBrokerAccountById(accountId);
+  const account = await getBrokerAccountById(accountId);
   if (!account) {
     throw new Error("Compte introuvable.");
   }
-  const integration = getIntegrationByAccountId(accountId);
+  const integration = await getIntegrationByAccountId(accountId);
   if (!integration) {
     throw new Error("Aucune intégration trouvée pour ce compte.");
   }
@@ -955,7 +1007,7 @@ const syncBrokerAccount = async (accountId) => {
       if (!address) {
         throw new Error("Adresse HyperLiquid introuvable.");
       }
-      const hasTrades = accountHasTrades(accountId);
+      const hasTrades = await accountHasTrades(accountId);
       const lastSync = hasTrades ? integration.lastSyncAt : null;
       result = await fetchHyperliquidFromScript(address, lastSync);
       if ((!result.trades || result.trades.length === 0) && lastSync) {
@@ -966,20 +1018,24 @@ const syncBrokerAccount = async (accountId) => {
     }
 
     const trades = result.trades || [];
-    const insertedTrades = bulkUpsertBrokerTrades(accountId, trades);
+    const insertedTrades = await bulkUpsertBrokerTrades(accountId, trades);
     const timestamp = new Date().toISOString();
     const newBalance = toNumber(result.account?.currentBalance) || account.currentBalance;
     const latestTradeIso = getLatestTradeTimestamp(trades, integration.lastSyncAt);
-    db.prepare(`
-      UPDATE broker_accounts
-      SET currentBalance = ?, lastSyncAt = ?, status = ?, updatedAt = ?
-      WHERE id = ?
-    `).run(newBalance, latestTradeIso || timestamp, "synced", timestamp, accountId);
+
+    await db.execute({
+      sql: `
+        UPDATE broker_accounts
+        SET currentBalance = ?, lastSyncAt = ?, status = ?, updatedAt = ?
+        WHERE id = ?
+      `,
+      args: [newBalance, latestTradeIso || timestamp, "synced", timestamp, accountId],
+    });
 
     const tradesCount = insertedTrades;
     const retrievedCount = trades.length;
 
-    saveIntegration(accountId, {
+    await saveIntegration(accountId, {
       type: integration.type,
       status: "synced",
       credentials: integration.credentials,
@@ -987,9 +1043,9 @@ const syncBrokerAccount = async (accountId) => {
       lastSyncAt: latestTradeIso || timestamp,
     });
 
-    return { account: getBrokerAccountById(accountId), tradesCount, retrievedCount };
+    return { account: await getBrokerAccountById(accountId), tradesCount, retrievedCount };
   } catch (error) {
-    saveIntegration(accountId, {
+    await saveIntegration(accountId, {
       type: integration.type,
       status: "error",
       credentials: integration.credentials,
@@ -1001,12 +1057,12 @@ const syncBrokerAccount = async (accountId) => {
   }
 };
 
-const importBrokerCsv = (accountId, file) => {
-  const account = getBrokerAccountById(accountId);
+const importBrokerCsv = async (accountId, file) => {
+  const account = await getBrokerAccountById(accountId);
   if (!account) {
     throw new Error("Compte introuvable.");
   }
-  const integration = getIntegrationByAccountId(accountId);
+  const integration = await getIntegrationByAccountId(accountId);
   if (!integration || integration.type !== "ftmo_csv") {
     throw new Error("Ce compte ne supporte pas l'import CSV FTMO.");
   }
@@ -1015,23 +1071,26 @@ const importBrokerCsv = (accountId, file) => {
   }
 
   const trades = parseFtmoCsvTrades(file.buffer, account.currency);
-  const insertedTrades = bulkUpsertBrokerTrades(accountId, trades);
+  const insertedTrades = await bulkUpsertBrokerTrades(accountId, trades);
   const timestamp = new Date().toISOString();
   const latestTradeIso = getLatestTradeTimestamp(
     trades,
     integration.lastSyncAt || account.lastSyncAt
   );
-  const realizedPnl = getRealizedPnlForAccount(accountId);
+  const realizedPnl = await getRealizedPnlForAccount(accountId);
   const newBalance = toNumber(account.initialBalance) + realizedPnl;
 
-  db.prepare(`
-    UPDATE broker_accounts
-    SET currentBalance = ?, lastSyncAt = ?, status = ?, updatedAt = ?
-    WHERE id = ?
-  `).run(newBalance, latestTradeIso || timestamp, "synced", timestamp, accountId);
+  await db.execute({
+    sql: `
+      UPDATE broker_accounts
+      SET currentBalance = ?, lastSyncAt = ?, status = ?, updatedAt = ?
+      WHERE id = ?
+    `,
+    args: [newBalance, latestTradeIso || timestamp, "synced", timestamp, accountId],
+  });
 
   const previousMeta = integration.metadata || {};
-  saveIntegration(accountId, {
+  await saveIntegration(accountId, {
     type: integration.type,
     status: "synced",
     credentials: integration.credentials,
@@ -1046,7 +1105,7 @@ const importBrokerCsv = (accountId, file) => {
   });
 
   return {
-    account: getBrokerAccountById(accountId),
+    account: await getBrokerAccountById(accountId),
     tradesCount: insertedTrades,
     retrievedCount: trades.length,
   };

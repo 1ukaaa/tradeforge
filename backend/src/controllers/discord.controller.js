@@ -130,7 +130,7 @@ const generateFromEntry = async (req, res) => {
     return res.status(400).json({ error: "Entrée du journal manquante." });
   }
 
-  const entry = journalService.getJournalEntryById(entryId);
+  const entry = await journalService.getJournalEntryById(entryId);
   if (!entry) {
     return res.status(404).json({ error: "Entrée du journal introuvable." });
   }

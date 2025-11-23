@@ -27,13 +27,14 @@ const buildGeminiUrl = (model, method = "generateContent") =>
 const formatTemplate = (template = "", data = {}) =>
   template.replace(/\{\{(\w+)\}\}/g, (_, key) => data[key] ?? "");
 
-const getActiveVariant = (type, overrideVariant) =>
-  overrideVariant ||
-  getSetting(`${type}_variant`)?.value ||
-  "default";
+const getActiveVariant = async (type, overrideVariant) => {
+  if (overrideVariant) return overrideVariant;
+  const setting = await getSetting(`${type}_variant`);
+  return setting?.value || "default";
+};
 
-const resolvePromptTemplate = (type, variant) => {
-  const stored = getPromptVariant(type, variant)?.prompt;
+const resolvePromptTemplate = async (type, variant) => {
+  const stored = (await getPromptVariant(type, variant))?.prompt;
   if (stored && stored.trim()) {
     return stored;
   }
@@ -58,9 +59,9 @@ const estimateTokens = (payload = {}) => {
 
 // --- Prompt Builders ---
 
-const buildPrompt = (type, rawText, plan = "", overrideVariant = null) => {
-  const variant = getActiveVariant(type, overrideVariant);
-  const storedTemplate = resolvePromptTemplate(type, variant);
+const buildPrompt = async (type, rawText, plan = "", overrideVariant = null) => {
+  const variant = await getActiveVariant(type, overrideVariant);
+  const storedTemplate = await resolvePromptTemplate(type, variant);
   return formatTemplate(storedTemplate, {
     rawText,
     plan,
@@ -68,11 +69,16 @@ const buildPrompt = (type, rawText, plan = "", overrideVariant = null) => {
   });
 };
 
-const buildStructuredPrompt = (rawText, entryType = "analyse", plan = "", variant = DEFAULT_STRUCTURED_VARIANT) => {
+const buildStructuredPrompt = async (
+  rawText,
+  entryType = "analyse",
+  plan = "",
+  variant = DEFAULT_STRUCTURED_VARIANT
+) => {
   const variantConfig =
     STRUCTURED_VARIANT_INSTRUCTIONS[variant] || STRUCTURED_VARIANT_INSTRUCTIONS[DEFAULT_STRUCTURED_VARIANT];
   const storedTemplate =
-    getStructuredTemplate(variant)?.prompt ||
+    (await getStructuredTemplate(variant))?.prompt ||
     DEFAULT_STRUCTURE_TEMPLATES[variant] ||
     DEFAULT_STRUCTURE_TEMPLATES[DEFAULT_STRUCTURED_VARIANT];
   return formatTemplate(storedTemplate, {
@@ -182,7 +188,7 @@ const generateAnalysis = async ({ rawText, template = "", plan, variant, type })
 
   const promptType = inferPromptType(type, template);
   const activePlan = typeof plan === "string" ? plan : "";
-  const prompt = buildPrompt(promptType, rawText, activePlan, variant);
+  const prompt = await buildPrompt(promptType, rawText, activePlan, variant);
 
   const payload = {
     contents: [{ parts: [{ text: prompt }] }]
@@ -202,10 +208,10 @@ const generateStructuredAnalysis = async ({ rawText, entryType, plan, variant })
 
   const configuredVariant =
     variant ||
-    getSetting("structured_variant")?.value ||
+    (await getSetting("structured_variant"))?.value ||
     DEFAULT_STRUCTURED_VARIANT;
   
-  const prompt = buildStructuredPrompt(rawText, entryType, plan, configuredVariant);
+  const prompt = await buildStructuredPrompt(rawText, entryType, plan, configuredVariant);
 
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],

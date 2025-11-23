@@ -76,9 +76,9 @@ const parseGeneratedTweets = (rawText = "") => {
   return tweets;
 };
 
-const listDrafts = (_req, res) => {
+const listDrafts = async (_req, res) => {
   try {
-    const drafts = twitterDraftsService.listDrafts();
+    const drafts = await twitterDraftsService.listDrafts();
     res.json({ drafts });
   } catch (error) {
     console.error("Erreur listDrafts :", error);
@@ -86,13 +86,13 @@ const listDrafts = (_req, res) => {
   }
 };
 
-const getDraft = (req, res) => {
+const getDraft = async (req, res) => {
   const id = Number(req.params.id);
   if (!id) {
     return res.status(400).json({ error: "Identifiant invalide." });
   }
   try {
-    const draft = twitterDraftsService.getDraftById(id);
+    const draft = await twitterDraftsService.getDraftById(id);
     if (!draft) {
       return res.status(404).json({ error: "Brouillon introuvable." });
     }
@@ -103,9 +103,9 @@ const getDraft = (req, res) => {
   }
 };
 
-const createDraft = (req, res) => {
+const createDraft = async (req, res) => {
   try {
-    const draft = twitterDraftsService.createDraft(req.body || {});
+    const draft = await twitterDraftsService.createDraft(req.body || {});
     res.status(201).json({ draft });
   } catch (error) {
     console.error("Erreur createDraft :", error);
@@ -113,13 +113,13 @@ const createDraft = (req, res) => {
   }
 };
 
-const updateDraft = (req, res) => {
+const updateDraft = async (req, res) => {
   const id = Number(req.params.id);
   if (!id) {
     return res.status(400).json({ error: "Identifiant invalide." });
   }
   try {
-    const draft = twitterDraftsService.updateDraft(id, req.body || {});
+    const draft = await twitterDraftsService.updateDraft(id, req.body || {});
     res.json({ draft });
   } catch (error) {
     console.error("Erreur updateDraft :", error);
@@ -127,13 +127,13 @@ const updateDraft = (req, res) => {
   }
 };
 
-const deleteDraft = (req, res) => {
+const deleteDraft = async (req, res) => {
   const id = Number(req.params.id);
   if (!id) {
     return res.status(400).json({ error: "Identifiant invalide." });
   }
   try {
-    const deleted = twitterDraftsService.deleteDraft(id);
+    const deleted = await twitterDraftsService.deleteDraft(id);
     if (!deleted) {
       return res.status(404).json({ error: "Brouillon introuvable." });
     }
@@ -150,7 +150,7 @@ const publishDraft = async (req, res) => {
     return res.status(400).json({ error: "Identifiant invalide." });
   }
   try {
-    const draft = twitterDraftsService.getDraftById(id);
+    const draft = await twitterDraftsService.getDraftById(id);
     if (!draft) {
       return res.status(404).json({ error: "Brouillon introuvable." });
     }
@@ -168,7 +168,7 @@ const publishDraft = async (req, res) => {
 
     const publishResult = await publishThread(draft.payload);
     const publishedAt = new Date().toISOString();
-    const updatedDraft = twitterDraftsService.markPublished(id, {
+    const updatedDraft = await twitterDraftsService.markPublished(id, {
       tweetId: publishResult.firstTweetId,
       publishedAt,
     });
@@ -189,7 +189,7 @@ const generateFromEntry = async (req, res) => {
   if (!entryId) {
     return res.status(400).json({ error: "Entrée du journal manquante." });
   }
-  const entry = journalService.getJournalEntryById(entryId);
+  const entry = await journalService.getJournalEntryById(entryId);
   if (!entry) {
     return res.status(404).json({ error: "Entrée du journal introuvable." });
   }

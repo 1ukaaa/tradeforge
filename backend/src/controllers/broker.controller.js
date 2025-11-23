@@ -1,9 +1,9 @@
 // backend/src/controllers/broker.controller.js
 const brokerService = require("../services/broker.service");
 
-const getBrokerSummary = (req, res) => {
+const getBrokerSummary = async (req, res) => {
   try {
-    const summary = brokerService.getDashboardSummary();
+    const summary = await brokerService.getDashboardSummary();
     res.json(summary);
   } catch (error) {
     console.error("Erreur broker summary:", error);
@@ -11,9 +11,9 @@ const getBrokerSummary = (req, res) => {
   }
 };
 
-const getBrokerAccounts = (req, res) => {
+const getBrokerAccounts = async (req, res) => {
   try {
-    const accounts = brokerService.getBrokerAccounts();
+    const accounts = await brokerService.getBrokerAccounts();
     res.json({ accounts });
   } catch (error) {
     console.error("Erreur broker accounts:", error);
@@ -21,11 +21,11 @@ const getBrokerAccounts = (req, res) => {
   }
 };
 
-const getBrokerTrades = (req, res) => {
+const getBrokerTrades = async (req, res) => {
   try {
     const accountId = req.query.accountId ? Number(req.query.accountId) : null;
     const limit = req.query.limit ? Number(req.query.limit) : null;
-    const trades = brokerService.getBrokerTrades({ accountId, limit });
+    const trades = await brokerService.getBrokerTrades({ accountId, limit });
     res.json({ trades });
   } catch (error) {
     console.error("Erreur broker trades:", error);
@@ -33,14 +33,14 @@ const getBrokerTrades = (req, res) => {
   }
 };
 
-const getBrokerPositions = (req, res) => {
+const getBrokerPositions = async (req, res) => {
   try {
     const accountId = req.query.accountId ? Number(req.query.accountId) : null;
     const order =
       typeof req.query.order === "string" && req.query.order.toLowerCase() === "asc"
         ? "asc"
         : "desc";
-    const positions = brokerService.getBrokerPositions({ accountId, order });
+    const positions = await brokerService.getBrokerPositions({ accountId, order });
     res.json({ positions });
   } catch (error) {
     console.error("Erreur broker positions:", error);
@@ -48,7 +48,7 @@ const getBrokerPositions = (req, res) => {
   }
 };
 
-const createBrokerAccount = (req, res) => {
+const createBrokerAccount = async (req, res) => {
   const { type } = req.body || {};
   if (!type) {
     return res.status(400).json({ error: "Type d'intégration requis." });
@@ -57,7 +57,7 @@ const createBrokerAccount = (req, res) => {
     let account;
     if (type === "mt5") {
       const { name, currency, color, initialBalance, login, password, server } = req.body;
-      account = brokerService.createMt5Account({
+      account = await brokerService.createMt5Account({
         name,
         currency,
         color,
@@ -68,7 +68,7 @@ const createBrokerAccount = (req, res) => {
       });
     } else if (type === "hyperliquid") {
       const { name, currency, color, initialBalance, address } = req.body;
-      account = brokerService.createHyperliquidAccount({
+      account = await brokerService.createHyperliquidAccount({
         name,
         currency,
         color,
