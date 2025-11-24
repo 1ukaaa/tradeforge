@@ -14,6 +14,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import BrandLogo from "./BrandLogo";
 
 // Icônes
+import AssessmentRoundedIcon from "@mui/icons-material/AssessmentRounded";
 import DashboardCustomizeRoundedIcon from "@mui/icons-material/DashboardCustomizeRounded";
 import InsightsRoundedIcon from "@mui/icons-material/InsightsRounded";
 import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
@@ -21,8 +22,8 @@ import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
 // 1. AJOUTER L'ICÔNE CALENDRIER
 import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
-import TwitterIcon from "@mui/icons-material/Twitter";
 import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
+import TwitterIcon from "@mui/icons-material/Twitter";
 import { useThemeMode } from "../context/ThemeModeContext";
 
 // Listes d'items séparées par groupes
@@ -31,6 +32,11 @@ const MAIN_NAV = [
     to: "/",
     label: "Dashboard",
     icon: <InsightsRoundedIcon />,
+  },
+  {
+    to: "/stats",
+    label: "Stats",
+    icon: <AssessmentRoundedIcon />,
   },
   {
     to: "/tradeforge-ai",
@@ -74,7 +80,7 @@ const SETTINGS_ITEM = {
 // (Le reste du fichier que vous m'avez fourni est inchangé)
 // ...
 
-const StyledNavItem = ({ to, label, icon, onNavigate = () => {} }) => {
+const StyledNavItem = ({ to, label, icon, onNavigate = () => { } }) => {
   const location = useLocation();
   const theme = useTheme();
   // [MODIFICATION] Récupérer le mode pour le hover
@@ -134,7 +140,7 @@ const StyledNavItem = ({ to, label, icon, onNavigate = () => {} }) => {
   );
 };
 
-const NavigationMenu = ({ onNavigate = () => {}, showBrand = true }) => {
+const NavigationMenu = ({ onNavigate = () => { }, showBrand = true }) => {
   const theme = useTheme();
   // [MODIFICATION] Récupérer le mode pour le style de la Box
   const { mode } = useThemeMode();
