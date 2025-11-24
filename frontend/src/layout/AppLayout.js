@@ -14,12 +14,12 @@ const AppLayout = () => {
   
   // LISTE DES PAGES "IMMERSIVES" (Sans marges, prennent tout l'écran)
   const isFullScreenApp = [
-    "/", 
+    "/tradeforge-ai", 
     "/twitter", 
     "/discord"
   ].includes(location.pathname);
 
-  const isDashboardPage = location.pathname === "/dashboard";
+  const isDashboardPage = ["/", "/dashboard"].includes(location.pathname);
 
   return (
     <Box

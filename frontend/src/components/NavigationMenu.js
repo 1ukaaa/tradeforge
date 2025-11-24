@@ -15,7 +15,6 @@ import BrandLogo from "./BrandLogo";
 
 // Icônes
 import DashboardCustomizeRoundedIcon from "@mui/icons-material/DashboardCustomizeRounded";
-import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
 import InsightsRoundedIcon from "@mui/icons-material/InsightsRounded";
 import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
@@ -29,12 +28,12 @@ import { useThemeMode } from "../context/ThemeModeContext";
 // Listes d'items séparées par groupes
 const MAIN_NAV = [
   {
-    to: "/home",
-    label: "Home",
-    icon: <HomeRoundedIcon />,
+    to: "/",
+    label: "Dashboard",
+    icon: <InsightsRoundedIcon />,
   },
   {
-    to: "/",
+    to: "/tradeforge-ai",
     label: "TradeForge AI",
     icon: <TaskAltRoundedIcon />,
   },
@@ -55,11 +54,6 @@ const WORKSPACE_NAV = [
     to: "/discord",
     label: "Discord Studio",
     icon: <ForumRoundedIcon />,
-  },
-  {
-    to: "/dashboard",
-    label: "Dashboard",
-    icon: <InsightsRoundedIcon />,
   },
   // 2. AJOUTER LE NOUVEL ITEM
   {
@@ -189,7 +183,7 @@ const NavigationMenu = ({ onNavigate = () => {}, showBrand = true }) => {
       <Box sx={{ px: 1.5, mb: 2 }}>
         <Button
           component={NavLink}
-          to="/"
+          to="/tradeforge-ai"
           variant="contained"
           color="primary"
           startIcon={<RocketLaunchRoundedIcon />}

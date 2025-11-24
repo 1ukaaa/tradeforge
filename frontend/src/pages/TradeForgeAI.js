@@ -1,4 +1,4 @@
-// frontend/src/pages/NewEntry.js
+// frontend/src/pages/TradeForgeAI.js
 
 import { Alert, alpha, Box, CircularProgress, Paper, Stack, Typography } from "@mui/material";
 import { useEffect, useRef, useState } from "react";
@@ -35,10 +35,10 @@ const UserPrompt = ({ text }) => (
 );
 
 /**
- * Page "Chat" pour la nouvelle entrée.
+ * Page principale TradeForge AI.
  * Gère le cycle de vie : Vide -> Soumission -> Affichage éditable
  */
-const NewEntry = () => {
+const TradeForgeAI = () => {
   const [planDescription, setPlanDescription] = useState("");
   const [structuredVariant, setStructuredVariant] = useState("detailed");
   const [analysisVariant, setAnalysisVariant] = useState("default");
@@ -63,11 +63,11 @@ const NewEntry = () => {
   // On lit l'état de la navigation pour définir l'onglet initial
   const { state } = useLocation();
   const getInitialTool = () => {
-    const defaultTab = state?.defaultTab; // Vient de Home.js
+    const defaultTab = state?.defaultTab; // Permet de préselectionner un onglet
     if (defaultTab === 'trade') {
       return 'trade'; // 'trade' correspond à 'trade'
     }
-    // 'ai' (de Home.js) ou une navigation directe (null) correspond à 'analyse'
+    // 'ai' ou une navigation directe (null) correspond à 'analyse'
     return 'analyse';
   };
   const [activeTool, setActiveTool] = useState(getInitialTool); // <-- MODIFIÉ
@@ -290,4 +290,4 @@ const NewEntry = () => {
   );
 };
 
-export default NewEntry;
+export default TradeForgeAI;

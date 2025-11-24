@@ -1,8 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import App from "./App";
 import { ThemeModeProvider } from "./context/ThemeModeContext";
+// Mock Calendar to avoid parsing FullCalendar ESM modules in tests
+jest.mock("./pages/Calendar", () => () => null);
+jest.mock("./pages/Dashboard", () => () => <div>Dashboard Page</div>);
 
-test("affiche la page Nouvelle Entrée", () => {
+test("affiche le dashboard en page d'accueil", () => {
   // Le composant App a besoin du ThemeModeProvider pour se rendre
   render(
     <ThemeModeProvider>
@@ -10,13 +13,7 @@ test("affiche la page Nouvelle Entrée", () => {
     </ThemeModeProvider>
   );
 
-  // On recherche le titre H1 de la page NewEntry.js
-  const titleElement = screen.getByText(/Nouvelle Entrée/i);
-  expect(titleElement).toBeInTheDocument();
-
-  // On vérifie aussi que la description est présente
-  const descriptionElement = screen.getByText(
-    /Dicte ou colle ton analyse/i
-  );
-  expect(descriptionElement).toBeInTheDocument();
+  // La page d'accueil doit afficher le dashboard
+  const dashboardElement = screen.getByText(/Dashboard Page/i);
+  expect(dashboardElement).toBeInTheDocument();
 });

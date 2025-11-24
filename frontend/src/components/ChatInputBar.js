@@ -87,7 +87,7 @@ const ChatInputBar = ({
   const handleSubmit = (e) => {
     e.preventDefault();
     if (loading || !text.trim()) return;
-    // 'activeTool' est déjà géré par le parent (NewEntry)
+    // 'activeTool' est déjà géré par le parent (TradeForgeAI)
     onSend(text);
     setText(""); // Vider le champ après envoi
   };
@@ -117,7 +117,7 @@ const ChatInputBar = ({
   };
   // --- Fin des nouveaux handlers ---
 
-  // Ce hook permet au parent (NewEntry) de remplir le champ de texte
+  // Ce hook permet au parent (TradeForgeAI) de remplir le champ de texte
   useEffect(() => {
     if (onSuggestionClick) {
       onSuggestionClick.current = (suggestion) => {
