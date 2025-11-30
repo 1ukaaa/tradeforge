@@ -35,7 +35,7 @@ const gradients = {
 };
 
 // 3. RADIUS (INCHANGÉ)
-const sharedRadius = 8; 
+const sharedRadius = 8;
 
 // 4. TYPOGRAPHIE (INCHANGÉE)
 const baseTypography = {
@@ -50,7 +50,7 @@ const baseTypography = {
 
 const createForgeTheme = (mode = "dark") => {
   const isDark = mode === "dark";
-  
+
   // 5. NOUVELLE PALETTE MUI
   const palette = {
     mode,
@@ -59,7 +59,7 @@ const createForgeTheme = (mode = "dark") => {
       main: forgePalette.accentNeutral, // Blanc/Sable
       contrastText: forgePalette.obsidian,
     } : {
-    // ================== MODE CLAIR (MODIFIÉ) ==================
+      // ================== MODE CLAIR (MODIFIÉ) ==================
       main: forgePalette.accentBlue, // Le bleu devient la couleur primaire
       contrastText: forgePalette.porcelain,
     },
@@ -107,6 +107,12 @@ const createForgeTheme = (mode = "dark") => {
         styleOverrides: {
           body: {
             backgroundColor: palette.background.default,
+            backgroundImage: isDark
+              ? "radial-gradient(circle at 20% 20%, #1b2d3f 0%, #05060a 55%)"
+              : `linear-gradient(160deg, ${forgePalette.porcelain} 0%, ${forgePalette.fog} 100%)`,
+            backgroundAttachment: "fixed",
+            backgroundRepeat: "no-repeat",
+            minHeight: "100vh",
           },
         },
       },
@@ -118,8 +124,8 @@ const createForgeTheme = (mode = "dark") => {
           root: {
             borderRadius: sharedRadius,
             border: `1px solid ${alpha(isDark ? "#FFFFFF" : "#0F1729", 0.1)}`,
-            backgroundImage: "none", // Mode clair : pas de gradient sur les cartes
-            backgroundColor: palette.background.paper, // Juste blanc
+            backgroundImage: "none",
+            backgroundColor: palette.background.paper,
           },
         },
       },
@@ -134,37 +140,31 @@ const createForgeTheme = (mode = "dark") => {
             letterSpacing: "0.06em",
           },
           containedPrimary: {
-            // ================== MODE SOMBRE (INCHANGÉ) ==================
-            background: isDark ? palette.primary.main : undefined,
-            color: isDark ? palette.primary.contrastText : undefined,
-            // ================== MODE CLAIR (MODIFIÉ) ==================
-            // Le bouton primaire est maintenant BLEU
-            ...( !isDark && {
-              background: palette.primary.main, // Bleu
-              color: palette.primary.contrastText, // Blanc
-              boxShadow: `0 4px 12px ${alpha(palette.primary.main, 0.2)}`,
-              "&:hover": {
-                background: alpha(palette.primary.main, 0.85),
-              },
-            }),
+            // Dark: White button (primary.main is White)
+            // Light: Blue button (primary.main is Blue)
+            background: palette.primary.main,
+            color: palette.primary.contrastText,
+            boxShadow: !isDark ? `0 4px 12px ${alpha(palette.primary.main, 0.2)}` : "none",
+            "&:hover": {
+              background: alpha(palette.primary.main, 0.85),
+            },
           },
           containedSecondary: {
-            // Le bouton secondaire est maintenant NOIR
-            ...( !isDark && {
-              background: palette.secondary.main, // Noir
-              color: palette.secondary.contrastText, // Blanc
-              boxShadow: "none",
-              "&:hover": {
-                background: alpha(palette.secondary.main, 0.85),
-              },
-            }),
+            // Dark: Blue button (secondary.main is Blue)
+            // Light: Dark button (secondary.main is Dark)
+            background: palette.secondary.main,
+            color: palette.secondary.contrastText,
+            boxShadow: "none",
+            "&:hover": {
+              background: alpha(palette.secondary.main, 0.85),
+            },
           },
           outlined: {
             borderWidth: "1px",
             borderColor: alpha(isDark ? "#FFFFFF" : "#0F1729", 0.2),
             color: isDark ? palette.text.secondary : palette.text.primary,
             "&:hover": {
-              borderColor: isDark ? palette.primary.main : palette.primary.main,
+              borderColor: palette.primary.main,
               color: palette.primary.main,
               background: alpha(palette.primary.main, 0.05),
             },
@@ -184,8 +184,8 @@ const createForgeTheme = (mode = "dark") => {
             fontWeight: 600,
             letterSpacing: "0.04em",
             backgroundImage: forge.gradients.chip,
-            borderColor: alpha(palette.secondary.main, 0.3),
-            color: palette.secondary.main, // Bleu
+            borderColor: alpha(forgePalette.accentBlue, 0.3),
+            color: forgePalette.accentBlue, // Always Blue
           },
         },
       },
@@ -197,8 +197,7 @@ const createForgeTheme = (mode = "dark") => {
             backgroundColor: alpha(isDark ? "#FFFFFF" : "#0F1729", 0.04),
           },
           indicator: {
-            // L'indicateur est maintenant BLEU en light mode
-            backgroundColor: isDark ? palette.secondary.main : palette.primary.main,
+            backgroundColor: forgePalette.accentBlue, // Always Blue
             height: 3,
             borderRadius: 3,
           },
@@ -211,8 +210,7 @@ const createForgeTheme = (mode = "dark") => {
             fontSize: "0.95rem",
             color: alpha(isDark ? "#FFFFFF" : "#0F1729", 0.6),
             "&.Mui-selected": {
-              // Le texte sélectionné est BLEU en light mode
-              color: isDark ? palette.primary.main : palette.primary.main,
+              color: forgePalette.accentBlue, // Always Blue
             },
           },
         },
@@ -239,8 +237,9 @@ const createForgeTheme = (mode = "dark") => {
           root: {
             borderRadius: sharedRadius,
             backgroundImage: forge.gradients.chip,
-            color: isDark ? palette.text.primary : palette.primary.main, // Texte bleu sur fond bleu clair
-            border: `1px solid ${alpha(palette.secondary.main, 0.3)}`,
+            color: forgePalette.accentBlue,
+            border: `1px solid ${alpha(forgePalette.accentBlue, 0.3)}`,
+            backgroundColor: isDark ? forgePalette.nightfall : forgePalette.porcelain,
           },
         },
       },

@@ -25,7 +25,6 @@ const AppLayout = () => {
     <Box
       sx={{
         minHeight: "100vh",
-        background: (theme) => theme.palette.background.default,
         display: "flex",
         flexDirection: { xs: "column", lg: "row" },
       }}

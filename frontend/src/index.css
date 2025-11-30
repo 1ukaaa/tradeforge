@@ -1,7 +1,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
 }
 
 body {
@@ -10,13 +10,12 @@ body {
     "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: radial-gradient(circle at 20% 20%, #1b2d3f 0%, #05060a 55%) fixed;
-  color: #f4f6ff;
 }
 
 #root {
   min-height: 100vh;
-  background: linear-gradient(145deg, rgba(6, 10, 21, 0.9), rgba(10, 15, 32, 0.95));
+  display: flex;
+  flex-direction: column;
 }
 
 code {

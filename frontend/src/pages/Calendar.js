@@ -310,7 +310,9 @@ const Calendar = () => {
             fontWeight={800}
             gutterBottom
             sx={{
-              background: "linear-gradient(90deg, #fff, #ccc)",
+              background: theme.palette.mode === 'dark'
+                ? "linear-gradient(90deg, #fff, #ccc)"
+                : "linear-gradient(90deg, #0F1729, #4A4A52)",
               backgroundClip: "text",
               textFillColor: "transparent",
             }}

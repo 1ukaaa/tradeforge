@@ -727,7 +727,13 @@ const PostDashboard = ({ posts, onEdit, onCreate, onDelete }) => {
                 <Container maxWidth="xl">
                     <Grid container spacing={4} alignItems="center">
                         <Grid item xs={12} md={6}>
-                            <Typography variant="h3" fontWeight={800} gutterBottom sx={{ background: 'linear-gradient(90deg, #fff, #ccc)', backgroundClip: 'text', textFillColor: 'transparent' }}>
+                            <Typography variant="h3" fontWeight={800} gutterBottom sx={{
+                                background: theme.palette.mode === 'dark'
+                                    ? 'linear-gradient(90deg, #fff, #ccc)'
+                                    : 'linear-gradient(90deg, #0F1729, #4A4A52)',
+                                backgroundClip: 'text',
+                                textFillColor: 'transparent'
+                            }}>
                                 Discord Studio
                             </Typography>
                             <Typography variant="h6" color="text.secondary" fontWeight={400} sx={{ maxWidth: 600 }}>
