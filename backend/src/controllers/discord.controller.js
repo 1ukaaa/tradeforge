@@ -60,7 +60,7 @@ const sanitizeImageUrl = (value) => {
   if (!value) return null;
   const trimmed = String(value).trim();
   // On autorise tout ici, le traitement DataURI se fait à l'envoi
-  return trimmed; 
+  return trimmed;
 };
 
 const pickEntryImage = (entry) => {
@@ -167,58 +167,23 @@ const publishPayload = async (req, res) => {
   }
 
   let payload = req.body?.payload;
+  const scheduledAt = req.body?.scheduledAt;
+
   if (!payload || typeof payload !== "object") {
     return res.status(400).json({ error: "Payload Discord manquant." });
   }
 
-  const debugInfo = {
-    contentPreview: typeof payload.content === "string" ? payload.content.slice(0, 120) : "",
-    embeds: Array.isArray(payload.embeds) ? payload.embeds.length : 0,
-  };
-  console.log("[Discord] Tentative d'envoi", debugInfo);
-
   try {
-    const form = new FormData();
-    const files = [];
-
-    // Traitement des embeds pour extraire les images Base64
-    if (payload.embeds && Array.isArray(payload.embeds)) {
-      payload.embeds = payload.embeds.map((embed, index) => {
-        if (embed.image && embed.image.url && embed.image.url.startsWith('data:image')) {
-          // Extraction du Base64
-          const matches = embed.image.url.match(/^data:image\/(\w+);base64,(.+)$/);
-          if (matches) {
-            const ext = matches[1];
-            const data = matches[2];
-            const filename = `image_${index}.${ext}`;
-            
-            // Ajout au FormData
-            const buffer = Buffer.from(data, 'base64');
-            form.append(`files[${index}]`, buffer, filename);
-            
-            // Remplacement de l'URL par la référence interne Discord
-            return {
-              ...embed,
-              image: { url: `attachment://image_${index}.${ext}` }
-            };
-          }
-        }
-        return embed;
-      });
+    // 1. GESTION PLANIFICATION
+    if (scheduledAt && new Date(scheduledAt) > new Date()) {
+      console.log("[Discord] Planification du post pour", scheduledAt);
+      await discordQueue.addToQueue(payload, scheduledAt);
+      return res.json({ success: true, scheduled: true, scheduledAt });
     }
 
-    // Ajout du JSON principal
-    form.append('payload_json', JSON.stringify(payload));
-
-    // Envoi via Axios avec les bons headers
-    const response = await axios.post(`${webhookUrl}?wait=true`, form, {
-      headers: {
-        ...form.getHeaders(), // Important pour le multipart boundary
-      },
-      timeout: 15000,
-    });
-
-    const message = response.data;
+    // 2. ENVOI DIRECT
+    console.log("[Discord] Envoi immédiat");
+    const message = await sendToDiscord(webhookUrl, payload);
     console.log("[Discord] Message envoyé", { id: message?.id });
 
     res.json({

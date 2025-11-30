@@ -2,8 +2,8 @@
 const axios = require("axios");
 const { enforceRateLimit } = require("../core/rateLimiter");
 const { getPromptVariant, getStructuredTemplate, getSetting } = require("./settings.service");
-const { 
-  DEFAULT_STRUCTURED_VARIANT, 
+const {
+  DEFAULT_STRUCTURED_VARIANT,
   STRUCTURED_VARIANT_INSTRUCTIONS,
   DEFAULT_STRUCTURE_TEMPLATES,
   DEFAULT_PROMPT_VARIANTS
@@ -66,6 +66,7 @@ const buildPrompt = async (type, rawText, plan = "", overrideVariant = null) => 
     rawText,
     plan,
     entryType: type === "trade" ? "trade" : "analyse",
+    date: new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }),
   });
 };
 
@@ -113,7 +114,7 @@ const callGeminiAPI = async (payload) => {
   });
   try {
     const response = await axios.post(buildGeminiUrl(DEFAULT_TEXT_MODEL), payload);
-    
+
     const resultText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!resultText) {
       throw new Error("Aucune réponse complète de Gemini.");
@@ -193,7 +194,7 @@ const generateAnalysis = async ({ rawText, template = "", plan, variant, type })
   const payload = {
     contents: [{ parts: [{ text: prompt }] }]
   };
-  
+
   const result = await callGeminiAPI(payload);
   return { result };
 };
@@ -210,7 +211,7 @@ const generateStructuredAnalysis = async ({ rawText, entryType, plan, variant })
     variant ||
     (await getSetting("structured_variant"))?.value ||
     DEFAULT_STRUCTURED_VARIANT;
-  
+
   const prompt = await buildStructuredPrompt(rawText, entryType, plan, configuredVariant);
 
   const payload = {

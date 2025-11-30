@@ -299,29 +299,38 @@ PLAN :
 {{plan}}
 `,
     "analysis.deep": `Tu es un assistant qui synthétise une analyse de marché pour Discord.
+La structure doit être PRÉCISE et suivre l'ordre demandé.
+
 Retourne STRICTEMENT un objet JSON valide (sans texte additionnel) avec cette structure :
 {
-  "title": "Actif + unité de temps",
-  "description": "Vue d'ensemble en <= 2 phrases",
+  "title": "Analyse Actif — {{date}}",
+  "description": "Micro intro du biais (très court)",
   "fields": [
-    { "name": "Biais", "value": "...", "inline": true },
-    { "name": "Catalyseurs", "value": "• ...\\n• ...", "inline": false },
-    { "name": "Niveaux clés", "value": "• ...\\n• ...", "inline": false },
-    { "name": "Plan d'action", "value": "...", "inline": false },
-    { "name": "Risque", "value": "...", "inline": false }
+    { "name": "HTF (Monthly/Weekly/Daily)", "value": "Analyse sur les unités de temps supérieures...", "inline": false },
+    { "name": "MTF (H4/H1)", "value": "Analyse sur les unités de temps intermédiaires...", "inline": false },
+    { "name": "LTF (M5/M15)", "value": "Analyse sur les unités de temps inférieures (si présentes)...", "inline": false },
+    { "name": "Conclusion / Plan d'action", "value": "Scénario Principal et Invalidation (sans gestion de risque)...", "inline": false }
   ],
   "callToAction": "CTA court invitant le débat",
   "footer": "Timeframe + prochaine revue",
   "imageUrl": ""
 }
+
 Contraintes :
-1) Les objets "fields" sont EXACTEMENT ceux listés ci-dessus dans cet ordre.
-2) Chaque "value" < 240 caractères ; préfère les puces « • » pour les listes.
-3) "title" combine symbole + timeframe (ex : "BTCUSD — H4").
-4) "description" = 2 phrases max résumant le contexte et le plan.
-5) "callToAction" = question ou invitation à réagir.
-6) "imageUrl" reste vide si aucune image pertinente n'est fournie.
-7) Retourne un JSON strict (pas de commentaire, pas de Markdown autour).
+1) "description" : Micro-intro du biais (ex: "Biais haussier confirmé par la clôture weekly").
+2) "fields" :
+   - Le champ "HTF" est OBLIGATOIRE (Monthly, Weekly ou Daily).
+   - Le champ "MTF" est OBLIGATOIRE (H4 ou H1).
+   - Le champ "LTF" (M5/M15) est OPTIONNEL.
+   - Le champ "Conclusion / Plan d'action" est OPTIONNEL mais DOIT contenir Scénario + Invalidation.
+3) STYLE TÉLÉGRAPHIQUE STRICT :
+   - Pas de phrases complètes ("Le marché a fait..." -> "Marché a fait...").
+   - Pas de mots de liaison inutiles ("Ensuite", "De plus", "Cependant").
+   - Va droit au but : Sujet + Verbe + Niveau.
+   - Utilise des abréviations standards (ATH, HL, LH, BOS).
+4) "title" DOIT suivre le format : "Analyse [Symbole] — {{date}}" (ex: "Analyse BTCUSD — 29 novembre").
+5) "imageUrl" reste vide si aucune image pertinente n'est fournie.
+6) Retourne un JSON strict (pas de commentaire, pas de Markdown autour).
 
 CONTENU SOURCE :
 {{rawText}}
