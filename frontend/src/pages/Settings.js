@@ -1,68 +1,140 @@
-// frontend/src/pages/Settings.js
-import { Box, Stack, Tab, Tabs, Typography } from "@mui/material";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import DescriptionIcon from "@mui/icons-material/Description";
+import NotificationsIcon from "@mui/icons-material/Notifications";
+import PaletteIcon from "@mui/icons-material/Palette";
+import TerminalIcon from "@mui/icons-material/Terminal";
+import {
+  Box,
+  Container,
+  Fade,
+  Paper,
+  Tab,
+  Tabs,
+  Typography,
+  alpha,
+  useTheme
+} from "@mui/material";
 import { useState } from "react";
-// Importer les nouveaux composants de panneau
+
+// Sub-components
 import SettingsAppearance from "./settings/SettingsAppearance";
+import SettingsBrokerAccounts from "./settings/SettingsBrokerAccounts";
 import SettingsPlan from "./settings/SettingsPlan";
 import SettingsPromptVariants from "./settings/SettingsPromptVariants";
-import SettingsBrokerAccounts from "./settings/SettingsBrokerAccounts";
-
-// Nouveau composant pour gérer le panneau d'onglet
-const TabPanel = ({ children, value, index }) => (
-  <Box role="tabpanel" hidden={value !== index} id={`settings-tabpanel-${index}`} sx={{ pt: 3 }}>
-    {value === index && children}
-  </Box>
-);
 
 const Settings = () => {
-  // Démarrer sur les brokers, seul panneau relié aux comptes externes
-  const [activeTab, setActiveTab] = useState("brokers"); 
+  const theme = useTheme();
+  const [activeTab, setActiveTab] = useState("brokers");
 
   const handleTabChange = (_, newValue) => {
     setActiveTab(newValue);
   };
 
+  const MENU_ITEMS = [
+    { value: "brokers", label: "Comptes & Brokers", icon: <AccountBalanceWalletIcon />, component: <SettingsBrokerAccounts /> },
+    { value: "appearance", label: "Apparence", icon: <PaletteIcon />, component: <SettingsAppearance /> },
+    { value: "plan", label: "Plan de Trading", icon: <DescriptionIcon />, component: <SettingsPlan /> },
+    { value: "variants", label: "Prompts IA", icon: <TerminalIcon />, component: <SettingsPromptVariants /> },
+    { value: "notifications", label: "Notifications", icon: <NotificationsIcon />, component: <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>Bientôt disponible</Box>, disabled: true },
+  ];
+
+  const activeItem = MENU_ITEMS.find(item => item.value === activeTab);
+
   return (
-    <Stack spacing={3}>
-      {/* 1. Titre (remplace le PageHero) */}
-      <Typography variant="h2" component="h1" fontWeight={700} sx={{ pt: 2 }}>
-        Atelier
-      </Typography>
+    <Box sx={{ minHeight: "100%", bgcolor: "background.default" }}>
+      {/* HERO HEADER */}
+      <Box
+        sx={{
+          pt: { xs: 4, md: 6 },
+          pb: { xs: 8, md: 10 }, // Extra padding at bottom for the overlapping tabs
+          px: { xs: 2, md: 4 },
+          background: theme.forge?.gradients?.hero || "linear-gradient(180deg, #1E1E24 0%, #0A0A0F 100%)",
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          position: 'relative',
+          zIndex: 1
+        }}
+      >
+        <Container maxWidth="xl">
+          <Typography
+            variant="h3"
+            fontWeight={800}
+            gutterBottom
+            sx={{
+              background: "linear-gradient(90deg, #fff, #ccc)",
+              backgroundClip: "text",
+              textFillColor: "transparent",
+            }}
+          >
+            Paramètres
+          </Typography>
+          <Typography variant="h6" color="text.secondary" fontWeight={400} sx={{ maxWidth: 600 }}>
+            Gérez vos connexions, personnalisez votre expérience et configurez vos assistants IA.
+          </Typography>
+        </Container>
+      </Box>
 
-      {/* 2. Barre d'onglets (style de l'image, adaptée au thème) */}
-      <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          aria-label="Sections des paramètres"
-          variant="scrollable"
-          scrollButtons="auto"
+      {/* MAIN CONTENT CONTAINER */}
+      <Container maxWidth="xl" sx={{ mt: -6, pb: 8, position: 'relative', zIndex: 2 }}>
+
+        {/* HORIZONTAL NAVIGATION */}
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 4,
+            borderRadius: 3,
+            border: `1px solid ${theme.palette.divider}`,
+            bgcolor: alpha(theme.palette.background.paper, 0.6),
+            backdropFilter: "blur(12px)",
+            p: 1
+          }}
         >
-          <Tab label="Compte" value="brokers" />
-          <Tab label="Apparence" value="appearance" />
-          <Tab label="Plan de Trading" value="plan" />
-          <Tab label="Prompts (Texte)" value="variants" />
-          <Tab label="Notifications" value="notifications" disabled />
-        </Tabs>
-      </Box>
+          <Tabs
+            value={activeTab}
+            onChange={handleTabChange}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            sx={{
+              minHeight: 60,
+              "& .MuiTabs-indicator": {
+                height: 4,
+                borderRadius: "4px 4px 0 0",
+                bgcolor: "primary.main",
+              },
+            }}
+          >
+            {MENU_ITEMS.map((item) => (
+              <Tab
+                key={item.value}
+                value={item.value}
+                label={item.label}
+                icon={item.icon}
+                iconPosition="start"
+                disabled={item.disabled}
+                sx={{
+                  minHeight: 60,
+                  px: 3,
+                  fontWeight: activeTab === item.value ? 700 : 500,
+                  color: activeTab === item.value ? "text.primary" : "text.secondary",
+                  opacity: item.disabled ? 0.5 : 1,
+                  "&.Mui-selected": {
+                    color: "primary.main",
+                  },
+                  transition: "all 0.2s",
+                }}
+              />
+            ))}
+          </Tabs>
+        </Paper>
 
-      {/* 3. Contenu des panneaux */}
-      <Box>
-        <TabPanel value={activeTab} index="brokers">
-          <SettingsBrokerAccounts />
-        </TabPanel>
-        <TabPanel value={activeTab} index="appearance">
-          <SettingsAppearance />
-        </TabPanel>
-        <TabPanel value={activeTab} index="plan">
-          <SettingsPlan />
-        </TabPanel>
-        <TabPanel value={activeTab} index="variants">
-          <SettingsPromptVariants />
-        </TabPanel>
-
-      </Box>
-    </Stack>
+        {/* CONTENT AREA */}
+        <Fade in={true} key={activeTab} timeout={400}>
+          <Box>
+            {activeItem?.component}
+          </Box>
+        </Fade>
+      </Container>
+    </Box>
   );
 };
 

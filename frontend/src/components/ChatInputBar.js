@@ -3,15 +3,12 @@ import MicOffIcon from "@mui/icons-material/MicOff";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
 // Imports ajoutés
 import AnalyticsIcon from "@mui/icons-material/Analytics";
-import ChatIcon from "@mui/icons-material/Chat";
 import CheckIcon from "@mui/icons-material/Check";
-import ShareIcon from "@mui/icons-material/Share";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
 import TuneIcon from "@mui/icons-material/Tune";
 import {
   Box,
   CircularProgress,
-  Divider,
   IconButton,
   ListItemIcon,
   ListItemText,
@@ -23,7 +20,7 @@ import {
   Tooltip,
   Typography,
   alpha,
-  useTheme,
+  useTheme
 } from "@mui/material";
 // 'useState' est déjà importé, j'ajoute 'useMemo'
 import { useEffect, useMemo, useState } from "react";
@@ -42,18 +39,6 @@ const TOOLS = {
     icon: <ShowChartIcon fontSize="small" />,
     description: "Analyser un trade spécifique (entrée/sortie)",
     disabled: false,
-  },
-  discord: {
-    label: "Message Discord",
-    icon: <ChatIcon fontSize="small" />,
-    description: "Préparer un post pour Discord (bientôt)",
-    disabled: true,
-  },
-  twitter: {
-    label: "Tweet Twitter",
-    icon: <ShareIcon fontSize="small" />,
-    description: "Rédiger un thread Twitter (bientôt)",
-    disabled: true,
   },
 };
 
@@ -279,7 +264,7 @@ const ChatInputBar = ({
         <Typography variant="overline" sx={{ px: 2, pt: 1, color: "text.secondary" }}>
           Outils
         </Typography>
-        
+
         {/* Outils fonctionnels */}
         {Object.entries(TOOLS)
           .filter(([, tool]) => !tool.disabled)
@@ -300,25 +285,6 @@ const ChatInputBar = ({
                 primary={tool.label}
                 secondary={tool.description}
                 primaryTypographyProps={{ fontWeight: 600 }}
-              />
-            </MenuItem>
-          ))}
-          
-        <Divider sx={{ my: 1 }} />
-        
-        {/* Outils non fonctionnels (désactivés) */}
-        {Object.entries(TOOLS)
-          .filter(([, tool]) => tool.disabled)
-          .map(([key, tool]) => (
-            <MenuItem
-              key={key}
-              onClick={() => handleToolSelect(key)}
-              disabled={tool.disabled}
-            >
-              <ListItemIcon>{tool.icon}</ListItemIcon>
-              <ListItemText
-                primary={tool.label}
-                secondary={tool.description}
               />
             </MenuItem>
           ))}

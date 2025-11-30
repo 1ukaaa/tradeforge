@@ -1,44 +1,112 @@
 // frontend/src/pages/TradeForgeAI.js
 
-import { Alert, alpha, Box, CircularProgress, Paper, Stack, Typography } from "@mui/material";
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import DescriptionIcon from '@mui/icons-material/Description';
+import PersonIcon from '@mui/icons-material/Person';
+import {
+  Alert,
+  alpha,
+  Avatar,
+  Box,
+  Chip,
+  CircularProgress,
+  Container,
+  Fade,
+  Paper,
+  Stack,
+  Typography,
+  useTheme
+} from "@mui/material";
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom"; // <--- AJOUT : Pour lire l'état de navigation
+import { useLocation } from "react-router-dom";
+
 import ChatInputBar from "../components/ChatInputBar";
 import EditableAnalysis from "../components/EditableAnalysis";
 import WelcomeScreen from "../components/WelcomeScreen";
 import { requestAnalysis, requestStructuredAnalysis } from "../services/aiClient";
+import { fetchBrokerPositions, fetchBrokerSummary } from "../services/brokerClient";
 import { saveJournalEntry } from "../services/journalClient";
 import { fetchPlan } from "../services/planClient";
 import { fetchSettings } from "../services/settingsClient";
-import { fetchBrokerSummary, fetchBrokerPositions } from "../services/brokerClient";
 import { buildPlanDescription } from "../utils/planUtils";
 import { stringifyTimeframes } from "../utils/timeframeUtils";
 
-// Le composant UserPrompt (inchangé)
-const UserPrompt = ({ text }) => (
-  <Stack direction="row" spacing={2} sx={{ width: "100%", justifyContent: "flex-end" }}>
-    <Paper
-      sx={{
-        p: { xs: 2, md: 3 },
-        maxWidth: "80%",
-        borderRadius: 4,
-        borderBottomRightRadius: 0,
-        bgcolor: (theme) => alpha(theme.palette.primary.main, 0.15),
-        border: (theme) => `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-      }}
-    >
-      <Typography sx={{ whiteSpace: "pre-wrap", wordWrap: "break-word" }}>
-        {text}
-      </Typography>
-    </Paper>
-  </Stack>
-);
+// --- COMPOSANTS UI ---
+
+const UserPrompt = ({ text }) => {
+  const theme = useTheme();
+  return (
+    <Fade in={true} timeout={500}>
+      <Stack direction="row" spacing={2} justifyContent="flex-end" sx={{ width: "100%", mb: 4 }}>
+        <Stack alignItems="flex-end" spacing={1} sx={{ maxWidth: { xs: "85%", md: "70%" } }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2.5,
+              borderRadius: "20px 20px 4px 20px",
+              background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+              color: "primary.contrastText",
+              boxShadow: theme.shadows[4],
+              position: 'relative',
+              overflow: 'hidden'
+            }}
+          >
+            <Typography variant="body1" sx={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+              {text}
+            </Typography>
+          </Paper>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="caption" color="text.secondary" fontWeight={600}>
+              VOUS
+            </Typography>
+            <Avatar sx={{ width: 24, height: 24, bgcolor: 'primary.main' }}>
+              <PersonIcon sx={{ fontSize: 16 }} />
+            </Avatar>
+          </Stack>
+        </Stack>
+      </Stack>
+    </Fade>
+  );
+};
+
+const AILoadingBubble = () => {
+  const theme = useTheme();
+  return (
+    <Fade in={true}>
+      <Stack direction="row" spacing={2} sx={{ width: "100%", mb: 4 }}>
+        <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main', boxShadow: theme.shadows[2] }}>
+          <AutoAwesomeIcon sx={{ fontSize: 18 }} />
+        </Avatar>
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2,
+            borderRadius: "4px 20px 20px 20px",
+            bgcolor: alpha(theme.palette.background.paper, 0.6),
+            border: `1px solid ${theme.palette.divider}`,
+            backdropFilter: "blur(10px)",
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2
+          }}
+        >
+          <CircularProgress size={20} color="secondary" />
+          <Typography variant="body2" color="text.secondary" fontWeight={500}>
+            Analyse en cours...
+          </Typography>
+        </Paper>
+      </Stack>
+    </Fade>
+  );
+};
 
 /**
  * Page principale TradeForge AI.
  * Gère le cycle de vie : Vide -> Soumission -> Affichage éditable
  */
 const TradeForgeAI = () => {
+  const theme = useTheme();
   const [planDescription, setPlanDescription] = useState("");
   const [structuredVariant, setStructuredVariant] = useState("detailed");
   const [analysisVariant, setAnalysisVariant] = useState("default");
@@ -53,36 +121,34 @@ const TradeForgeAI = () => {
   const [structuredMetadata, setStructuredMetadata] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  
+
   // États de sauvegarde
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState("");
 
-  // NOUVEL ÉTAT (Logique modifiée)
-  // On lit l'état de la navigation pour définir l'onglet initial
+  // Navigation state
   const { state } = useLocation();
   const getInitialTool = () => {
-    const defaultTab = state?.defaultTab; // Permet de préselectionner un onglet
+    const defaultTab = state?.defaultTab;
     if (defaultTab === 'trade') {
-      return 'trade'; // 'trade' correspond à 'trade'
+      return 'trade';
     }
-    // 'ai' ou une navigation directe (null) correspond à 'analyse'
     return 'analyse';
   };
-  const [activeTool, setActiveTool] = useState(getInitialTool); // <-- MODIFIÉ
+  const [activeTool, setActiveTool] = useState(getInitialTool);
 
   const suggestionClickCallback = useRef(null);
   const scrollRef = useRef(null);
 
-  // 1. Charger le plan et les réglages (inchangé)
+  // 1. Charger le plan et les réglages
   useEffect(() => {
     const loadPrereqs = async () => {
       try {
         const { plan } = await fetchPlan();
         setPlanDescription(buildPlanDescription(plan));
       } catch (e) { console.error("Erreur chargement plan:", e); }
-      
+
       try {
         const settings = await fetchSettings();
         setStructuredVariant(settings.structuredVariant || "detailed");
@@ -104,14 +170,14 @@ const TradeForgeAI = () => {
     loadPrereqs();
   }, []);
 
-  // Fait défiler vers le bas (inchangé)
+  // Scroll to bottom
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [userTranscript, aiAnalysis, loading]);
 
-  // 2. Logique de soumission (inchangée)
+  // 2. Logique de soumission
   const handleSend = async (rawText) => {
     setLoading(true);
     setError("");
@@ -158,13 +224,13 @@ const TradeForgeAI = () => {
     }
   };
 
-  // 3. Logique de Sauvegarde (inchangée)
+  // 3. Logique de Sauvegarde
   const handleSave = async (finalContent, finalMetadata) => {
     if (!finalContent || !userTranscript) {
       setSaveError("Aucune analyse à sauvegarder.");
       return;
     }
-    
+
     setSaving(true);
     setSaveError("");
     setSaveSuccess("");
@@ -179,9 +245,9 @@ const TradeForgeAI = () => {
         transcript: userTranscript,
         metadata: finalMetadata,
       });
-      
+
       setSaveSuccess("Analyse enregistrée au journal !");
-      
+
       setTimeout(() => {
         setUserTranscript("");
         setAiAnalysis("");
@@ -197,8 +263,6 @@ const TradeForgeAI = () => {
     }
   };
 
-
-  // 4. Gérer les suggestions (inchangé)
   const handleSuggestion = (suggestion) => {
     if (suggestionClickCallback.current) {
       suggestionClickCallback.current(suggestion);
@@ -206,79 +270,122 @@ const TradeForgeAI = () => {
   };
 
   return (
-    <Stack sx={{ height: "100%", width: "100%" }}>
-      {/* Zone de contenu scrollable */}
+    <Box sx={{ height: "100%", display: "flex", flexDirection: "column", bgcolor: "background.default" }}>
+
+      {/* MINIMAL HEADER - Context Aware */}
+      <Paper
+        elevation={0}
+        sx={{
+          py: 1.5,
+          px: { xs: 2, md: 4 },
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          bgcolor: alpha(theme.palette.background.paper, 0.8),
+          backdropFilter: "blur(12px)",
+          zIndex: 10,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}
+      >
+        <Stack direction="row" alignItems="center" spacing={2}>
+          <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
+            <AutoAwesomeIcon sx={{ fontSize: 18 }} />
+          </Avatar>
+          <Typography variant="subtitle1" fontWeight={700}>
+            TradeForge AI
+          </Typography>
+        </Stack>
+
+        {/* Context Indicators */}
+        <Stack direction="row" spacing={1}>
+          {planDescription && (
+            <Chip
+              icon={<DescriptionIcon sx={{ fontSize: 14 }} />}
+              label="Plan Chargé"
+              size="small"
+              color="success"
+              variant="outlined"
+              sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
+            />
+          )}
+          {accountOptions.length > 0 && (
+            <Chip
+              icon={<AccountBalanceWalletIcon sx={{ fontSize: 14 }} />}
+              label={`${accountOptions.length} Compte(s)`}
+              size="small"
+              color="info"
+              variant="outlined"
+              sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
+            />
+          )}
+        </Stack>
+      </Paper>
+
+      {/* SCROLLABLE CONTENT AREA */}
       <Box
         ref={scrollRef}
         sx={{
           flex: 1,
           overflowY: "auto",
-          p: { xs: 2, md: 4 },
+          px: { xs: 2, md: 4 },
+          py: 4,
+          scrollBehavior: 'smooth'
         }}
       >
-        <Stack
-          spacing={3}
-          sx={{
-            maxWidth: { lg: 980, xl: 1080 },
-            mx: "auto",
-            height: !userTranscript && !aiAnalysis ? "100%" : "auto",
-          }}
-        >
-          {/* État vide */}
-          {!userTranscript && !aiAnalysis && (
-            <WelcomeScreen onSuggestionClick={handleSuggestion} />
-          )}
-
-          {/* Prompt Utilisateur */}
-          {userTranscript && <UserPrompt text={userTranscript} />}
-
-          {/* Loader */}
-          {loading && (
-             <Stack direction="row" spacing={2} sx={{ width: "100%" }}>
-                <Box
-                  sx={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: "50%",
-                    bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <CircularProgress size={24} />
+        <Container maxWidth="lg">
+          <Stack spacing={4}>
+            {/* État vide */}
+            {!userTranscript && !aiAnalysis && (
+              <Fade in={true} timeout={800}>
+                <Box sx={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <WelcomeScreen onSuggestionClick={handleSuggestion} />
                 </Box>
-                <Typography sx={{ color: "text.secondary", fontStyle: "italic" }}>
-                  TradeForge AI est en train d'analyser...
-                </Typography>
-             </Stack>
-          )}
+              </Fade>
+            )}
 
-          {/* Bulle éditable */}
-          {aiAnalysis && structuredMetadata && (
-            <EditableAnalysis
-              content={aiAnalysis}
-              initialMetadata={structuredMetadata}
-              onSave={handleSave}
-              saving={saving}
-              saveError={saveError}
-              saveSuccess={saveSuccess}
-              accountOptions={accountOptions}
-              defaultAccountId={defaultAccountId}
-              entryType={activeTool}
-              brokerTrades={brokerTrades}
-            />
-          )}
+            {/* Prompt Utilisateur */}
+            {userTranscript && <UserPrompt text={userTranscript} />}
 
-          {/* Afficher l'erreur principale */}
-          {error && !aiAnalysis && (
-            <Alert severity="error">{error}</Alert>
-          )}
-        </Stack>
+            {/* Loader */}
+            {loading && <AILoadingBubble />}
+
+            {/* Bulle éditable (Réponse IA) */}
+            {aiAnalysis && structuredMetadata && (
+              <Fade in={true} timeout={600}>
+                <Box sx={{ width: '100%', display: 'flex', gap: 2 }}>
+                  <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main', mt: 1, boxShadow: theme.shadows[2] }}>
+                    <AutoAwesomeIcon sx={{ fontSize: 18 }} />
+                  </Avatar>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <EditableAnalysis
+                      content={aiAnalysis}
+                      initialMetadata={structuredMetadata}
+                      onSave={handleSave}
+                      saving={saving}
+                      saveError={saveError}
+                      saveSuccess={saveSuccess}
+                      accountOptions={accountOptions}
+                      defaultAccountId={defaultAccountId}
+                      entryType={activeTool}
+                      brokerTrades={brokerTrades}
+                    />
+                  </Box>
+                </Box>
+              </Fade>
+            )}
+
+            {/* Afficher l'erreur principale */}
+            {error && !aiAnalysis && (
+              <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>
+            )}
+
+            {/* Spacer for bottom input bar */}
+            <Box sx={{ height: 100 }} />
+          </Stack>
+        </Container>
       </Box>
 
-      {/* Barre d'input fixe (inchangée) */}
+      {/* INPUT BAR - Fixed at bottom */}
       <ChatInputBar
         onSend={handleSend}
         loading={loading}
@@ -286,7 +393,7 @@ const TradeForgeAI = () => {
         activeTool={activeTool}
         onToolChange={setActiveTool}
       />
-    </Stack>
+    </Box>
   );
 };
 

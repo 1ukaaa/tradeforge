@@ -1,8 +1,24 @@
-import { Alert, Box, Button, Chip, CircularProgress, Grid, IconButton, Paper, Snackbar, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Grid,
+  IconButton,
+  Paper,
+  Snackbar,
+  Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+  alpha,
+  useTheme
+} from "@mui/material";
 import { useEffect, useRef, useState } from "react";
-import { ForgeCard } from "../../components/ForgeUI";
 import {
   createBrokerAccount,
   fetchBrokerAccounts,
@@ -10,6 +26,36 @@ import {
   syncBrokerAccount,
 } from "../../services/brokerClient";
 import { fetchIntegrations } from "../../services/integrationsClient";
+
+const SettingsSection = ({ title, subtitle, children, actions }) => {
+  const theme = useTheme();
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 3,
+        mb: 3,
+        borderRadius: 3,
+        border: `1px solid ${theme.palette.divider}`,
+        bgcolor: alpha(theme.palette.background.paper, 0.4),
+        backdropFilter: "blur(10px)",
+      }}
+    >
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={3}>
+        <Box>
+          <Typography variant="overline" fontWeight={700} color="primary" sx={{ letterSpacing: 1.2 }}>
+            {subtitle}
+          </Typography>
+          <Typography variant="h6" fontWeight={700}>
+            {title}
+          </Typography>
+        </Box>
+        {actions && <Box>{actions}</Box>}
+      </Stack>
+      {children}
+    </Paper>
+  );
+};
 
 const getDefaultForm = (type) => {
   if (type === "hyperliquid") {
@@ -32,6 +78,7 @@ const getDefaultForm = (type) => {
 };
 
 const SettingsBrokerAccounts = () => {
+  const theme = useTheme();
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -59,20 +106,20 @@ const SettingsBrokerAccounts = () => {
   const loadIntegrations = () => {
     setLoadingIntegrations(true);
     setIntegrationsError(null);
-        fetchIntegrations()
-          .then((data) => {
-            const fallback = {
-              provider: "twitter",
-              connected: false,
-              hasAccessToken: false,
-              hasAccessSecret: false,
-              hasApiKey: false,
-              hasApiSecret: false,
-              publishReady: false,
-              handle: null,
-            };
-            setTwitterIntegration(data.twitter || fallback);
-          })
+    fetchIntegrations()
+      .then((data) => {
+        const fallback = {
+          provider: "twitter",
+          connected: false,
+          hasAccessToken: false,
+          hasAccessSecret: false,
+          hasApiKey: false,
+          hasApiSecret: false,
+          publishReady: false,
+          handle: null,
+        };
+        setTwitterIntegration(data.twitter || fallback);
+      })
       .catch((err) => setIntegrationsError(err.message))
       .finally(() => setLoadingIntegrations(false));
   };
@@ -192,30 +239,41 @@ const SettingsBrokerAccounts = () => {
   };
 
   return (
-    <Stack spacing={3}>
-      <ForgeCard
+    <Box>
+      <SettingsSection
         title="Ajouter un compte"
-        subtitle="CONNEXIONS BROKER"
-        helper="Ajoutez un compte FTMO (import CSV manuel) ou HyperLiquid (connexion API)."
+        subtitle="NOUVELLE CONNEXION"
       >
-        <Stack spacing={2}>
+        <Stack spacing={3}>
           <ToggleButtonGroup
             color="primary"
             exclusive
             value={formState.type}
             onChange={handleTypeChange}
-            size="small"
+            fullWidth
+            sx={{
+              mb: 2,
+              '& .MuiToggleButton-root': {
+                borderRadius: 2,
+                border: `1px solid ${theme.palette.divider}`,
+                py: 1.5,
+                fontWeight: 600
+              }
+            }}
           >
-            <ToggleButton value="mt5">FTMO (CSV)</ToggleButton>
-            <ToggleButton value="hyperliquid">HyperLiquid</ToggleButton>
+            <ToggleButton value="mt5">FTMO (Import CSV)</ToggleButton>
+            <ToggleButton value="hyperliquid">HyperLiquid (API)</ToggleButton>
           </ToggleButtonGroup>
-          <Grid container spacing={2}>
+
+          <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
               <TextField
                 label="Nom du compte"
                 value={formState.name}
                 onChange={handleFormChange("name")}
                 fullWidth
+                variant="outlined"
+                InputProps={{ sx: { borderRadius: 2 } }}
               />
             </Grid>
             <Grid item xs={6} md={3}>
@@ -224,6 +282,8 @@ const SettingsBrokerAccounts = () => {
                 value={formState.currency}
                 onChange={handleFormChange("currency")}
                 fullWidth
+                variant="outlined"
+                InputProps={{ sx: { borderRadius: 2 } }}
               />
             </Grid>
             <Grid item xs={6} md={3}>
@@ -233,14 +293,15 @@ const SettingsBrokerAccounts = () => {
                 value={formState.initialBalance}
                 onChange={handleFormChange("initialBalance")}
                 fullWidth
+                variant="outlined"
+                InputProps={{ sx: { borderRadius: 2 } }}
               />
             </Grid>
             {formState.type === "mt5" ? (
               <Grid item xs={12}>
-                <Alert severity="info">
+                <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
                   Les comptes FTMO utilisent désormais un import manuel. Ajoutez le compte, puis
-                  cliquez sur &laquo;&nbsp;Importer un CSV&nbsp;&raquo; dans la section Synchronisation
-                  pour charger le fichier exporté depuis FTMO.
+                  cliquez sur &laquo;&nbsp;Importer un CSV&nbsp;&raquo; dans la section Synchronisation.
                 </Alert>
               </Grid>
             ) : (
@@ -251,71 +312,79 @@ const SettingsBrokerAccounts = () => {
                   onChange={handleFormChange("address")}
                   helperText="Entrez l'adresse publique du compte HyperLiquid"
                   fullWidth
+                  variant="outlined"
+                  InputProps={{ sx: { borderRadius: 2 } }}
                 />
               </Grid>
             )}
           </Grid>
 
-          {error && (
-            <Typography color="error" variant="body2">
-              {error}
-            </Typography>
-          )}
-          {success && (
-            <Typography color="success.main" variant="body2">
-              {success}
-            </Typography>
-          )}
-          {syncSuccess && (
-            <Typography color="success.main" variant="body2">
-              {syncSuccess}
-            </Typography>
-          )}
+          {error && <Alert severity="error" sx={{ borderRadius: 2 }}>{error}</Alert>}
+          {success && <Alert severity="success" sx={{ borderRadius: 2 }}>{success}</Alert>}
 
-          <Box>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Button
               variant="contained"
               onClick={handleSubmit}
               disabled={submitting}
+              size="large"
+              sx={{ borderRadius: 2, px: 4, fontWeight: 700 }}
             >
               {submitting ? "Ajout en cours..." : "Ajouter le compte"}
             </Button>
           </Box>
         </Stack>
-      </ForgeCard>
+      </SettingsSection>
 
-      <ForgeCard
-        title="Synchronisation"
-        subtitle="ETAT DES COMPTES"
-        helper="Importez un CSV FTMO ou lancez une synchronisation HyperLiquid pour récupérer les trades."
+      <SettingsSection
+        title="Comptes connectés"
+        subtitle="SYNCHRONISATION"
       >
         {loading ? (
-          <Stack alignItems="center" spacing={1}>
-            <CircularProgress size={28} />
+          <Stack alignItems="center" spacing={2} py={4}>
+            <CircularProgress size={32} />
             <Typography variant="body2" color="text.secondary">
               Chargement des comptes...
             </Typography>
           </Stack>
         ) : accounts.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            Aucun compte connecté pour le moment.
-          </Typography>
+          <Box sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>
+            <Typography variant="body1">Aucun compte connecté pour le moment.</Typography>
+          </Box>
         ) : (
           <Stack spacing={2}>
             {accounts.map((account) => (
               <Paper
                 key={account.id}
-                variant="outlined"
-                sx={{ p: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}
+                elevation={0}
+                sx={{
+                  p: 2.5,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  borderRadius: 3,
+                  border: `1px solid ${theme.palette.divider}`,
+                  bgcolor: 'background.paper',
+                  transition: 'all 0.2s',
+                  '&:hover': { borderColor: 'primary.main', transform: 'translateY(-2px)', boxShadow: theme.shadows[2] }
+                }}
               >
                 <Box>
-                  <Typography fontWeight={600}>{account.name}</Typography>
+                  <Stack direction="row" alignItems="center" spacing={1.5} mb={0.5}>
+                    <Typography fontWeight={700} variant="h6">{account.name}</Typography>
+                    <Chip
+                      label={account.status || "connecté"}
+                      color={account.status === "error" ? "error" : "success"}
+                      size="small"
+                      sx={{ height: 20, fontSize: 11, fontWeight: 700 }}
+                    />
+                  </Stack>
                   <Typography variant="body2" color="text.secondary">
                     {account.provider?.toUpperCase()} • {account.currency} • Dernière synchro :
                     {account.lastSyncAt ? ` ${new Date(account.lastSyncAt).toLocaleString("fr-FR")}` : " jamais"}
                   </Typography>
                   {isManualAccount(account) && (
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                       {account.metadata?.lastImportName
                         ? `Dernier import : ${account.metadata.lastImportName}`
                         : "Aucun import pour le moment."}
@@ -323,11 +392,6 @@ const SettingsBrokerAccounts = () => {
                   )}
                 </Box>
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Chip
-                    label={account.status || "connecté"}
-                    color={account.status === "error" ? "error" : "success"}
-                    size="small"
-                  />
                   {isManualAccount(account) ? (
                     <>
                       <input
@@ -344,25 +408,22 @@ const SettingsBrokerAccounts = () => {
                         onChange={handleCsvFileChange(account.id)}
                       />
                       <Button
-                        variant="contained"
+                        variant="outlined"
                         size="small"
                         onClick={() => triggerCsvImport(account.id)}
                         disabled={importingAccountId === account.id}
-                        startIcon={
-                          importingAccountId === account.id ? (
-                            <CircularProgress size={14} color="inherit" />
-                          ) : (
-                            <UploadFileRoundedIcon fontSize="small" />
-                          )
-                        }
+                        startIcon={importingAccountId === account.id ? <CircularProgress size={14} color="inherit" /> : <UploadFileRoundedIcon fontSize="small" />}
+                        sx={{ borderRadius: 2, textTransform: 'none' }}
                       >
-                        {importingAccountId === account.id ? "Import..." : "Importer un CSV"}
+                        {importingAccountId === account.id ? "Import..." : "Importer CSV"}
                       </Button>
                     </>
                   ) : (
                     <IconButton
                       onClick={() => handleSync(account.id)}
                       disabled={syncingAccountId === account.id}
+                      color="primary"
+                      sx={{ bgcolor: alpha(theme.palette.primary.main, 0.1), '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.2) } }}
                     >
                       {syncingAccountId === account.id ? <CircularProgress size={20} /> : <RefreshIcon />}
                     </IconButton>
@@ -372,75 +433,68 @@ const SettingsBrokerAccounts = () => {
             ))}
           </Stack>
         )}
-      </ForgeCard>
+      </SettingsSection>
 
-      <ForgeCard
-        title="Compte Twitter"
-        subtitle="INTEGRATION SOCIALE"
-        helper="Les clés de l'app Twitter sont stockées côté serveur. Une fois en place, le mode Tweet pourra publier directement."
+      <SettingsSection
+        title="Intégration Twitter"
+        subtitle="RÉSEAUX SOCIAUX"
         actions={
-          <Button variant="outlined" size="small" onClick={loadIntegrations} disabled={loadingIntegrations}>
+          <Button variant="outlined" size="small" onClick={loadIntegrations} disabled={loadingIntegrations} sx={{ borderRadius: 2 }}>
             {loadingIntegrations ? "Chargement..." : "Rafraîchir"}
           </Button>
         }
       >
-        {integrationsError && (
-          <Alert severity="error">{integrationsError}</Alert>
-        )}
+        {integrationsError && <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>{integrationsError}</Alert>}
+
         {loadingIntegrations ? (
-          <Stack alignItems="center" spacing={1}>
+          <Stack alignItems="center" spacing={2} py={2}>
             <CircularProgress size={24} />
-            <Typography variant="body2" color="text.secondary">
-              Vérification des clés Twitter...
-            </Typography>
+            <Typography variant="body2" color="text.secondary">Vérification des clés...</Typography>
           </Stack>
         ) : twitterIntegration ? (
-          <Stack spacing={1.5}>
+          <Stack spacing={2}>
             <Stack direction="row" spacing={1} alignItems="center">
               <Chip
                 label={twitterIntegration.connected ? "Connecté" : "À configurer"}
                 color={twitterIntegration.connected ? "success" : "default"}
                 size="small"
+                sx={{ fontWeight: 600 }}
               />
               <Chip
-                label={twitterIntegration.publishReady ? "Prêt à publier" : "Préparation uniquement"}
+                label={twitterIntegration.publishReady ? "Prêt à publier" : "Lecture seule"}
                 color={twitterIntegration.publishReady ? "info" : "default"}
                 size="small"
+                sx={{ fontWeight: 600 }}
               />
               {twitterIntegration.handle && (
-                <Typography fontWeight={600}>{twitterIntegration.handle}</Typography>
+                <Typography fontWeight={700} color="primary">@{twitterIntegration.handle}</Typography>
               )}
             </Stack>
-            <Typography variant="body2" color="text.secondary">
+
+            <Alert severity={twitterIntegration.publishReady ? "success" : "info"} variant="outlined" sx={{ borderRadius: 2 }}>
               {twitterIntegration.publishReady
-                ? "Toutes les clés requises (API et Access Token) sont détectées. Les publications seront envoyées directement sur Twitter."
+                ? "Toutes les clés requises sont détectées. Vous pouvez publier directement depuis Twitter Studio."
                 : twitterIntegration.connected
-                ? "Les Access Token sont présents. Ajoute TWITTER_API_KEY et TWITTER_API_SECRET pour autoriser la publication automatique."
-                : "Ajoute TWITTER_ACCESS_TOKEN et TWITTER_ACCESS_SECRET dans backend/.env pour activer ton compte Twitter."}
-            </Typography>
-            {!twitterIntegration.handle && (
-              <Typography variant="caption" color="text.secondary">
-                (Optionnel) Ajoute TWITTER_HANDLE pour afficher l'@ associé au compte.
-              </Typography>
-            )}
+                  ? "Clés API manquantes pour la publication automatique. Vérifiez vos variables d'environnement."
+                  : "Ajoutez vos clés Twitter dans le fichier .env du backend pour activer l'intégration."}
+            </Alert>
           </Stack>
         ) : (
-          <Typography variant="body2" color="text.secondary">
-            Impossible de récupérer les informations Twitter pour le moment.
-          </Typography>
+          <Typography variant="body2" color="text.secondary">Impossible de récupérer les informations Twitter.</Typography>
         )}
-      </ForgeCard>
+      </SettingsSection>
+
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
       >
-        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: "100%" }}>
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: "100%", borderRadius: 2 }}>
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Stack>
+    </Box>
   );
 };
 

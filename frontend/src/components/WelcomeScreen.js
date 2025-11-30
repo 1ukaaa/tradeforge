@@ -5,9 +5,9 @@ import BrandLogo from "./BrandLogo";
 
 // Suggestions de prompts pour guider l'utilisateur
 const suggestions = [
-  "Analyser mon trade sur EUR/USD...",
-  "Revue de ma session de Londres...",
-  "Quels étaient mes biais sur le NAS100 ce matin ?",
+  "Analyse mon dernier trade sur EUR/USD",
+  "Vérifie si j'ai respecté mon plan aujourd'hui",
+  "Analyse ma psychologie sur cette session",
 ];
 
 // Définir l'animation de flottement
@@ -46,7 +46,7 @@ const WelcomeScreen = ({ onSuggestionClick }) => {
         showText={false}
         sx={{
           animation: `${floatAnimation} 3.5s ease-in-out infinite`,
-          
+
           // BONUS: Respecte l'accessibilité si l'utilisateur préfère
           // ne pas avoir de mouvement.
           '@media (prefers-reduced-motion: reduce)': {
@@ -54,7 +54,7 @@ const WelcomeScreen = ({ onSuggestionClick }) => {
           },
         }}
       />
-      
+
       <Typography
         variant="h4"
         sx={{
@@ -67,10 +67,10 @@ const WelcomeScreen = ({ onSuggestionClick }) => {
           WebkitTextFillColor: "transparent",
         }}
       >
-        Bonjour Luka, Que souhaitez-vous analyser ?
+        Assistant TradeForge
       </Typography>
-      <Typography variant="body1" color="text.secondary">
-        Commencez par dicter, coller, ou taper votre analyse de trade.
+      <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 500 }}>
+        Je suis prêt à structurer vos analyses et vérifier votre conformité au plan.
       </Typography>
 
       <Stack

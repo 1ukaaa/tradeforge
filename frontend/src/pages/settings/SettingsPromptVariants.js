@@ -1,16 +1,18 @@
-// frontend/src/pages/settings/SettingsPromptVariants.js
 import {
+  Box,
   Button,
   Chip,
   MenuItem,
+  Paper,
   Stack,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
+  alpha,
+  useTheme
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import { ForgeCard } from "../../components/ForgeUI";
 import {
   deletePromptVariant,
   fetchPromptVariants,
@@ -207,6 +209,7 @@ const getDefaultPromptText = (type, variant) => {
 };
 
 const SettingsPromptVariants = () => {
+  const theme = useTheme();
   const [activeVariants, setActiveVariants] = useState({
     analysis: "default",
     trade: "default",
@@ -230,7 +233,7 @@ const SettingsPromptVariants = () => {
       try {
         const [settings, variants] = await Promise.all([fetchSettings(), fetchPromptVariants()]);
         if (cancelled) return;
-        
+
         setActiveVariants({
           analysis: settings.analysisVariant || "default",
           trade: settings.tradeVariant || "default",
@@ -403,118 +406,161 @@ const SettingsPromptVariants = () => {
       setVariantDeleting(false);
     }
   };
-  
+
   const isDefaultVariantName = variantNameInput === "default";
   const canSetActive = Boolean(TYPE_SETTINGS_KEYS[selectedPromptType]);
   const availableVariants = promptVariants[selectedPromptType] || [];
 
   return (
-    <ForgeCard
-      subtitle="VARIANTES PROMPT (TEXTE)"
-      title="Prompts Gemini (Texte Brut)"
-      helper="Crée, sélectionne ou active une variante différente pour chaque type de prompt (Analyse, Trade, Twitter)."
+    <Paper
+      elevation={0}
+      sx={{
+        p: 3,
+        borderRadius: 3,
+        border: `1px solid ${theme.palette.divider}`,
+        bgcolor: alpha(theme.palette.background.paper, 0.4),
+        backdropFilter: "blur(10px)",
+      }}
     >
-      <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
-        <ToggleButtonGroup
-          value={selectedPromptType}
-          exclusive
-          onChange={handleVariantTypeChange}
-          aria-label="Type de prompt"
-          size="small"
-        >
-          {PROMPT_TYPES.map((type) => (
-            <ToggleButton key={type.value} value={type.value}>
-              {type.label}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
-        <TextField
-          select
-          label="Variantes existantes"
-          value={selectedPromptVariant}
-          onChange={handleVariantSelectionChange}
-          size="small"
-          sx={{ minWidth: 200 }}
-        >
-          {availableVariants.map((variant) => (
-            <MenuItem key={variant.variant} value={variant.variant}>
-              {variant.variant}
-            </MenuItem>
-          ))}
-          {availableVariants.length === 0 && (
-            <MenuItem value={selectedPromptVariant} disabled>
-              Aucune variante enregistrée
-            </MenuItem>
-          )}
-        </TextField>
-        <TextField
-          label="Nom de la variante"
-          value={variantNameInput}
-          onChange={handleVariantNameChange}
-          size="small"
-          sx={{ minWidth: 200 }}
-          helperText={
-            isDefaultVariantName
-              ? "La variante default est système."
-              : "Nom unique identifiant la variante."
-          }
-        />
-      </Stack>
-      {canSetActive ? (
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Typography variant="caption" color="text.secondary">
-            Variante active pour ce type :
-          </Typography>
-          <Chip
-            size="small"
-            label={activeVariants[selectedPromptType]}
-            variant="outlined"
-            color="primary"
-          />
-        </Stack>
-      ) : (
-        <Typography variant="caption" color="text.secondary">
-          Chaque variante Twitter correspond à un format précis (tweet synthèse, thread analyse, annonce).
-          Sélectionne celle à éditer dans la liste.
+      <Box mb={3}>
+        <Typography variant="overline" fontWeight={700} color="primary" sx={{ letterSpacing: 1.2 }}>
+          INTELLIGENCE ARTIFICIELLE
         </Typography>
-      )}
-      <TextField
-        label="Prompt complet (Texte)"
-        value={variantPromptText}
-        onChange={handleVariantTextChange}
-        multiline
-        minRows={10}
-        fullWidth
-        sx={{ mt: 2 }}
-        InputProps={{ sx: { fontFamily: `"JetBrains Mono","Fira Code",monospace`, fontSize: "0.9rem" } }}
-      />
-      <Stack direction="row" spacing={2} alignItems="center" mt={2} flexWrap="wrap">
-        <Button variant="contained" onClick={handleVariantSave} disabled={variantSaving}>
-          {variantSaving ? "Sauvegarde…" : "Sauvegarder la variante"}
-        </Button>
-        {canSetActive && (
-          <Button variant="outlined" onClick={handleSetActiveVariant} disabled={!variantNameInput}>
-            Définir comme variante active
-          </Button>
-        )}
-        <Button
+        <Typography variant="h6" fontWeight={700}>
+          Prompts Système (Texte Brut)
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, maxWidth: 800 }}>
+          Personnalisez les instructions envoyées à l'IA pour chaque type de tâche. Créez des variantes pour tester différentes approches.
+        </Typography>
+      </Box>
+
+      <Stack spacing={3}>
+        {/* CONTROLS */}
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.background.default, 0.4) }}>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="center">
+            <ToggleButtonGroup
+              value={selectedPromptType}
+              exclusive
+              onChange={handleVariantTypeChange}
+              aria-label="Type de prompt"
+              size="small"
+              sx={{ '& .MuiToggleButton-root': { borderRadius: 1, px: 2 } }}
+            >
+              {PROMPT_TYPES.map((type) => (
+                <ToggleButton key={type.value} value={type.value}>
+                  {type.label}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+
+            <TextField
+              select
+              label="Variante"
+              value={selectedPromptVariant}
+              onChange={handleVariantSelectionChange}
+              size="small"
+              sx={{ minWidth: 200 }}
+              variant="outlined"
+            >
+              {availableVariants.map((variant) => (
+                <MenuItem key={variant.variant} value={variant.variant}>
+                  {variant.variant}
+                </MenuItem>
+              ))}
+              {availableVariants.length === 0 && (
+                <MenuItem value={selectedPromptVariant} disabled>
+                  Aucune variante
+                </MenuItem>
+              )}
+            </TextField>
+
+            <TextField
+              label="Nom (pour nouvelle variante)"
+              value={variantNameInput}
+              onChange={handleVariantNameChange}
+              size="small"
+              sx={{ minWidth: 200 }}
+              variant="outlined"
+            />
+          </Stack>
+
+          {canSetActive && (
+            <Stack direction="row" spacing={1} alignItems="center" mt={2}>
+              <Typography variant="caption" fontWeight={600} color="text.secondary">
+                ACTUELLEMENT UTILISÉ :
+              </Typography>
+              <Chip
+                size="small"
+                label={activeVariants[selectedPromptType]}
+                color="primary"
+                sx={{ fontWeight: 700, height: 24 }}
+              />
+            </Stack>
+          )}
+        </Paper>
+
+        {/* EDITOR */}
+        <TextField
+          label="Prompt Système"
+          value={variantPromptText}
+          onChange={handleVariantTextChange}
+          multiline
+          minRows={15}
+          fullWidth
           variant="outlined"
-          color="error"
-          onClick={handleVariantDelete}
-          disabled={variantDeleting || !variantNameInput || isDefaultVariantName}
-        >
-          {variantDeleting ? "Suppression…" : "Supprimer la variante"}
-        </Button>
-        {variantFeedback.text && (
-          <Typography
-            variant="body2"
-            color={variantFeedback.severity === "error" ? "error.main" : "success.main"}
-          >
-            {variantFeedback.text}
-          </Typography>
-        )}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              fontFamily: `"JetBrains Mono","Fira Code",monospace`,
+              fontSize: "0.9rem",
+              lineHeight: 1.6,
+              bgcolor: 'background.paper'
+            }
+          }}
+        />
+
+        {/* ACTIONS */}
+        <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
+          <Box>
+            {variantFeedback.text && (
+              <Typography
+                variant="body2"
+                fontWeight={600}
+                color={variantFeedback.severity === "error" ? "error.main" : "success.main"}
+              >
+                {variantFeedback.text}
+              </Typography>
+            )}
+          </Box>
+          <Stack direction="row" spacing={2}>
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={handleVariantDelete}
+              disabled={variantDeleting || !variantNameInput || isDefaultVariantName}
+            >
+              Supprimer
+            </Button>
+            {canSetActive && (
+              <Button
+                variant="outlined"
+                onClick={handleSetActiveVariant}
+                disabled={!variantNameInput}
+              >
+                Définir comme actif
+              </Button>
+            )}
+            <Button
+              variant="contained"
+              onClick={handleVariantSave}
+              disabled={variantSaving}
+              sx={{ px: 3, fontWeight: 700 }}
+            >
+              Sauvegarder
+            </Button>
+          </Stack>
+        </Stack>
       </Stack>
-    </ForgeCard>
+    </Paper>
   );
 };
 

@@ -1,9 +1,7 @@
-// frontend/src/pages/settings/SettingsAppearance.js
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
-import { Box, CardActionArea, Paper, Stack, SvgIcon, Typography, alpha } from "@mui/material";
-import { ForgeCard } from "../../components/ForgeUI";
+import { Box, Paper, Stack, SvgIcon, Typography, alpha, useTheme } from "@mui/material";
 import { useThemeMode } from "../../context/ThemeModeContext";
 
 // Simple SVG pour la carte "Dark"
@@ -33,57 +31,83 @@ const LightModeIllustration = () => (
 );
 
 const ThemeCard = ({ title, icon, illustration, selected, onClick }) => {
+  const theme = useTheme();
   return (
     <Paper
       variant="outlined"
       onClick={onClick}
       sx={{
         borderColor: selected ? "primary.main" : "divider",
-        bgcolor: selected ? alpha("#3B82F6", 0.05) : "transparent",
-        p: 1.5,
+        bgcolor: selected ? alpha(theme.palette.primary.main, 0.05) : "transparent",
+        borderWidth: selected ? 2 : 1,
+        p: 2,
         width: 240,
         position: "relative",
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        '&:hover': {
+          borderColor: 'primary.main',
+          transform: 'translateY(-4px)',
+          boxShadow: theme.shadows[4]
+        }
       }}
     >
-      <CardActionArea sx={{ borderRadius: 2 }}>
-        {selected && (
-          <CheckCircleIcon
-            color="primary"
-            sx={{ position: "absolute", top: 8, right: 8, zIndex: 2 }}
-          />
-        )}
-        <Box
-          sx={{
-            borderRadius: 2,
-            overflow: "hidden",
-            border: "1px solid",
-            borderColor: "divider",
-            lineHeight: 0,
-          }}
-        >
-          {illustration}
-        </Box>
-        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1.5, pl: 0.5 }}>
-          {icon}
-          <Typography variant="h6" fontWeight={600}>
-            {title}
-          </Typography>
-        </Stack>
-      </CardActionArea>
+      {selected && (
+        <CheckCircleIcon
+          color="primary"
+          sx={{ position: "absolute", top: -10, right: -10, zIndex: 2, bgcolor: 'background.paper', borderRadius: '50%' }}
+        />
+      )}
+      <Box
+        sx={{
+          borderRadius: 2,
+          overflow: "hidden",
+          border: "1px solid",
+          borderColor: "divider",
+          lineHeight: 0,
+          mb: 2
+        }}
+      >
+        {illustration}
+      </Box>
+      <Stack direction="row" spacing={1.5} alignItems="center">
+        {icon}
+        <Typography variant="h6" fontWeight={700}>
+          {title}
+        </Typography>
+      </Stack>
     </Paper>
   );
 };
 
 const SettingsAppearance = () => {
+  const theme = useTheme();
   const { mode, setMode } = useThemeMode();
 
   return (
-    <ForgeCard
-      title="Apparence"
-      subtitle="PRÉFÉRENCES"
-      helper="Choisissez le thème par défaut de l'application."
+    <Paper
+      elevation={0}
+      sx={{
+        p: 4,
+        borderRadius: 3,
+        border: `1px solid ${theme.palette.divider}`,
+        bgcolor: alpha(theme.palette.background.paper, 0.4),
+        backdropFilter: "blur(10px)",
+      }}
     >
-      <Stack direction="row" spacing={3} sx={{ flexWrap: "wrap" }}>
+      <Box mb={4}>
+        <Typography variant="overline" fontWeight={700} color="primary" sx={{ letterSpacing: 1.2 }}>
+          PRÉFÉRENCES
+        </Typography>
+        <Typography variant="h6" fontWeight={700}>
+          Thème de l'interface
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, maxWidth: 600 }}>
+          Choisissez l'apparence de TradeForge. Le thème sombre est recommandé pour les sessions de trading nocturnes.
+        </Typography>
+      </Box>
+
+      <Stack direction="row" spacing={3} sx={{ flexWrap: "wrap", gap: 2 }}>
         <ThemeCard
           title="Clair"
           icon={<LightModeIcon />}
@@ -98,10 +122,8 @@ const SettingsAppearance = () => {
           selected={mode === "dark"}
           onClick={() => setMode("dark")}
         />
-        {/* Note: La version "Système" n'est pas implémentée dans le ThemeContext.
-            Elle peut être ajoutée plus tard en modifiant ThemeModeContext.js */}
       </Stack>
-    </ForgeCard>
+    </Paper>
   );
 };
 
