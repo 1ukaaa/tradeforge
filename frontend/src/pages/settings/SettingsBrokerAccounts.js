@@ -467,7 +467,7 @@ const SettingsBrokerAccounts = () => {
                 sx={{ fontWeight: 600 }}
               />
               {twitterIntegration.handle && (
-                <Typography fontWeight={700} color="primary">@{twitterIntegration.handle}</Typography>
+                <Typography fontWeight={700} color="primary">{twitterIntegration.handle}</Typography>
               )}
             </Stack>
 

@@ -52,7 +52,7 @@ const JournalListItem = ({ entry, onClick }) => {
       elevation={0}
       onClick={onClick}
       sx={{
-        p: 2,
+        p: { xs: 1.5, sm: 2 },
         borderRadius: 3,
         border: `1px solid ${theme.palette.divider}`,
         transition: "all 0.2s ease",
@@ -65,23 +65,23 @@ const JournalListItem = ({ entry, onClick }) => {
         },
         display: 'flex',
         alignItems: 'center',
-        gap: 3
+        gap: { xs: 1.5, sm: 3 }
       }}
     >
       {/* 1. Date Box */}
-      <Box sx={{ minWidth: 80, textAlign: 'center' }}>
-        <Typography variant="caption" color="text.secondary" display="block" sx={{ textTransform: 'uppercase', fontWeight: 700 }}>
+      <Box sx={{ minWidth: { xs: 50, sm: 80 }, textAlign: 'center' }}>
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ textTransform: 'uppercase', fontWeight: 700, fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>
           {new Date(meta.date || entry.createdAt).toLocaleDateString('fr-FR', { month: 'short' })}
         </Typography>
-        <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1 }}>
+        <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1, fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>
           {new Date(meta.date || entry.createdAt).getDate()}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>
           {new Date(meta.date || entry.createdAt).getFullYear()}
         </Typography>
       </Box>
 
-      {/* 2. Thumbnail */}
+      {/* 2. Thumbnail (Hidden on Mobile) */}
       <Box
         sx={{
           width: 80,
@@ -89,7 +89,7 @@ const JournalListItem = ({ entry, onClick }) => {
           borderRadius: 2,
           overflow: 'hidden',
           bgcolor: alpha(theme.palette.divider, 0.1),
-          display: 'flex',
+          display: { xs: 'none', sm: 'flex' },
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0
@@ -118,25 +118,31 @@ const JournalListItem = ({ entry, onClick }) => {
             </Typography>
           )}
         </Stack>
-        <Typography variant="subtitle1" fontWeight={600} noWrap>
+        <Typography variant="subtitle1" fontWeight={600} noWrap sx={{ fontSize: { xs: '0.9rem', sm: '1rem' } }}>
           {title}
         </Typography>
       </Box>
 
       {/* 4. Result / Status */}
       {isTrade && (
-        <Box sx={{ textAlign: 'right', minWidth: 100 }}>
+        <Box sx={{ textAlign: 'right', minWidth: { xs: 'auto', sm: 100 } }}>
           <Chip
             label={meta.result || "EN COURS"}
             color={tone}
             size="small"
-            sx={{ fontWeight: 700, minWidth: 80 }}
+            sx={{
+              fontWeight: 700,
+              minWidth: { xs: 'auto', sm: 80 },
+              height: { xs: 24, sm: 24 },
+              fontSize: { xs: '0.7rem', sm: '0.8125rem' },
+              px: { xs: 0.5, sm: 0 }
+            }}
           />
         </Box>
       )}
 
       {/* 5. Arrow */}
-      <ArrowForwardIosIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
+      <ArrowForwardIosIcon sx={{ fontSize: 16, color: 'text.disabled', display: { xs: 'none', sm: 'block' } }} />
     </Paper>
   );
 };

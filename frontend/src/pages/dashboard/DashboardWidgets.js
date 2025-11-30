@@ -99,7 +99,7 @@ export const StatCard = memo(({ label, value, type = "number", currency, trend, 
   if (label.toLowerCase().includes('win')) IconComponent = EmojiEventsRoundedIcon;
 
   return (
-    <AdaptiveCard sx={{ p: 3, height: '100%', position: 'relative', overflow: 'hidden' }}>
+    <AdaptiveCard sx={{ p: { xs: 2, sm: 3 }, height: '100%', position: 'relative', overflow: 'hidden' }}>
       {/* Background Icon Decoration */}
       <Box sx={{
         position: 'absolute',
@@ -172,7 +172,7 @@ export const PerformanceChart = memo(({ data, range, onRangeChange, rangeOptions
 
   return (
     <AdaptiveCard sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <Box sx={{ p: 3, pb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ p: { xs: 2, sm: 3 }, pb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Stack spacing={0.5}>
           <Typography variant="h6" fontWeight={700}>Évolution du Capital</Typography>
           <Typography variant="body2" color="text.secondary">Aperçu de la performance</Typography>
@@ -261,7 +261,7 @@ export const RecentActivity = memo(({ trades = [], page, setPage, pageSize }) =>
 
   return (
     <AdaptiveCard>
-      <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ p: { xs: 2, sm: 3 }, borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Stack spacing={0.5}>
           <Typography variant="h6" fontWeight={700}>Activité Récente</Typography>
           <Typography variant="body2" color="text.secondary">Vos derniers mouvements</Typography>
@@ -404,7 +404,7 @@ export const AccountsList = memo(({ accounts = [], selectedId, onSelect }) => {
   const theme = useTheme();
   return (
     <AdaptiveCard>
-      <Box sx={{ p: 3, pb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ p: { xs: 2, sm: 3 }, pb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h6" fontWeight={700}>Comptes</Typography>
         <IconButton size="small" sx={{ color: 'text.secondary' }}>
           <MoreHorizRoundedIcon fontSize="small" />
@@ -459,7 +459,7 @@ export const Goals = memo(({ current = 0, target = 1, currency }) => {
   const theme = useTheme();
 
   return (
-    <AdaptiveCard sx={{ p: 3 }}>
+    <AdaptiveCard sx={{ p: { xs: 2, sm: 3 } }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
         <Typography variant="h6" fontWeight={700}>Objectif Mensuel</Typography>
         <Chip
@@ -506,7 +506,7 @@ export const GoalInsights = memo(({ stats, trades = [] }) => {
 
   return (
     <AdaptiveCard sx={{
-      p: 3,
+      p: { xs: 2, sm: 3 },
       background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${alpha(theme.palette.background.paper, 0.5)} 100%)`,
       border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
       position: 'relative',

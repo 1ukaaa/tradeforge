@@ -157,9 +157,8 @@ const NavigationMenu = ({ onNavigate = () => { }, showBrand = true }) => {
         // top: { lg: 32 },
         // alignSelf: "flex-start",
 
-        // [MODIFICATION] Prend toute la hauteur sur desktop
-        height: { xs: "auto", lg: "100vh" },
-        // maxHeight: { lg: "calc(100vh - 64px)" }, // Supprimé
+        // [MODIFICATION] Prend toute la hauteur du conteneur parent (Drawer ou Sidebar)
+        height: "100%",
 
         display: "flex",
         flexDirection: "column",

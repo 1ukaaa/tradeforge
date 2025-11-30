@@ -741,7 +741,7 @@ const PostDashboard = ({ posts, onEdit, onCreate, onDelete }) => {
                             </Typography>
                         </Grid>
                         <Grid item xs={12} md={6}>
-                            <Stack direction="row" spacing={2} justifyContent={{ xs: 'flex-start', md: 'flex-end' }}>
+                            <Stack direction="row" spacing={2} justifyContent={{ xs: 'flex-start', md: 'flex-end' }} sx={{ flexWrap: 'wrap', useFlexGap: true }}>
                                 <StatCard title="Brouillons" value={stats.drafts} icon={<EditIcon />} color={theme.palette.text.secondary} />
                                 <StatCard title="Planifiés" value={stats.scheduled} icon={<CalendarTodayIcon />} color="#F57C00" />
                                 <StatCard title="Publiés" value={stats.published} icon={<CheckCircleIcon />} color="#23A559" />
