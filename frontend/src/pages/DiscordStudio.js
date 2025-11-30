@@ -5,7 +5,8 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import CloseIcon from "@mui/icons-material/Close";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditIcon from "@mui/icons-material/Edit";
 import EmojiEmotionsIcon from "@mui/icons-material/EmojiEmotions";
@@ -15,6 +16,7 @@ import InboxIcon from "@mui/icons-material/Inbox";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import PushPinIcon from "@mui/icons-material/PushPin";
 import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
+import SearchIcon from "@mui/icons-material/Search";
 import SettingsEthernetIcon from "@mui/icons-material/SettingsEthernet";
 import TagIcon from "@mui/icons-material/Tag";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -30,13 +32,16 @@ import {
     CardMedia,
     Chip,
     CircularProgress,
+    Container,
     Dialog,
     DialogActions,
     DialogContent,
     DialogTitle,
     Divider,
+    Fade,
     Grid,
     IconButton,
+    InputAdornment,
     InputBase,
     List,
     ListItemAvatar,
@@ -61,8 +66,8 @@ import { fetchJournalEntries } from "../services/journalClient";
 
 // --- CONFIGURATION ---
 const VARIANTS = [
-    { value: "trade.simple", label: "Trade Recap", icon: "📉" },
-    { value: "analysis.deep", label: "Analyse", icon: "🧠" },
+    { value: "trade.simple", label: "Trade Recap", icon: "📉", description: "Résumé simple d'un trade" },
+    { value: "analysis.deep", label: "Analyse", icon: "🧠", description: "Analyse technique détaillée" },
 ];
 
 // --- UTILS ---
@@ -73,11 +78,14 @@ const fileToDataUrl = (file) => new Promise((resolve, reject) => {
     reader.readAsDataURL(file);
 });
 
-// --- COMPOSANT : DISCORD IMAGE GRID (GALERIE PREVIEW) ---
-const DiscordImageGrid = ({ embeds }) => {
-    // On récupère les images à partir du 2ème embed (le 1er est le principal)
-    const galleryImages = embeds.slice(1).filter(e => e.image && e.image.url).map(e => e.image.url);
+const formatDate = (dateString) => {
+    if (!dateString) return "";
+    return new Date(dateString).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+};
 
+// --- COMPOSANT : DISCORD IMAGE GRID ---
+const DiscordImageGrid = ({ embeds }) => {
+    const galleryImages = embeds.slice(1).filter(e => e.image && e.image.url).map(e => e.image.url);
     if (galleryImages.length === 0) return null;
 
     const count = galleryImages.length;
@@ -94,7 +102,7 @@ const DiscordImageGrid = ({ embeds }) => {
             height: height,
             borderRadius: '4px',
             overflow: 'hidden',
-            maxWidth: '800px'
+            maxWidth: '100%'
         }}>
             {galleryImages.slice(0, 4).map((src, idx) => {
                 const isTriple = count === 3;
@@ -119,8 +127,7 @@ const DiscordMessagePreview = ({ payload, loading, onUpdate }) => {
 
     if (loading) {
         return (
-            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: DC.bg, p: 0 }}>
-                {/* Fake Header */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: DC.bg }}>
                 <Box sx={{ height: 48, borderBottom: `1px solid ${DC.divider}`, display: 'flex', alignItems: 'center', px: 2, gap: 1 }}>
                     <Skeleton variant="circular" width={24} height={24} sx={{ bgcolor: DC.channelBar }} />
                     <Skeleton variant="text" width={120} sx={{ bgcolor: DC.channelBar }} />
@@ -132,16 +139,9 @@ const DiscordMessagePreview = ({ payload, loading, onUpdate }) => {
                             <Skeleton variant="text" width={150} height={24} sx={{ bgcolor: DC.channelBar, mb: 1 }} />
                             <Skeleton variant="text" width="90%" sx={{ bgcolor: DC.channelBar }} />
                             <Skeleton variant="text" width="60%" sx={{ bgcolor: DC.channelBar, mb: 2 }} />
-
-                            {/* Embed Skeleton */}
                             <Box sx={{ borderLeft: `4px solid ${DC.channelBar}`, bgcolor: DC.embedBg, p: 2, borderRadius: 1, maxWidth: 500 }}>
                                 <Skeleton variant="text" width="40%" height={28} sx={{ bgcolor: DC.channelBar, mb: 1 }} />
                                 <Skeleton variant="text" width="80%" sx={{ bgcolor: DC.channelBar }} />
-                                <Skeleton variant="text" width="70%" sx={{ bgcolor: DC.channelBar, mb: 2 }} />
-                                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-                                    <Skeleton variant="rectangular" height={40} sx={{ bgcolor: DC.channelBar, borderRadius: 1 }} />
-                                    <Skeleton variant="rectangular" height={40} sx={{ bgcolor: DC.channelBar, borderRadius: 1 }} />
-                                </Box>
                             </Box>
                         </Box>
                     </Box>
@@ -154,27 +154,31 @@ const DiscordMessagePreview = ({ payload, loading, onUpdate }) => {
         return (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flexDirection: 'column', gap: 2, color: DC.textMuted, opacity: 0.5, bgcolor: DC.bg }}>
                 <SettingsEthernetIcon sx={{ fontSize: 60 }} />
-                <Typography variant="body2">En attente de contenu</Typography>
+                <Typography variant="body2">Aperçu du message</Typography>
             </Box>
         );
     }
 
     const mainEmbed = payload.embeds?.[0] || {};
-    // Est-ce que l'embed a du contenu texte/champs ?
     const hasEmbedContent = mainEmbed.title || mainEmbed.description || (mainEmbed.fields && mainEmbed.fields.length > 0);
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: DC.bg, fontFamily: 'gg sans, "Noto Sans", sans-serif' }}>
-            {/* Header */}
+            {/* Header Mock */}
             <Box sx={{ height: 48, minHeight: 48, borderBottom: `1px solid ${DC.divider}`, display: 'flex', alignItems: 'center', px: 2, gap: 1, bgcolor: DC.bg, boxShadow: '0 1px 0 rgba(4,4,5,0.02),0 1.5px 0 rgba(6,6,7,0.05),0 2px 0 rgba(4,4,5,0.05)' }}>
                 <TagIcon sx={{ color: DC.textMuted, fontSize: 24 }} />
                 <Typography sx={{ color: '#F2F3F5', fontWeight: 700, fontSize: '1rem', mr: 1 }}>annonces-trades</Typography>
                 <Divider orientation="vertical" sx={{ height: 24, bgcolor: '#3F4147', mx: 1 }} />
-                <Typography sx={{ color: DC.textMuted, fontSize: '0.8rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>Signaux et analyses automatiques</Typography>
-                <Stack direction="row" spacing={2} sx={{ color: DC.textMuted, display: { xs: 'none', md: 'flex' } }}><NotificationsIcon sx={{ fontSize: 22 }} /><PushPinIcon sx={{ fontSize: 22, transform: 'rotate(45deg)' }} /><InboxIcon sx={{ fontSize: 22 }} /><HelpOutlineIcon sx={{ fontSize: 22 }} /></Stack>
+                <Typography sx={{ color: DC.textMuted, fontSize: '0.8rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>Signaux et analyses</Typography>
+                <Stack direction="row" spacing={2} sx={{ color: DC.textMuted, display: { xs: 'none', md: 'flex' } }}>
+                    <NotificationsIcon sx={{ fontSize: 22 }} />
+                    <PushPinIcon sx={{ fontSize: 22, transform: 'rotate(45deg)' }} />
+                    <InboxIcon sx={{ fontSize: 22 }} />
+                    <HelpOutlineIcon sx={{ fontSize: 22 }} />
+                </Stack>
             </Box>
 
-            {/* Messages */}
+            {/* Message Content */}
             <Box sx={{ flex: 1, overflowY: 'auto', p: 0, '&::-webkit-scrollbar': { width: '8px', bgcolor: '#2B2D31' }, '&::-webkit-scrollbar-thumb': { bgcolor: '#1A1B1E', borderRadius: '4px' } }}>
                 <Box sx={{ height: 20 }} />
                 <Box sx={{ display: 'flex', gap: 2, px: 2, py: 0.5, mt: 1, '&:hover': { bgcolor: DC.messageHover }, position: 'relative' }}>
@@ -187,9 +191,9 @@ const DiscordMessagePreview = ({ payload, loading, onUpdate }) => {
                         </Box>
                         {payload.content && <Typography sx={{ color: DC.textMain, whiteSpace: 'pre-wrap', mb: 0.5, fontSize: '1rem', lineHeight: '1.375rem' }}>{payload.content}</Typography>}
 
-                        {/* EMBED PRINCIPAL (SANS IMAGE) */}
+                        {/* EMBED */}
                         {hasEmbedContent && (
-                            <Box sx={{ bgcolor: DC.embedBg, borderRadius: '4px', maxWidth: 800, borderLeft: `4px solid ${mainEmbed.color ? `#${mainEmbed.color.toString(16)}` : DC.blurple}`, display: 'flex', flexDirection: 'column', mt: 0.5 }}>
+                            <Box sx={{ bgcolor: DC.embedBg, borderRadius: '4px', maxWidth: 600, borderLeft: `4px solid ${mainEmbed.color ? `#${mainEmbed.color.toString(16)}` : DC.blurple}`, display: 'flex', flexDirection: 'column', mt: 0.5 }}>
                                 <Box sx={{ p: 2 }}>
                                     <Stack spacing={1}>
                                         {mainEmbed.author && (
@@ -198,14 +202,40 @@ const DiscordMessagePreview = ({ payload, loading, onUpdate }) => {
                                                 <Typography sx={{ color: '#F2F3F5', fontWeight: 600, fontSize: '0.875rem' }}>{mainEmbed.author.name}</Typography>
                                             </Box>
                                         )}
-                                        {mainEmbed.title && <InputBase fullWidth multiline value={mainEmbed.title} onChange={(e) => onUpdate && onUpdate('title', e.target.value)} sx={{ color: '#F2F3F5', fontWeight: 600, fontSize: '1rem', p: 0 }} />}
-                                        {mainEmbed.description && <InputBase fullWidth multiline value={mainEmbed.description} onChange={(e) => onUpdate && onUpdate('description', e.target.value)} sx={{ color: DC.textMain, fontSize: '0.875rem', lineHeight: '1.125rem', p: 0 }} />}
+                                        {mainEmbed.title && (
+                                            <InputBase
+                                                fullWidth multiline
+                                                value={mainEmbed.title}
+                                                onChange={(e) => onUpdate && onUpdate('title', e.target.value)}
+                                                sx={{ color: '#F2F3F5', fontWeight: 600, fontSize: '1rem', p: 0, '& .MuiInputBase-input': { p: 0 } }}
+                                                placeholder="Titre de l'embed"
+                                            />
+                                        )}
+                                        {mainEmbed.description && (
+                                            <InputBase
+                                                fullWidth multiline
+                                                value={mainEmbed.description}
+                                                onChange={(e) => onUpdate && onUpdate('description', e.target.value)}
+                                                sx={{ color: DC.textMain, fontSize: '0.875rem', lineHeight: '1.125rem', p: 0, '& .MuiInputBase-input': { p: 0 } }}
+                                                placeholder="Description de l'embed"
+                                            />
+                                        )}
                                         {mainEmbed.fields?.length > 0 && (
-                                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 1, mt: 1 }}>
+                                            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 2, mt: 1 }}>
                                                 {mainEmbed.fields.map((field, i) => (
-                                                    <Box key={i} sx={{ mb: 1 }}>
-                                                        <InputBase fullWidth value={field.name} onChange={(e) => onUpdate && onUpdate('field_name', e.target.value, i)} sx={{ color: DC.textMuted, fontWeight: 600, fontSize: '0.75rem', mb: 0.25, p: 0 }} />
-                                                        <InputBase fullWidth multiline value={field.value} onChange={(e) => onUpdate && onUpdate('field_value', e.target.value, i)} sx={{ color: DC.textMain, fontSize: '0.875rem', p: 0 }} />
+                                                    <Box key={i}>
+                                                        <InputBase
+                                                            fullWidth
+                                                            value={field.name}
+                                                            onChange={(e) => onUpdate && onUpdate('field_name', e.target.value, i)}
+                                                            sx={{ color: DC.textMuted, fontWeight: 600, fontSize: '0.75rem', mb: 0.25, p: 0, '& .MuiInputBase-input': { p: 0 } }}
+                                                        />
+                                                        <InputBase
+                                                            fullWidth multiline
+                                                            value={field.value}
+                                                            onChange={(e) => onUpdate && onUpdate('field_value', e.target.value, i)}
+                                                            sx={{ color: DC.textMain, fontSize: '0.875rem', p: 0, '& .MuiInputBase-input': { p: 0 } }}
+                                                        />
                                                     </Box>
                                                 ))}
                                             </Box>
@@ -218,66 +248,143 @@ const DiscordMessagePreview = ({ payload, loading, onUpdate }) => {
                                         )}
                                     </Stack>
                                 </Box>
+                                {mainEmbed.image && mainEmbed.image.url && (
+                                    <Box component="img" src={mainEmbed.image.url} sx={{ width: '100%', maxHeight: 400, objectFit: 'cover', display: 'block', borderBottomLeftRadius: 4, borderBottomRightRadius: 4 }} />
+                                )}
                             </Box>
                         )}
 
-                        {/* IMAGE PRINCIPALE (HORS EMBED BG) */}
-                        {mainEmbed.image && mainEmbed.image.url && (
-                            <Box sx={{ mt: 0.5, borderRadius: '4px', overflow: 'hidden', maxWidth: 800 }}>
-                                <Box component="img" src={mainEmbed.image.url} sx={{ width: '100%', maxHeight: 400, objectFit: 'cover', display: 'block' }} />
-                            </Box>
-                        )}
-
-                        {/* GALERIE D'IMAGES SECONDAIRES */}
+                        {/* Images Grid if multiple */}
                         <DiscordImageGrid embeds={payload.embeds} />
-
                     </Box>
                 </Box>
             </Box>
 
-            {/* Fake Input */}
+            {/* Input Mock */}
             <Box sx={{ p: 2, pt: 0, bgcolor: DC.bg }}>
-                <Box sx={{ bgcolor: '#383A40', borderRadius: '8px', p: 0, px: 2, height: 44, display: 'flex', alignItems: 'center', gap: 2, color: DC.textMuted }}>
-                    <AddCircleIcon sx={{ cursor: 'pointer' }} /><Typography fontSize="0.95rem" sx={{ flex: 1 }}>Envoyer un message...</Typography><GifIcon sx={{ fontSize: 28 }} /><EmojiEmotionsIcon sx={{ fontSize: 22 }} />
+                <Box sx={{ bgcolor: '#383A40', borderRadius: '8px', px: 2, height: 44, display: 'flex', alignItems: 'center', gap: 2, color: DC.textMuted }}>
+                    <AddCircleIcon sx={{ cursor: 'pointer' }} />
+                    <Typography fontSize="0.95rem" sx={{ flex: 1 }}>Envoyer un message...</Typography>
+                    <GifIcon sx={{ fontSize: 28 }} />
+                    <EmojiEmotionsIcon sx={{ fontSize: 22 }} />
                 </Box>
             </Box>
         </Box>
     );
 };
 
-// --- COMPOSANT : STUDIO TOOLBAR ---
-const StudioToolbar = ({ currentVariant, onVariantChange, sourceEntry, onOpenSource, onGenerate, isGenerating, webhookStatus, onShowSource }) => {
+// --- COMPOSANT : EDITOR TOOLBAR ---
+const EditorToolbar = ({ currentVariant, onVariantChange, sourceEntry, onOpenSource, onGenerate, isGenerating, webhookStatus, onShowSource }) => {
     const theme = useTheme();
+
     return (
-        <Paper elevation={0} sx={{ p: 1.5, mx: 2, mt: 2, mb: 0, border: `1px solid ${theme.palette.divider}`, borderRadius: '16px', bgcolor: alpha(theme.palette.background.paper, 0.6), backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-            <Stack direction="row" spacing={0.5} sx={{ p: 0.5, bgcolor: theme.palette.action.hover, borderRadius: '12px' }}>
-                {VARIANTS.map((v) => (
-                    <Button key={v.value} onClick={() => onVariantChange(v.value)} size="small" startIcon={<span>{v.icon}</span>} sx={{ borderRadius: '8px', px: 2, py: 0.5, minWidth: 'auto', color: currentVariant === v.value ? 'white' : 'text.secondary', bgcolor: currentVariant === v.value ? '#5865F2' : 'transparent', fontWeight: currentVariant === v.value ? 700 : 500, '&:hover': { bgcolor: currentVariant === v.value ? '#4752C4' : theme.palette.action.selected } }}>{v.label}</Button>
-                ))}
-            </Stack>
-            <Divider orientation="vertical" flexItem sx={{ height: 24, alignSelf: 'center' }} />
-            {sourceEntry ? (
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <Chip avatar={<Avatar src={sourceEntry.metadata?.images?.[0]?.src} sx={{ width: 24, height: 24 }}>{sourceEntry.metadata?.symbol?.[0]}</Avatar>} label={<Typography variant="caption" fontWeight={700}>{sourceEntry.metadata?.symbol || "Source"}</Typography>} onDelete={onOpenSource} deleteIcon={<EditIcon sx={{ fontSize: '14px !important' }} />} onClick={onOpenSource} sx={{ bgcolor: alpha(theme.palette.info.main, 0.1), color: theme.palette.info.main, border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`, fontWeight: 700, cursor: 'pointer' }} />
-                    <Tooltip title="Voir le contenu original"><IconButton size="small" onClick={onShowSource} sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: '8px' }}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
+        <Paper
+            elevation={0}
+            sx={{
+                p: 2,
+                mb: 3,
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 3,
+                bgcolor: alpha(theme.palette.background.paper, 0.5),
+                backdropFilter: 'blur(10px)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+                flexWrap: 'wrap'
+            }}
+        >
+            <Box>
+                <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>VARIANTE</Typography>
+                <Stack direction="row" spacing={1}>
+                    {VARIANTS.map((v) => (
+                        <Tooltip key={v.value} title={v.description}>
+                            <Button
+                                onClick={() => onVariantChange(v.value)}
+                                size="small"
+                                startIcon={<span>{v.icon}</span>}
+                                variant={currentVariant === v.value ? "contained" : "outlined"}
+                                color={currentVariant === v.value ? "primary" : "inherit"}
+                                sx={{
+                                    borderRadius: 2,
+                                    textTransform: 'none',
+                                    borderColor: currentVariant === v.value ? 'transparent' : theme.palette.divider
+                                }}
+                            >
+                                {v.label}
+                            </Button>
+                        </Tooltip>
+                    ))}
                 </Stack>
-            ) : (
-                <Button onClick={onOpenSource} startIcon={<AddLinkIcon sx={{ fontSize: 18 }} />} variant="outlined" size="small" sx={{ borderStyle: 'dashed', color: 'text.secondary', borderColor: theme.palette.divider, borderRadius: '20px', textTransform: 'none', px: 2, '&:hover': { borderColor: '#5865F2', color: '#5865F2', bgcolor: alpha('#5865F2', 0.05) } }}>Lier journal</Button>
-            )}
-            <Box flexGrow={1} />
-            <Tooltip title={webhookStatus ? "Connecté" : "Manquant"}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 1 }}><Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: webhookStatus ? '#23A559' : '#DA373C', boxShadow: webhookStatus ? '0 0 8px #23A559' : 'none' }} /></Box></Tooltip>
-            <Button onClick={onGenerate} disabled={isGenerating || !sourceEntry} startIcon={isGenerating ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />} sx={{ background: isGenerating || !sourceEntry ? theme.palette.action.disabledBackground : 'linear-gradient(135deg, #5865F2 0%, #4752C4 100%)', color: 'white', borderRadius: '12px', textTransform: 'none', fontWeight: 700, px: 3, boxShadow: isGenerating ? 'none' : '0px 4px 12px rgba(88, 101, 242, 0.3)', '&:hover': { transform: 'translateY(-1px)', boxShadow: '0px 6px 16px rgba(88, 101, 242, 0.4)' } }}>{isGenerating ? "Générer" : "Créer"}</Button>
+            </Box>
+
+            <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+
+            <Box sx={{ flex: 1 }}>
+                <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>SOURCE</Typography>
+                {sourceEntry ? (
+                    <Stack direction="row" spacing={1} alignItems="center">
+                        <Chip
+                            avatar={<Avatar src={sourceEntry.metadata?.images?.[0]?.src} sx={{ width: 24, height: 24 }}>{sourceEntry.metadata?.symbol?.[0]}</Avatar>}
+                            label={sourceEntry.metadata?.symbol || "Source"}
+                            onDelete={onOpenSource}
+                            deleteIcon={<EditIcon sx={{ fontSize: '14px !important' }} />}
+                            onClick={onOpenSource}
+                            sx={{ fontWeight: 600 }}
+                        />
+                        <Tooltip title="Voir le contenu original">
+                            <IconButton size="small" onClick={onShowSource} sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1 }}>
+                                <VisibilityIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                    </Stack>
+                ) : (
+                    <Button
+                        onClick={onOpenSource}
+                        startIcon={<AddLinkIcon />}
+                        variant="outlined"
+                        size="small"
+                        sx={{ borderStyle: 'dashed', borderRadius: 2, textTransform: 'none' }}
+                    >
+                        Lier une entrée
+                    </Button>
+                )}
+            </Box>
+
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Tooltip title={webhookStatus ? "Webhook Connecté" : "Webhook Manquant"}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.5, borderRadius: 2, bgcolor: alpha(webhookStatus ? '#23A559' : '#DA373C', 0.1), color: webhookStatus ? '#23A559' : '#DA373C' }}>
+                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'currentColor' }} />
+                        <Typography variant="caption" fontWeight={700}>{webhookStatus ? "ON" : "OFF"}</Typography>
+                    </Box>
+                </Tooltip>
+                <Button
+                    onClick={onGenerate}
+                    disabled={isGenerating || !sourceEntry}
+                    variant="contained"
+                    startIcon={isGenerating ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
+                    sx={{
+                        borderRadius: 2,
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        px: 3,
+                        background: 'linear-gradient(135deg, #5865F2 0%, #4752C4 100%)',
+                        boxShadow: '0 4px 12px rgba(88, 101, 242, 0.3)'
+                    }}
+                >
+                    {isGenerating ? "Génération..." : "Générer"}
+                </Button>
+            </Box>
         </Paper>
     );
 };
 
-// --- COMPOSANT : POST EDITOR (L'ancien DiscordStudio adapté) ---
+// --- COMPOSANT : POST EDITOR ---
 const PostEditor = ({ post, onSave, onClose, onPublish }) => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const fileInputRef = useRef(null);
 
-    // Init state from POST prop
+    // State
     const [selectedEntry, setSelectedEntry] = useState(post.selectedEntry || null);
     const [generatedPost, setGeneratedPost] = useState(post.generatedPost || null);
     const [variant, setVariant] = useState(post.variant || "trade.simple");
@@ -286,9 +393,8 @@ const PostEditor = ({ post, onSave, onClose, onPublish }) => {
     const [activeImages, setActiveImages] = useState(post.activeImages || []);
     const [scheduledTime, setScheduledTime] = useState(post.scheduledAt || "");
 
-    // UI States
+    // UI State
     const [mobileTab, setMobileTab] = useState(0);
-    const [draggingId, setDraggingId] = useState(null);
     const [generating, setGenerating] = useState(false);
     const [sending, setSending] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -297,14 +403,13 @@ const PostEditor = ({ post, onSave, onClose, onPublish }) => {
     const [showSource, setShowSource] = useState(false);
     const [journalEntries, setJournalEntries] = useState([]);
 
-    // Load Webhook Status
+    // Effects
     useEffect(() => {
         const init = async () => {
             try { const status = await fetchDiscordStatus(); setWebhookConfigured(status?.configured); } catch (e) { setWebhookConfigured(false); }
         }; init();
     }, []);
 
-    // Auto-Save to Parent
     useEffect(() => {
         const updatedPost = {
             ...post,
@@ -318,10 +423,11 @@ const PostEditor = ({ post, onSave, onClose, onPublish }) => {
             updatedAt: new Date().toISOString(),
             title: generatedPost?.embeds?.[0]?.title || "Nouveau brouillon"
         };
-        const timer = setTimeout(() => onSave(updatedPost), 500);
+        const timer = setTimeout(() => onSave(updatedPost), 800);
         return () => clearTimeout(timer);
     }, [selectedEntry, generatedPost, variant, contentOverride, notes, activeImages, scheduledTime]);
 
+    // Handlers
     const handleSelectEntry = (entry) => {
         setSelectedEntry(entry);
         if (entry?.metadata?.images) {
@@ -345,7 +451,7 @@ const PostEditor = ({ post, onSave, onClose, onPublish }) => {
             const data = await generateDiscordPostFromEntry({ entryId: selectedEntry.id, variant });
             setGeneratedPost(data.post);
             setContentOverride(data.post.content || "");
-            setNotification({ open: true, message: "Généré !", severity: "success" });
+            setNotification({ open: true, message: "Contenu généré avec succès !", severity: "success" });
         } catch (err) { setNotification({ open: true, message: err.message, severity: "error" }); } finally { setGenerating(false); }
     };
 
@@ -359,34 +465,6 @@ const PostEditor = ({ post, onSave, onClose, onPublish }) => {
     };
 
     const removeImage = (id) => setActiveImages(prev => prev.filter(img => img.id !== id));
-    const moveImage = (index, direction) => {
-        const newIndex = index + direction;
-        if (newIndex < 0 || newIndex >= activeImages.length) return;
-        setActiveImages(prev => {
-            const newList = [...prev];
-            const [movedItem] = newList.splice(index, 1);
-            newList.splice(newIndex, 0, movedItem);
-            return newList;
-        });
-    };
-
-    // Drag & Drop
-    const handleDragStart = (e, id) => setDraggingId(id);
-    const handleDragOver = (e) => { e.preventDefault(); };
-    const handleDrop = (e, targetId) => {
-        e.preventDefault();
-        if (!draggingId || draggingId === targetId) return;
-        setActiveImages(prev => {
-            const newList = [...prev];
-            const dragIndex = newList.findIndex(item => item.id === draggingId);
-            const targetIndex = newList.findIndex(item => item.id === targetId);
-            if (dragIndex === -1 || targetIndex === -1) return prev;
-            const [movedItem] = newList.splice(dragIndex, 1);
-            newList.splice(targetIndex, 0, movedItem);
-            return newList;
-        });
-        setDraggingId(null);
-    };
 
     const handleFieldUpdate = (type, value, index) => {
         if (!generatedPost) return;
@@ -426,71 +504,129 @@ const PostEditor = ({ post, onSave, onClose, onPublish }) => {
         try {
             const finalPayload = { ...previewPayload, scheduledAt: scheduledTime || null };
             await onPublish(post.id, finalPayload, scheduledTime);
-            // onPublish handles the logic, we just wait
         } catch (err) { setNotification({ open: true, message: err.message, severity: "error" }); } finally { setSending(false); }
     };
 
     return (
-        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', overflow: 'hidden' }}>
-            {/* HEADER EDITOR */}
-            <Box sx={{ px: 3, py: 2, borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', alignItems: 'center', gap: 2, bgcolor: 'background.paper' }}>
-                <Button startIcon={<ArrowBackIcon />} onClick={onClose} sx={{ color: 'text.secondary' }}>Retour</Button>
-                <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>Éditeur</Typography>
+        <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', overflow: 'hidden' }}>
+            {/* TOP BAR */}
+            <Paper elevation={0} sx={{ px: 3, py: 2, borderBottom: `1px solid ${theme.palette.divider}`, display: 'flex', alignItems: 'center', gap: 2, bgcolor: 'background.paper', zIndex: 10 }}>
+                <Button startIcon={<ArrowBackIcon />} onClick={onClose} sx={{ color: 'text.secondary', fontWeight: 600 }}>Retour</Button>
+                <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+                <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>Éditeur de Post</Typography>
 
-                <TextField type="datetime-local" size="small" value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} sx={{ width: 220 }} InputLabelProps={{ shrink: true }} label="Planifier (Optionnel)" />
+                <TextField
+                    type="datetime-local"
+                    size="small"
+                    value={scheduledTime}
+                    onChange={(e) => setScheduledTime(e.target.value)}
+                    sx={{ width: 220 }}
+                    InputLabelProps={{ shrink: true }}
+                    label="Planifier (Optionnel)"
+                />
 
-                {generatedPost && (
-                    <Tooltip title="Copier JSON"><IconButton size="small" onClick={() => { navigator.clipboard.writeText(JSON.stringify(previewPayload, null, 2)); setNotification({ open: true, message: "JSON Copié" }) }}><ContentCopyIcon fontSize="small" /></IconButton></Tooltip>
-                )}
-
-                <Button variant="contained" startIcon={sending ? <CircularProgress size={20} color="inherit" /> : (scheduledTime ? <CalendarTodayIcon /> : <RocketLaunchIcon />)} onClick={handlePublishClick} disabled={sending || !previewPayload || !webhookConfigured} sx={{ bgcolor: scheduledTime ? '#F57C00' : '#5865F2', '&:hover': { bgcolor: scheduledTime ? '#EF6C00' : '#4752C4' }, opacity: (!previewPayload || !webhookConfigured) ? 0.5 : 1 }}>
+                <Button
+                    variant="contained"
+                    startIcon={sending ? <CircularProgress size={20} color="inherit" /> : (scheduledTime ? <CalendarTodayIcon /> : <RocketLaunchIcon />)}
+                    onClick={handlePublishClick}
+                    disabled={sending || !previewPayload || !webhookConfigured}
+                    sx={{
+                        bgcolor: scheduledTime ? '#F57C00' : '#5865F2',
+                        '&:hover': { bgcolor: scheduledTime ? '#EF6C00' : '#4752C4' },
+                        borderRadius: 2,
+                        px: 3,
+                        boxShadow: '0 4px 10px rgba(0,0,0,0.2)'
+                    }}
+                >
                     {scheduledTime ? "Planifier" : "Publier"}
                 </Button>
-            </Box>
+            </Paper>
 
             {/* MOBILE TABS */}
             {isMobile && <Tabs value={mobileTab} onChange={(_, v) => setMobileTab(v)} variant="fullWidth" sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 48 }}><Tab icon={<EditIcon fontSize="small" />} label="Éditeur" /><Tab icon={<RocketLaunchIcon fontSize="small" />} label="Aperçu" /></Tabs>}
 
-            {/* WORKSPACE */}
+            {/* MAIN CONTENT */}
             <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                {/* LEFT PANEL: TOOLS */}
                 {(!isMobile || mobileTab === 0) && (
-                    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: isMobile ? 'none' : `1px solid ${theme.palette.divider}`, maxWidth: isMobile ? '100%' : '40%', minWidth: 350, bgcolor: 'background.paper', zIndex: 1 }}>
-                        <StudioToolbar currentVariant={variant} onVariantChange={setVariant} sourceEntry={selectedEntry} onOpenSource={openDialog} onGenerate={handleGenerate} isGenerating={generating} webhookStatus={webhookConfigured} onShowSource={() => setShowSource(true)} />
-                        <Box sx={{ flex: 1, overflowY: 'auto', p: 3 }}>
+                    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: isMobile ? 'none' : `1px solid ${theme.palette.divider}`, maxWidth: isMobile ? '100%' : '550px', minWidth: 350, bgcolor: 'background.paper', overflowY: 'auto' }}>
+                        <Box sx={{ p: 3 }}>
+                            <EditorToolbar
+                                currentVariant={variant}
+                                onVariantChange={setVariant}
+                                sourceEntry={selectedEntry}
+                                onOpenSource={openDialog}
+                                onGenerate={handleGenerate}
+                                isGenerating={generating}
+                                webhookStatus={webhookConfigured}
+                                onShowSource={() => setShowSource(true)}
+                            />
+
                             {!selectedEntry ? (
-                                <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.5, gap: 2 }}>
-                                    <AutoAwesomeIcon sx={{ fontSize: 60, color: 'text.disabled' }} />
-                                    <Typography variant="body1" color="text.secondary" fontWeight={500}>Sélectionnez une entrée pour commencer</Typography>
-                                    <Button variant="outlined" onClick={openDialog}>Ouvrir le journal</Button>
+                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8, gap: 2, opacity: 0.7 }}>
+                                    <AutoAwesomeIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+                                    <Typography variant="h6" color="text.secondary">Commencez par lier une entrée</Typography>
+                                    <Typography variant="body2" color="text.disabled" align="center" sx={{ maxWidth: 300 }}>
+                                        Sélectionnez une entrée de votre journal pour générer automatiquement un post Discord formaté.
+                                    </Typography>
+                                    <Button variant="outlined" onClick={openDialog} sx={{ mt: 2 }}>Ouvrir le journal</Button>
                                 </Box>
                             ) : (
-                                <Stack spacing={3}>
+                                <Stack spacing={4}>
                                     <Box>
-                                        <Typography variant="caption" fontWeight="bold" color="text.secondary" sx={{ mb: 1, display: 'block' }}>MESSAGE</Typography>
-                                        <TextField fullWidth multiline minRows={2} placeholder="Message hors embed..." value={contentOverride} onChange={(e) => setContentOverride(e.target.value)} variant="outlined" disabled={!generatedPost} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }} />
+                                        <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <EditIcon fontSize="small" /> MESSAGE
+                                        </Typography>
+                                        <TextField
+                                            fullWidth multiline minRows={3}
+                                            placeholder="Message d'introduction (hors embed)..."
+                                            value={contentOverride}
+                                            onChange={(e) => setContentOverride(e.target.value)}
+                                            variant="outlined"
+                                            disabled={!generatedPost}
+                                            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.default' } }}
+                                        />
                                     </Box>
                                     <Box>
-                                        <Typography variant="caption" fontWeight="bold" color="text.secondary" sx={{ mb: 1, display: 'block' }}>NOTE</Typography>
-                                        <TextField fullWidth multiline minRows={3} placeholder="Précision dans l'embed..." value={notes} onChange={(e) => setNotes(e.target.value)} variant="outlined" disabled={!generatedPost} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }} />
+                                        <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <PushPinIcon fontSize="small" /> NOTE
+                                        </Typography>
+                                        <TextField
+                                            fullWidth multiline minRows={3}
+                                            placeholder="Ajouter une note ou une précision dans l'embed..."
+                                            value={notes}
+                                            onChange={(e) => setNotes(e.target.value)}
+                                            variant="outlined"
+                                            disabled={!generatedPost}
+                                            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, bgcolor: 'background.default' } }}
+                                        />
                                     </Box>
                                     <Box>
-                                        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-                                            <Typography variant="caption" fontWeight="bold" color="text.secondary">MÉDIAS ({activeImages.length})</Typography>
-                                            <Button size="small" startIcon={<AddPhotoAlternateIcon />} onClick={() => fileInputRef.current?.click()} disabled={!generatedPost}>Ajouter</Button>
+                                        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
+                                            <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <AddPhotoAlternateIcon fontSize="small" /> MÉDIAS ({activeImages.length})
+                                            </Typography>
+                                            <Button size="small" startIcon={<AddCircleIcon />} onClick={() => fileInputRef.current?.click()} disabled={!generatedPost}>Ajouter</Button>
                                         </Stack>
-                                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(70px, 1fr))', gap: 1, p: 1, bgcolor: alpha(theme.palette.action.hover, 0.5), borderRadius: 2, minHeight: 80 }}>
+                                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 1.5 }}>
                                             {activeImages.map((img, index) => (
-                                                <Box key={img.id} draggable onDragStart={(e) => handleDragStart(e, img.id)} onDragOver={handleDragOver} onDrop={(e) => handleDrop(e, img.id)} sx={{ position: 'relative', width: '100%', aspectRatio: '1', cursor: 'grab', opacity: draggingId === img.id ? 0.5 : 1, border: index === 0 ? `2px solid ${theme.palette.primary.main}` : 'none', borderRadius: 1, overflow: 'hidden', '&:hover .image-controls': { opacity: 1 } }}>
+                                                <Paper key={img.id} elevation={0} sx={{ position: 'relative', width: '100%', aspectRatio: '1', borderRadius: 2, overflow: 'hidden', border: `1px solid ${theme.palette.divider}` }}>
                                                     <Box component="img" src={img.src} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                    <Box className="image-controls" sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.4)', opacity: 0, transition: 'opacity 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                                                        <IconButton size="small" onClick={() => moveImage(index, -1)} disabled={index === 0} sx={{ color: 'white', bgcolor: 'rgba(0,0,0,0.5)', p: 0.5, '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }, '&.Mui-disabled': { opacity: 0.3 } }}><ArrowBackIcon sx={{ fontSize: 16 }} /></IconButton>
-                                                        <IconButton size="small" onClick={() => removeImage(img.id)} sx={{ color: 'white', bgcolor: 'rgba(218, 55, 60, 0.8)', p: 0.5, '&:hover': { bgcolor: 'rgba(218, 55, 60, 1)' } }}><DeleteOutlineIcon sx={{ fontSize: 16 }} /></IconButton>
-                                                        <IconButton size="small" onClick={() => moveImage(index, 1)} disabled={index === activeImages.length - 1} sx={{ color: 'white', bgcolor: 'rgba(0,0,0,0.5)', p: 0.5, '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' }, '&.Mui-disabled': { opacity: 0.3 } }}><ArrowForwardIcon sx={{ fontSize: 16 }} /></IconButton>
+                                                    <Box sx={{ position: 'absolute', top: 4, right: 4, bgcolor: 'rgba(0,0,0,0.6)', borderRadius: '50%' }}>
+                                                        <IconButton size="small" onClick={() => removeImage(img.id)} sx={{ color: 'white', p: 0.5 }}><CloseIcon sx={{ fontSize: 14 }} /></IconButton>
                                                     </Box>
-                                                    {index === 0 && <Chip label="Principal" size="small" color="primary" sx={{ position: 'absolute', bottom: 2, left: 2, height: 16, fontSize: '0.6rem', pointerEvents: 'none' }} />}
-                                                </Box>
+                                                    {index === 0 && <Chip label="Cover" size="small" color="primary" sx={{ position: 'absolute', bottom: 4, left: 4, height: 16, fontSize: '0.6rem' }} />}
+                                                </Paper>
                                             ))}
-                                            {activeImages.length === 0 && <Typography variant="caption" color="text.secondary" sx={{ gridColumn: '1/-1', textAlign: 'center', py: 2 }}>Aucune image</Typography>}
+                                            <Button
+                                                variant="outlined"
+                                                onClick={() => fileInputRef.current?.click()}
+                                                disabled={!generatedPost}
+                                                sx={{ aspectRatio: '1', borderStyle: 'dashed', borderRadius: 2, flexDirection: 'column', gap: 1 }}
+                                            >
+                                                <AddPhotoAlternateIcon color="action" />
+                                                <Typography variant="caption" color="text.secondary">Upload</Typography>
+                                            </Button>
                                         </Box>
                                     </Box>
                                 </Stack>
@@ -498,74 +634,228 @@ const PostEditor = ({ post, onSave, onClose, onPublish }) => {
                         </Box>
                     </Box>
                 )}
+
+                {/* RIGHT PANEL: PREVIEW */}
                 {(!isMobile || mobileTab === 1) && (
-                    <Box sx={{ flex: 1.5, bgcolor: '#313338', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                        <DiscordMessagePreview payload={previewPayload} loading={generating} onUpdate={handleFieldUpdate} />
+                    <Box sx={{ flex: 1, bgcolor: '#1E1F22', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+                        <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                            <DiscordMessagePreview payload={previewPayload} loading={generating} onUpdate={handleFieldUpdate} />
+                        </Box>
                     </Box>
                 )}
             </Box>
+
             <input type="file" multiple accept="image/*" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileChange} />
-            <Dialog open={isDialogOpen} onClose={() => setIsDialogOpen(false)} maxWidth="sm" fullWidth><DialogTitle>Choisir une source</DialogTitle><DialogContent dividers><List>{journalEntries.slice(0, 6).map(entry => (<ListItemButton key={entry.id} onClick={() => handleSelectEntry(entry)}><ListItemAvatar><Avatar variant="rounded" src={entry.metadata?.images?.[0]?.src}>{entry.type[0].toUpperCase()}</Avatar></ListItemAvatar><ListItemText primary={entry.metadata?.title || "Entrée sans titre"} secondary={entry.metadata?.symbol} /></ListItemButton>))}</List></DialogContent><DialogActions><Button onClick={() => setIsDialogOpen(false)}>Fermer</Button></DialogActions></Dialog>
-            <Dialog open={showSource} onClose={() => setShowSource(false)} maxWidth="md" fullWidth><DialogTitle>Contenu Original</DialogTitle><DialogContent dividers><Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{selectedEntry ? (selectedEntry.content || "Pas de contenu") : "Aucune entrée sélectionnée"}</Typography>{selectedEntry?.plan && (<Box mt={2}><Typography variant="subtitle2" fontWeight="bold">Plan :</Typography><Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', color: 'text.secondary' }}>{selectedEntry.plan}</Typography></Box>)}</DialogContent><DialogActions><Button onClick={() => setShowSource(false)}>Fermer</Button></DialogActions></Dialog>
-            <Snackbar open={notification.open} autoHideDuration={3000} onClose={() => setNotification(p => ({ ...p, open: false }))}><Alert severity={notification.severity} variant="filled">{notification.message}</Alert></Snackbar>
+
+            {/* DIALOGS */}
+            <Dialog open={isDialogOpen} onClose={() => setIsDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+                <DialogTitle sx={{ fontWeight: 700 }}>Sélectionner une entrée</DialogTitle>
+                <DialogContent dividers>
+                    <List>
+                        {journalEntries.slice(0, 6).map(entry => (
+                            <ListItemButton key={entry.id} onClick={() => handleSelectEntry(entry)} sx={{ borderRadius: 2, mb: 1 }}>
+                                <ListItemAvatar>
+                                    <Avatar variant="rounded" src={entry.metadata?.images?.[0]?.src} sx={{ bgcolor: theme.palette.primary.main }}>{entry.type[0].toUpperCase()}</Avatar>
+                                </ListItemAvatar>
+                                <ListItemText
+                                    primary={<Typography fontWeight={600}>{entry.metadata?.title || "Entrée sans titre"}</Typography>}
+                                    secondary={entry.metadata?.symbol}
+                                />
+                                <ArrowForwardIcon color="action" fontSize="small" />
+                            </ListItemButton>
+                        ))}
+                    </List>
+                </DialogContent>
+                <DialogActions><Button onClick={() => setIsDialogOpen(false)}>Annuler</Button></DialogActions>
+            </Dialog>
+
+            <Dialog open={showSource} onClose={() => setShowSource(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+                <DialogTitle sx={{ fontWeight: 700 }}>Contenu Original</DialogTitle>
+                <DialogContent dividers>
+                    <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                        {selectedEntry ? (selectedEntry.content || "Pas de contenu") : "Aucune entrée sélectionnée"}
+                    </Paper>
+                </DialogContent>
+                <DialogActions><Button onClick={() => setShowSource(false)}>Fermer</Button></DialogActions>
+            </Dialog>
+
+            <Snackbar open={notification.open} autoHideDuration={3000} onClose={() => setNotification(p => ({ ...p, open: false }))}>
+                <Alert severity={notification.severity} variant="filled" sx={{ borderRadius: 2 }}>{notification.message}</Alert>
+            </Snackbar>
         </Box>
     );
 };
 
-// --- COMPOSANT : DASHBOARD (Nouvelle vue) ---
+// --- COMPOSANT : DASHBOARD ---
+const StatCard = ({ title, value, icon, color }) => (
+    <Paper sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2, borderRadius: 3, border: '1px solid', borderColor: 'divider' }}>
+        <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: alpha(color, 0.1), color: color, display: 'flex' }}>
+            {icon}
+        </Box>
+        <Box>
+            <Typography variant="h5" fontWeight={700}>{value}</Typography>
+            <Typography variant="body2" color="text.secondary" fontWeight={500}>{title}</Typography>
+        </Box>
+    </Paper>
+);
+
 const PostDashboard = ({ posts, onEdit, onCreate, onDelete }) => {
+    const theme = useTheme();
     const [tab, setTab] = useState(0);
+    const [search, setSearch] = useState("");
+
     const filteredPosts = posts.filter(p => {
-        if (tab === 0) return p.status === 'draft';
-        if (tab === 1) return p.status === 'scheduled';
-        return p.status === 'published';
+        const matchesTab = (tab === 0 && p.status === 'draft') || (tab === 1 && p.status === 'scheduled') || (tab === 2 && p.status === 'published');
+        const matchesSearch = p.title?.toLowerCase().includes(search.toLowerCase());
+        return matchesTab && matchesSearch;
     });
 
+    const stats = {
+        drafts: posts.filter(p => p.status === 'draft').length,
+        scheduled: posts.filter(p => p.status === 'scheduled').length,
+        published: posts.filter(p => p.status === 'published').length
+    };
+
     return (
-        <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h5" fontWeight={700}>Tableau de bord</Typography>
-                <Button variant="contained" startIcon={<AddCircleIcon />} onClick={onCreate} sx={{ bgcolor: '#5865F2', fontWeight: 700 }}>Nouveau Post</Button>
+        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', overflowY: 'auto' }}>
+            {/* HEADER */}
+            <Box sx={{
+                py: 6, px: 4,
+                background: theme.forge?.gradients?.hero || 'linear-gradient(180deg, #1E1E24 0%, #0A0A0F 100%)',
+                borderBottom: `1px solid ${theme.palette.divider}`
+            }}>
+                <Container maxWidth="xl">
+                    <Grid container spacing={4} alignItems="center">
+                        <Grid item xs={12} md={6}>
+                            <Typography variant="h3" fontWeight={800} gutterBottom sx={{ background: 'linear-gradient(90deg, #fff, #ccc)', backgroundClip: 'text', textFillColor: 'transparent' }}>
+                                Discord Studio
+                            </Typography>
+                            <Typography variant="h6" color="text.secondary" fontWeight={400} sx={{ maxWidth: 600 }}>
+                                Créez, planifiez et publiez vos analyses et signaux de trading directement vers vos serveurs Discord.
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} md={6}>
+                            <Stack direction="row" spacing={2} justifyContent={{ xs: 'flex-start', md: 'flex-end' }}>
+                                <StatCard title="Brouillons" value={stats.drafts} icon={<EditIcon />} color={theme.palette.text.secondary} />
+                                <StatCard title="Planifiés" value={stats.scheduled} icon={<CalendarTodayIcon />} color="#F57C00" />
+                                <StatCard title="Publiés" value={stats.published} icon={<CheckCircleIcon />} color="#23A559" />
+                            </Stack>
+                        </Grid>
+                    </Grid>
+                </Container>
             </Box>
 
-            <Paper sx={{ mb: 3, borderRadius: 2 }}>
-                <Tabs value={tab} onChange={(_, v) => setTab(v)} indicatorColor="primary" textColor="primary" sx={{ px: 2 }}>
-                    <Tab label={`Brouillons (${posts.filter(p => p.status === 'draft').length})`} />
-                    <Tab label={`Planifiés (${posts.filter(p => p.status === 'scheduled').length})`} />
-                    <Tab label={`Publiés (${posts.filter(p => p.status === 'published').length})`} />
-                </Tabs>
-            </Paper>
+            {/* CONTENT */}
+            <Container maxWidth="xl" sx={{ flex: 1, py: 4 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexWrap: 'wrap', gap: 2 }}>
+                    <Tabs
+                        value={tab}
+                        onChange={(_, v) => setTab(v)}
+                        sx={{
+                            bgcolor: 'background.paper',
+                            borderRadius: 3,
+                            p: 0.5,
+                            border: `1px solid ${theme.palette.divider}`,
+                            '& .MuiTab-root': { borderRadius: 2, minHeight: 40, px: 3, zIndex: 1 },
+                            '& .MuiTabs-indicator': { height: '100%', borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.1) }
+                        }}
+                    >
+                        <Tab label="Brouillons" />
+                        <Tab label="Planifiés" />
+                        <Tab label="Publiés" />
+                    </Tabs>
 
-            <Grid container spacing={2} sx={{ flex: 1, overflowY: 'auto', pb: 2 }}>
-                {filteredPosts.map(post => (
-                    <Grid item xs={12} sm={6} md={4} lg={3} key={post.id}>
-                        <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', borderRadius: 2, transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-4px)', boxShadow: 4 } }}>
-                            <CardActionArea onClick={() => onEdit(post)} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
-                                {post.activeImages?.[0]?.src ? (
-                                    <CardMedia component="img" height="140" image={post.activeImages[0].src} alt="Post image" />
-                                ) : (
-                                    <Box sx={{ height: 140, bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AutoAwesomeIcon sx={{ color: 'text.disabled', fontSize: 40 }} /></Box>
-                                )}
-                                <CardContent sx={{ flex: 1 }}>
-                                    <Typography variant="subtitle1" fontWeight={700} noWrap>{post.title || "Sans titre"}</Typography>
-                                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-                                        Modifié le {new Date(post.updatedAt).toLocaleDateString()}
-                                    </Typography>
-                                    <Chip label={post.status === 'scheduled' ? new Date(post.scheduledAt).toLocaleDateString() : (post.status === 'published' ? 'Envoyé' : 'Brouillon')} size="small" color={post.status === 'scheduled' ? 'warning' : (post.status === 'published' ? 'success' : 'default')} variant="outlined" />
-                                </CardContent>
-                            </CardActionArea>
-                            <CardActions sx={{ justifyContent: 'flex-end' }}>
-                                <IconButton size="small" color="error" onClick={() => onDelete(post.id)}><DeleteOutlineIcon /></IconButton>
-                            </CardActions>
-                        </Card>
-                    </Grid>
-                ))}
-                {filteredPosts.length === 0 && (
-                    <Box sx={{ width: '100%', textAlign: 'center', mt: 5, color: 'text.secondary' }}>
-                        <Typography>Aucun post dans cette catégorie.</Typography>
-                    </Box>
-                )}
-            </Grid>
+                    <Stack direction="row" spacing={2}>
+                        <TextField
+                            size="small"
+                            placeholder="Rechercher..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+                            sx={{ width: 250, '& .MuiOutlinedInput-root': { borderRadius: 3, bgcolor: 'background.paper' } }}
+                        />
+                        <Button
+                            variant="contained"
+                            startIcon={<AddCircleIcon />}
+                            onClick={onCreate}
+                            sx={{
+                                borderRadius: 3,
+                                fontWeight: 700,
+                                px: 3,
+                                background: 'linear-gradient(135deg, #5865F2 0%, #4752C4 100%)',
+                                boxShadow: '0 4px 12px rgba(88, 101, 242, 0.3)'
+                            }}
+                        >
+                            Créer
+                        </Button>
+                    </Stack>
+                </Box>
+
+                <Grid container spacing={3}>
+                    {filteredPosts.map(post => (
+                        <Grid item xs={12} sm={6} md={4} lg={3} key={post.id}>
+                            <Fade in timeout={500}>
+                                <Card sx={{
+                                    height: '100%',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    borderRadius: 3,
+                                    border: `1px solid ${theme.palette.divider}`,
+                                    transition: 'all 0.3s ease',
+                                    '&:hover': { transform: 'translateY(-5px)', boxShadow: theme.shadows[4], borderColor: theme.palette.primary.main }
+                                }}>
+                                    <CardActionArea onClick={() => onEdit(post)} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+                                        <Box sx={{ height: 160, position: 'relative', overflow: 'hidden' }}>
+                                            {post.activeImages?.[0]?.src ? (
+                                                <CardMedia component="img" height="100%" image={post.activeImages[0].src} alt="Post image" sx={{ transition: 'transform 0.5s', '&:hover': { transform: 'scale(1.05)' } }} />
+                                            ) : (
+                                                <Box sx={{ height: '100%', bgcolor: alpha(theme.palette.action.hover, 0.1), display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '10px 10px' }}>
+                                                    <AutoAwesomeIcon sx={{ color: theme.palette.divider, fontSize: 40 }} />
+                                                </Box>
+                                            )}
+                                            <Chip
+                                                label={post.variant === 'trade.simple' ? 'Trade' : 'Analyse'}
+                                                size="small"
+                                                sx={{ position: 'absolute', top: 10, right: 10, bgcolor: 'rgba(0,0,0,0.6)', color: 'white', backdropFilter: 'blur(4px)', border: 'none' }}
+                                            />
+                                        </Box>
+                                        <CardContent sx={{ flex: 1, p: 2.5 }}>
+                                            <Typography variant="h6" fontWeight={700} noWrap sx={{ mb: 1 }}>{post.title || "Sans titre"}</Typography>
+                                            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                                                <CalendarTodayIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                                                <Typography variant="caption" color="text.secondary">
+                                                    {post.status === 'scheduled' ? `Prévu : ${formatDate(post.scheduledAt)}` : `Modifié : ${formatDate(post.updatedAt)}`}
+                                                </Typography>
+                                            </Stack>
+                                            <Chip
+                                                label={post.status === 'scheduled' ? 'Planifié' : (post.status === 'published' ? 'Publié' : 'Brouillon')}
+                                                size="small"
+                                                color={post.status === 'scheduled' ? 'warning' : (post.status === 'published' ? 'success' : 'default')}
+                                                variant="outlined"
+                                                sx={{ fontWeight: 600 }}
+                                            />
+                                        </CardContent>
+                                    </CardActionArea>
+                                    <Divider />
+                                    <CardActions sx={{ justifyContent: 'space-between', p: 1.5 }}>
+                                        <Button size="small" color="inherit" onClick={() => onEdit(post)}>Éditer</Button>
+                                        <IconButton size="small" color="error" onClick={() => onDelete(post.id)} sx={{ opacity: 0.7, '&:hover': { opacity: 1, bgcolor: alpha(theme.palette.error.main, 0.1) } }}>
+                                            <DeleteOutlineIcon fontSize="small" />
+                                        </IconButton>
+                                    </CardActions>
+                                </Card>
+                            </Fade>
+                        </Grid>
+                    ))}
+                    {filteredPosts.length === 0 && (
+                        <Box sx={{ width: '100%', textAlign: 'center', mt: 8, color: 'text.secondary' }}>
+                            <InboxIcon sx={{ fontSize: 60, opacity: 0.2, mb: 2 }} />
+                            <Typography variant="h6">Aucun post trouvé</Typography>
+                            <Typography variant="body2" color="text.disabled">Créez un nouveau post pour commencer.</Typography>
+                        </Box>
+                    )}
+                </Grid>
+            </Container>
         </Box>
     );
 };
@@ -615,24 +905,18 @@ const DiscordStudio = () => {
     };
 
     const handleDeletePost = (id) => {
-        if (!window.confirm("Supprimer ce post ?")) return;
+        if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce post ?")) return;
         setPosts(prev => prev.filter(p => p.id !== id));
     };
 
     const handlePublishPost = async (id, payload, scheduledAt) => {
-        // Here we would normally call the API
         await publishToDiscord(payload);
-
-        // Update status
         setPosts(prev => prev.map(p => {
             if (p.id === id) {
                 return { ...p, status: scheduledAt ? 'scheduled' : 'published', scheduledAt };
             }
             return p;
         }));
-
-        // Return to dashboard or stay? Let's return to dashboard with success
-        // Actually, PostEditor handles the notification. We just update state.
         setView('dashboard');
     };
 
