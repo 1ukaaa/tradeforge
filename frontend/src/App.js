@@ -1,5 +1,6 @@
 import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import AppLayout from "./layout/AppLayout";
+import Calculator from "./pages/Calculator";
 import Calendar from "./pages/Calendar";
 import Dashboard from "./pages/Dashboard";
 import DiscordStudio from "./pages/DiscordStudio";
@@ -23,6 +24,7 @@ const App = () => {
           <Route path="settings" element={<Settings />} />
           <Route path="twitter" element={<TwitterStudio />} />
           <Route path="discord" element={<DiscordStudio />} />
+          <Route path="calculator" element={<Calculator />} />
         </Route>
       </Routes>
     </Router>

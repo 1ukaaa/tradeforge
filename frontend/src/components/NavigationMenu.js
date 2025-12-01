@@ -21,6 +21,7 @@ import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
 // 1. AJOUTER L'ICÔNE CALENDRIER
+import CalculateRoundedIcon from "@mui/icons-material/CalculateRounded";
 import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
 import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
 import TwitterIcon from "@mui/icons-material/Twitter";
@@ -66,6 +67,11 @@ const WORKSPACE_NAV = [
     to: "/calendar",
     label: "Calendrier",
     icon: <CalendarMonthRoundedIcon />,
+  },
+  {
+    to: "/calculator",
+    label: "Calculateur",
+    icon: <CalculateRoundedIcon />,
   },
 ];
 
