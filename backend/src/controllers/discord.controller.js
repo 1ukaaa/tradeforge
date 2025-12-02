@@ -3,6 +3,8 @@ const FormData = require("form-data"); // Nécessaire pour l'envoi de fichiers
 const journalService = require("../services/journal.service");
 const { generateAnalysis } = require("../services/gemini.service");
 const { getDiscordWebhookUrl, hasDiscordWebhookConfigured } = require("../config/discord.config");
+const { sendToDiscord } = require("../services/discordSender.service");
+const discordQueue = require("../services/discordQueue.service");
 
 const ALLOWED_VARIANTS = new Set(["trade.simple", "analysis.deep"]);
 const VARIANT_COLORS = {
