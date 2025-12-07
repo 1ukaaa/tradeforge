@@ -113,9 +113,30 @@ const JournalListItem = ({ entry, onClick }) => {
             sx={{ height: 20, fontSize: 10, fontWeight: 700, borderRadius: 1 }}
           />
           {meta.symbol && (
-            <Typography variant="caption" fontWeight={700} color="text.secondary">
-              {meta.symbol}
-            </Typography>
+            <Box
+              sx={{
+                px: 1,
+                py: 0.25,
+                borderRadius: 1,
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 700,
+                  color: theme.palette.primary.main,
+                  fontSize: '0.7rem',
+                  letterSpacing: '0.5px',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {meta.symbol}
+              </Typography>
+            </Box>
           )}
         </Stack>
         <Typography variant="subtitle1" fontWeight={600} noWrap sx={{ fontSize: { xs: '0.9rem', sm: '1rem' } }}>

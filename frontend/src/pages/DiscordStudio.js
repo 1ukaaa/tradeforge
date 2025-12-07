@@ -491,7 +491,7 @@ const PostEditor = ({ post, onSave, onClose, onPublish }) => {
         else {
             baseEmbed.image = { url: activeImages[0].src };
             embeds.push(baseEmbed);
-            const groupUrl = baseEmbed.url || "https://tradeforge.app/grouped";
+            const groupUrl = baseEmbed.url || "";
             baseEmbed.url = groupUrl;
             for (let i = 1; i < Math.min(activeImages.length, 4); i++) embeds.push({ url: groupUrl, image: { url: activeImages[i].src } });
         }

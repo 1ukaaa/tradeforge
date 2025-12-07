@@ -26,14 +26,20 @@ import {
   IconButton,
   Paper,
   Stack,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
-  useTheme,
+  useTheme
 } from "@mui/material";
+import { useRef, useState } from "react";
 
 // Icons
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import BeachAccessIcon from "@mui/icons-material/BeachAccess";
 import BusinessCenterIcon from "@mui/icons-material/BusinessCenter";
+import CalendarViewMonthIcon from "@mui/icons-material/CalendarViewMonth";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CloseIcon from "@mui/icons-material/Close";
 import DoNotDisturbAltIcon from "@mui/icons-material/DoNotDisturbAlt";
 import EventBusyIcon from "@mui/icons-material/EventBusy";
@@ -42,6 +48,8 @@ import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import QueryStatsRoundedIcon from "@mui/icons-material/QueryStatsRounded";
+import TodayIcon from "@mui/icons-material/Today";
+import ViewAgendaIcon from "@mui/icons-material/ViewAgenda";
 
 // Hooks & Utils
 import { Link as RouterLink } from "react-router-dom";
@@ -84,6 +92,95 @@ const formatPrice = (value) => {
 
 // --- SUB-COMPONENTS ---
 
+// NOTE: Specific Toolbar removed here as it is integrated directly in main component for better state access (Like Export button)
+// Custom Event Content Renderer
+const renderEventContent = (eventInfo) => {
+  const { event } = eventInfo;
+  const props = event.extendedProps;
+  const isTrade = props.type === 'brokerTrade';
+
+  if (isTrade) {
+    const trade = props.brokerTrade;
+    const isWin = Number(trade.pnl) >= 0;
+    const pnlLabel = formatSignedAmount(trade.pnl, trade.currency);
+
+    return (
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+        px: 0.5,
+        py: 0.25,
+        overflow: 'hidden'
+      }}>
+        <Stack direction="row" alignItems="center" spacing={0.5} sx={{ minWidth: 0 }}>
+          <Box sx={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            bgcolor: isWin ? 'success.main' : 'error.main',
+            flexShrink: 0
+          }} />
+          <Typography variant="caption" fontWeight={700} noWrap sx={{ fontSize: '0.7rem' }}>
+            {trade.symbol}
+          </Typography>
+        </Stack>
+        <Typography
+          variant="caption"
+          fontWeight={800}
+          sx={{
+            fontSize: '0.7rem',
+            color: isWin ? 'success.main' : 'error.main',
+            ml: 0.5
+          }}
+        >
+          {pnlLabel}
+        </Typography>
+      </Box>
+    );
+  } else {
+    // Economic Event
+    const impactColor = event.backgroundColor;
+    const title = event.title || "";
+    const isCritical = /CPI|NFP|FOMC|Unemployment Claims/i.test(title);
+
+    if (isCritical) {
+      return (
+        <Box sx={{
+          bgcolor: alpha('#ef4444', 0.9),
+          color: 'white',
+          borderRadius: '4px',
+          px: 0.75,
+          py: 0.25,
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          boxShadow: '0 2px 5px rgba(239, 68, 68, 0.4)'
+        }}>
+          <Typography variant="caption" fontWeight={900} sx={{ fontSize: '0.65rem', lineHeight: 1 }}>
+            ⛔
+          </Typography>
+          <Typography variant="caption" fontWeight={800} noWrap sx={{ fontSize: '0.65rem', letterSpacing: '0.5px' }}>
+            {title.toUpperCase()}
+          </Typography>
+        </Box>
+      );
+    }
+
+    return (
+      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ px: 0.5, py: 0.25, width: '100%' }}>
+        <LocalFireDepartmentIcon sx={{ fontSize: 12, color: impactColor }} />
+        <Typography variant="caption" noWrap sx={{ fontSize: '0.7rem', opacity: 0.9 }}>
+          {event.title}
+        </Typography>
+      </Stack>
+    );
+  }
+};
+
+// Trade Summary Card (Reused)
 const TradeSummaryCard = ({ trade, onClick }) => {
   const isProfit = Number(trade.pnl) >= 0;
   const tone = isProfit ? "success.main" : "error.main";
@@ -132,6 +229,7 @@ const TradeSummaryCard = ({ trade, onClick }) => {
   );
 };
 
+// Modals (Reused)
 const TradeDetailModal = ({ open, trade, onClose }) => {
   if (!trade) return null;
   const isProfit = Number(trade.pnl) >= 0;
@@ -272,6 +370,11 @@ const FocusDayModal = ({ open, onClose, date, trades, economics, onTradeClick })
 
 const Calendar = () => {
   const theme = useTheme();
+  const calendarRef = useRef(null);
+  const [currentView, setCurrentView] = useState("dayGridMonth");
+  const [currentTitle, setCurrentTitle] = useState("");
+  const [exporting, setExporting] = useState(false);
+
   const { events: allEvents, loading, error } = useCalendarEvents(theme);
   const {
     typeFilter,
@@ -289,6 +392,70 @@ const Calendar = () => {
     handleModalClose,
     openTradeFromFocus,
   } = useCalendarInteractions(allEvents);
+
+  // Custom Toolbar Handlers
+  const handlePrev = () => {
+    const api = calendarRef.current?.getApi();
+    if (api) {
+      api.prev();
+      setCurrentTitle(api.view.title);
+    }
+  };
+  const handleNext = () => {
+    const api = calendarRef.current?.getApi();
+    if (api) {
+      api.next();
+      setCurrentTitle(api.view.title);
+    }
+  };
+  const handleToday = () => {
+    const api = calendarRef.current?.getApi();
+    if (api) {
+      api.today();
+      setCurrentTitle(api.view.title);
+    }
+  };
+  const handleViewChange = (viewName) => {
+    const api = calendarRef.current?.getApi();
+    if (api) {
+      api.changeView(viewName);
+      setCurrentView(viewName);
+      setCurrentTitle(api.view.title);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!calendarRef.current) return;
+    setExporting(true);
+
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const calendarEl = document.querySelector('.fc');
+      if (!calendarEl) return;
+
+      const canvas = await html2canvas(calendarEl, {
+        backgroundColor: theme.palette.mode === 'dark' ? '#0F1729' : '#ffffff',
+        scale: 2,
+        useCORS: true,
+        logging: false
+      });
+
+      const image = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = image;
+      link.download = `TradeForge_Export_${new Date().toISOString().slice(0, 10)}.png`;
+      link.click();
+    } catch (err) {
+      console.error("Export failed:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Init Title
+  const handleDatesSet = (arg) => {
+    setCurrentTitle(arg.view.title);
+  };
 
   return (
     <Box sx={{ minHeight: "100%", bgcolor: "background.default" }}>
@@ -326,121 +493,146 @@ const Calendar = () => {
       </Box>
 
       {/* CONTENT */}
-      <Container maxWidth="xl" sx={{ mt: -6, pb: 8, position: 'relative', zIndex: 2 }}>
+      <Container maxWidth="xl" sx={{ mt: -6, pb: 8, position: 'relative', zIndex: exporting ? 9999 : 2 }}> {/* Small tweaks for z-index if needed */}
 
         {/* HORIZONTAL FILTERS */}
-        <Paper
-          elevation={0}
-          sx={{
-            mb: 4,
-            p: 2,
-            borderRadius: 3,
-            border: `1px solid ${theme.palette.divider}`,
-            bgcolor: alpha(theme.palette.background.paper, 0.6),
-            backdropFilter: "blur(12px)",
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 3
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <FilterListIcon color="action" />
-            <Typography variant="subtitle2" fontWeight={700}>FILTRES</Typography>
-          </Box>
+        {!exporting && (
+          <Paper
+            elevation={0}
+            sx={{
+              mb: 4,
+              p: 2,
+              borderRadius: 3,
+              border: `1px solid ${theme.palette.divider}`,
+              bgcolor: alpha(theme.palette.background.paper, 0.6),
+              backdropFilter: "blur(12px)",
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 3
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <FilterListIcon color="action" />
+              <Typography variant="subtitle2" fontWeight={700}>FILTRES</Typography>
+            </Box>
 
-          <Divider orientation="vertical" flexItem sx={{ height: 24, alignSelf: 'center' }} />
+            <Divider orientation="vertical" flexItem sx={{ height: 24, alignSelf: 'center' }} />
 
-          <FormGroup row sx={{ gap: 2 }}>
-            <FormControlLabel
-              control={<Checkbox size="small" checked={typeFilter.trade} onChange={handleTypeChange} name="trade" icon={<BusinessCenterIcon fontSize="small" />} checkedIcon={<BusinessCenterIcon fontSize="small" color="primary" />} />}
-              label={<Typography variant="body2" fontWeight={500}>Trades</Typography>}
-            />
-            <FormControlLabel
-              control={<Checkbox size="small" checked={typeFilter.economic} onChange={handleTypeChange} name="economic" icon={<AssessmentIcon fontSize="small" />} checkedIcon={<AssessmentIcon fontSize="small" color="primary" />} />}
-              label={<Typography variant="body2" fontWeight={500}>Annonces Éco</Typography>}
-            />
-          </FormGroup>
+            <FormGroup row sx={{ gap: 2 }}>
+              <FormControlLabel
+                control={<Checkbox size="small" checked={typeFilter.trade} onChange={handleTypeChange} name="trade" icon={<BusinessCenterIcon fontSize="small" />} checkedIcon={<BusinessCenterIcon fontSize="small" color="primary" />} />}
+                label={<Typography variant="body2" fontWeight={500}>Trades</Typography>}
+              />
+              <FormControlLabel
+                control={<Checkbox size="small" checked={typeFilter.economic} onChange={handleTypeChange} name="economic" icon={<AssessmentIcon fontSize="small" />} checkedIcon={<AssessmentIcon fontSize="small" color="primary" />} />}
+                label={<Typography variant="body2" fontWeight={500}>Annonces Éco</Typography>}
+              />
+            </FormGroup>
 
-          <Divider orientation="vertical" flexItem sx={{ height: 24, alignSelf: 'center' }} />
+            <Divider orientation="vertical" flexItem sx={{ height: 24, alignSelf: 'center' }} />
 
-          <FormGroup row sx={{ gap: 1 }}>
-            <FormControlLabel
-              control={<Checkbox size="small" checked={impactFilter.high} onChange={handleImpactChange} name="high" disabled={!typeFilter.economic} icon={<LocalFireDepartmentIcon fontSize="small" color="error" />} checkedIcon={<LocalFireDepartmentIcon fontSize="small" color="error" />} />}
-              label={<Typography variant="caption">Fort</Typography>}
-            />
-            <FormControlLabel
-              control={<Checkbox size="small" checked={impactFilter.medium} onChange={handleImpactChange} name="medium" disabled={!typeFilter.economic} icon={<NotificationsActiveIcon fontSize="small" color="warning" />} checkedIcon={<NotificationsActiveIcon fontSize="small" color="warning" />} />}
-              label={<Typography variant="caption">Moyen</Typography>}
-            />
-            <FormControlLabel
-              control={<Checkbox size="small" checked={impactFilter.low} onChange={handleImpactChange} name="low" disabled={!typeFilter.economic} icon={<DoNotDisturbAltIcon fontSize="small" />} checkedIcon={<DoNotDisturbAltIcon fontSize="small" />} />}
-              label={<Typography variant="caption">Faible</Typography>}
-            />
-            <FormControlLabel
-              control={<Checkbox size="small" checked={impactFilter.holiday} onChange={handleImpactChange} name="holiday" disabled={!typeFilter.economic} icon={<BeachAccessIcon fontSize="small" color="info" />} checkedIcon={<BeachAccessIcon fontSize="small" color="info" />} />}
-              label={<Typography variant="caption">Férié</Typography>}
-            />
-          </FormGroup>
-        </Paper>
+            <FormGroup row sx={{ gap: 1 }}>
+              <FormControlLabel
+                control={<Checkbox size="small" checked={impactFilter.high} onChange={handleImpactChange} name="high" disabled={!typeFilter.economic} icon={<LocalFireDepartmentIcon fontSize="small" color="error" />} checkedIcon={<LocalFireDepartmentIcon fontSize="small" color="error" />} />}
+                label={<Typography variant="caption">Fort</Typography>}
+              />
+              <FormControlLabel
+                control={<Checkbox size="small" checked={impactFilter.medium} onChange={handleImpactChange} name="medium" disabled={!typeFilter.economic} icon={<NotificationsActiveIcon fontSize="small" color="warning" />} checkedIcon={<NotificationsActiveIcon fontSize="small" color="warning" />} />}
+                label={<Typography variant="caption">Moyen</Typography>}
+              />
+              <FormControlLabel
+                control={<Checkbox size="small" checked={impactFilter.low} onChange={handleImpactChange} name="low" disabled={!typeFilter.economic} icon={<DoNotDisturbAltIcon fontSize="small" />} checkedIcon={<DoNotDisturbAltIcon fontSize="small" />} />}
+                label={<Typography variant="caption">Faible</Typography>}
+              />
+              <FormControlLabel
+                control={<Checkbox size="small" checked={impactFilter.holiday} onChange={handleImpactChange} name="holiday" disabled={!typeFilter.economic} icon={<BeachAccessIcon fontSize="small" color="info" />} checkedIcon={<BeachAccessIcon fontSize="small" color="info" />} />}
+                label={<Typography variant="caption">Férié</Typography>}
+              />
+            </FormGroup>
+          </Paper>
+        )}
 
         {/* MAIN CALENDAR AREA */}
         <Fade in={true} timeout={600}>
           <Paper
             elevation={0}
             sx={{
-              p: 1,
+              p: 3,
               borderRadius: 3,
               border: `1px solid ${theme.palette.divider}`,
               bgcolor: alpha(theme.palette.background.paper, 0.4),
               backdropFilter: "blur(10px)",
-              minHeight: 600,
+              minHeight: 700,
               // FullCalendar Customization
               "& .fc": { fontFamily: 'inherit' },
-              "& .fc-toolbar-title": { fontSize: '1.5rem', fontWeight: 800 },
-              "& .fc-button": {
-                borderRadius: '8px',
-                textTransform: 'capitalize',
-                fontWeight: 600,
-                boxShadow: 'none !important',
-                transition: 'all 0.2s'
+              "& .fc-theme-standard td, & .fc-theme-standard th": { borderColor: theme.palette.divider },
+              "& .fc-col-header-cell": {
+                py: 2,
+                bgcolor: alpha(theme.palette.background.default, 0.5),
+                textTransform: 'uppercase',
+                fontSize: '0.75rem',
+                letterSpacing: '1px'
               },
-              "& .fc-button-primary": {
-                bgcolor: 'transparent',
-                color: 'text.primary',
-                border: `1px solid ${theme.palette.divider}`
-              },
-              "& .fc-button-primary:hover": { bgcolor: 'action.hover' },
-              "& .fc-button-active": {
-                bgcolor: alpha(theme.palette.primary.main, 0.1) + ' !important',
-                color: 'primary.main !important',
-                borderColor: 'primary.main !important'
-              },
-              "& .fc-col-header-cell": { py: 2, bgcolor: alpha(theme.palette.background.default, 0.5) },
-              "& .fc-daygrid-day": { transition: 'bgcolor 0.2s' },
+              "& .fc-daygrid-day": { transition: 'background-color 0.2s' },
               "& .fc-daygrid-day:hover": { bgcolor: alpha(theme.palette.action.hover, 0.05), cursor: 'pointer' },
+              "& .fc-day-today": { bgcolor: alpha(theme.palette.primary.main, 0.05) + " !important" },
+
+              // Events
               "& .fc-event": {
                 borderRadius: '4px',
                 border: 'none',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                boxShadow: 'none',
+                bgcolor: 'transparent',
                 cursor: 'pointer',
                 transition: 'transform 0.1s',
-                '&:hover': { transform: 'scale(1.02)' }
+                '&:hover': { transform: 'scale(1.02)', zIndex: 10 }
               },
-              // FIX DARK MODE LIST VIEW
+
+              // List View Styling
+              "& .fc-list": {
+                border: 'none',
+                '--fc-list-event-dot-width': '8px',
+                '--fc-list-event-hover-bg-color': alpha(theme.palette.action.hover, 0.1)
+              },
+              "& .fc-list-table": {
+                borderCollapse: 'collapse', // Revert to collapse to avoid gaps artifacts
+                borderSpacing: 0,
+              },
               "& .fc-list-day-cushion": {
-                bgcolor: alpha(theme.palette.background.default, 0.5) + " !important",
+                bgcolor: (theme.palette.mode === 'dark' ? theme.palette.background.default : theme.palette.grey[100]) + " !important",
+                borderBottom: `1px solid ${theme.palette.divider}`, // Subtle separator
+                py: 2, // More spacing
               },
               "& .fc-list-day-text": {
                 color: theme.palette.text.primary,
-                fontWeight: 700
+                fontWeight: 800,
+                fontSize: '1.25rem', // Larger text for clear hierarchy
+                textTransform: 'capitalize',
+                pl: 1
               },
               "& .fc-list-day-side-text": {
                 color: theme.palette.text.secondary,
+                fontWeight: 500,
+                fontSize: '1rem',
+                opacity: 0.7
               },
-              "& .fc-list-event:hover td": {
-                bgcolor: alpha(theme.palette.action.hover, 0.1) + " !important",
-              }
+              "& .fc-list-event": {
+                cursor: 'pointer'
+              },
+              "& .fc-list-event td": {
+                bgcolor: 'transparent',
+                border: 'none',
+                py: 1.5
+              },
+              "& .fc-list-event-time": {
+                fontSize: '0.9rem',
+                fontFamily: 'monospace',
+                fontWeight: 600,
+                color: theme.palette.text.secondary
+              },
+              "& .fc-list-event-graphic": { display: 'none' }, // Remove default dots
+              // Use explicit colors for list view rows if needed to match image exactly
             }}
           >
             {loading ? (
@@ -450,29 +642,95 @@ const Calendar = () => {
             ) : error ? (
               <Alert severity="error">{error}</Alert>
             ) : (
-              <FullCalendar
-                locale={frLocale}
-                plugins={[dayGridPlugin, interactionPlugin, listPlugin]}
-                initialView="dayGridMonth"
-                events={filteredEvents}
-                eventClick={handleEventClick}
-                dateClick={handleDateClick}
-                height="auto"
-                headerToolbar={{
-                  left: "prev,next today",
-                  center: "title",
-                  right: "dayGridMonth,listWeek",
-                }}
-                buttonText={{
-                  today: "Aujourd'hui",
-                  month: "Mois",
-                  week: "Semaine",
-                  list: "Agenda",
-                }}
-                dayMaxEvents={3}
-                moreLinkContent={(args) => `+${args.num} autres`}
-                noEventsText="Aucun événement à afficher"
-              />
+              <>
+                {/* TOOLBAR INTEGRATED */}
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  justifyContent="space-between"
+                  alignItems={{ xs: 'stretch', md: 'center' }}
+                  spacing={2}
+                  sx={{ mb: 3 }}
+                >
+                  <Stack direction="row" alignItems="center" spacing={2}>
+                    <Stack direction="row" alignItems="center" spacing={1} sx={{ bgcolor: 'background.paper', p: 0.5, borderRadius: 2, border: 1, borderColor: 'divider' }}>
+                      <IconButton onClick={handlePrev} size="small" sx={{ p: 0.5 }}>
+                        <ChevronLeftIcon fontSize="small" />
+                      </IconButton>
+                      <Button
+                        onClick={handleToday}
+                        size="small"
+                        startIcon={<TodayIcon sx={{ fontSize: 14 }} />}
+                        sx={{
+                          fontWeight: 700,
+                          color: 'text.primary',
+                          px: 2,
+                          minWidth: 'auto',
+                          '&:hover': { bgcolor: alpha(theme.palette.text.primary, 0.05) }
+                        }}
+                      >
+                        Aujourd'hui
+                      </Button>
+                      <IconButton onClick={handleNext} size="small" sx={{ p: 0.5 }}>
+                        <ChevronRightIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                    <Typography variant="h5" fontWeight={800} sx={{ textTransform: 'capitalize', minWidth: 200 }}>
+                      {currentTitle}
+                    </Typography>
+                  </Stack>
+
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Button
+                      variant="outlined"
+                      startIcon={exporting ? <CircularProgress size={16} /> : <LaunchRoundedIcon sx={{ transform: 'rotate(180deg)', fontSize: 18 }} />}
+                      onClick={handleExport}
+                      disabled={exporting}
+                      size="small"
+                      sx={{ display: { xs: 'none', md: 'flex' } }}
+                    >
+                      Exporter
+                    </Button>
+
+                    <ToggleButtonGroup
+                      value={currentView}
+                      exclusive
+                      onChange={(e, v) => v && handleViewChange(v)}
+                      size="small"
+                      sx={{ bgcolor: 'background.paper' }}
+                    >
+                      <ToggleButton value="dayGridMonth" sx={{ px: 2, gap: 1 }}>
+                        <CalendarViewMonthIcon fontSize="small" />
+                        <Typography variant="caption" fontWeight={700}>MOIS</Typography>
+                      </ToggleButton>
+                      <ToggleButton value="listWeek" sx={{ px: 2, gap: 1 }}>
+                        <ViewAgendaIcon fontSize="small" />
+                        <Typography variant="caption" fontWeight={700}>AGENDA</Typography>
+                      </ToggleButton>
+                    </ToggleButtonGroup>
+                  </Stack>
+                </Stack>
+
+                <FullCalendar
+                  ref={calendarRef}
+                  locale={frLocale}
+                  plugins={[dayGridPlugin, interactionPlugin, listPlugin]}
+                  initialView="dayGridMonth"
+                  events={filteredEvents}
+                  eventContent={renderEventContent}
+                  eventClick={handleEventClick}
+                  dateClick={handleDateClick}
+                  datesSet={handleDatesSet}
+                  height="auto"
+                  headerToolbar={false}
+                  dayMaxEvents={4}
+                  moreLinkContent={(args) => (
+                    <Typography variant="caption" color="primary" fontWeight={700} sx={{ display: 'block', textAlign: 'center', mt: 0.5 }}>
+                      +{args.num} autres
+                    </Typography>
+                  )}
+                  noEventsText="Aucun événement à afficher"
+                />
+              </>
             )}
           </Paper>
         </Fade>
