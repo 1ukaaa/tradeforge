@@ -1,10 +1,9 @@
 const axios = require("axios");
-const FormData = require("form-data"); // Nécessaire pour l'envoi de fichiers
 const journalService = require("../services/journal.service");
 const { generateAnalysis } = require("../services/gemini.service");
 const { getDiscordWebhookUrl, hasDiscordWebhookConfigured } = require("../config/discord.config");
 const { sendToDiscord } = require("../services/discordSender.service");
-const discordQueue = require("../services/discordQueue.service");
+const discordDraftsService = require("../services/discordDrafts.service");
 
 const ALLOWED_VARIANTS = new Set(["trade.simple", "analysis.deep"]);
 const VARIANT_COLORS = {
@@ -12,6 +11,7 @@ const VARIANT_COLORS = {
   "analysis.deep": 0x60a5fa,
 };
 
+// --- HELPER FUNCTIONS (Context, Parsing) ---
 const formatEntryContext = (entry) => {
   if (!entry) return "";
   const meta = entry.metadata || {};
@@ -56,19 +56,15 @@ const sanitizeFields = (fields) => {
     .filter((field) => field.name && field.value);
 };
 
-const isValidHttpUrl = (value = "") => /^https?:\/\//i.test(value.trim());
-
 const sanitizeImageUrl = (value) => {
   if (!value) return null;
   const trimmed = String(value).trim();
-  // On autorise tout ici, le traitement DataURI se fait à l'envoi
   return trimmed;
 };
 
 const pickEntryImage = (entry) => {
   const images = entry?.metadata?.images;
   if (!Array.isArray(images) || !images.length) return null;
-  // On prend la première image valide (http ou data)
   const candidate = images.find((image) => image?.src);
   return candidate ? candidate.src : null;
 };
@@ -103,7 +99,6 @@ const buildDiscordPayload = (entry, variant, data = {}) => {
     embed.footer = { text: `Journal • ${entry.metadata.timeframe}` };
   }
 
-  // On récupère l'image, qu'elle soit HTTP ou DataURI
   const imageUrl = sanitizeImageUrl(data.imageUrl) || pickEntryImage(entry);
   if (imageUrl) {
     embed.image = { url: imageUrl };
@@ -122,6 +117,62 @@ const buildDiscordPayload = (entry, variant, data = {}) => {
     embeds: [embed],
   };
 };
+
+// --- DRAFTS CRUD ---
+
+const listDrafts = async (_req, res) => {
+  try {
+    const drafts = await discordDraftsService.listDrafts();
+    res.json({ drafts });
+  } catch (error) {
+    console.error("Erreur listDrafts Discord :", error);
+    res.status(500).json({ error: "Impossible de récupérer les brouillons Discord." });
+  }
+};
+
+const getDraft = async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: "ID invalide" });
+  try {
+    const draft = await discordDraftsService.getDraftById(id);
+    if (!draft) return res.status(404).json({ error: "Brouillon introuvable" });
+    res.json({ draft });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const createDraft = async (req, res) => {
+  try {
+    const draft = await discordDraftsService.createDraft(req.body || {});
+    res.status(201).json({ draft });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const updateDraft = async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const draft = await discordDraftsService.updateDraft(id, req.body || {});
+    res.json({ draft });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const deleteDraft = async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const success = await discordDraftsService.deleteDraft(id);
+    if (!success) return res.status(404).json({ error: "Brouillon introuvable" });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// --- GENERATION ---
 
 const generateFromEntry = async (req, res) => {
   const entryId = Number(req.body?.entryId);
@@ -148,6 +199,8 @@ const generateFromEntry = async (req, res) => {
     });
 
     const parsed = extractJsonPayload(aiResult.result);
+    // Note: We don't save draft yet, we just return generated content to user
+    // The user will save it later via "Save" or "Publish"
     const payload = buildDiscordPayload(entry, variant, parsed);
 
     res.json({
@@ -161,39 +214,66 @@ const generateFromEntry = async (req, res) => {
   }
 };
 
-// --- LOGIQUE D'ENVOI AVEC GESTION DES IMAGES LOCALES ---
+// --- PUBLICATION (Unified) ---
+
 const publishPayload = async (req, res) => {
   const webhookUrl = getDiscordWebhookUrl();
   if (!webhookUrl) {
     return res.status(400).json({ error: "Aucun webhook Discord n'est configuré côté serveur." });
   }
 
-  let payload = req.body?.payload;
-  const scheduledAt = req.body?.scheduledAt;
+  const { payload, scheduledAt, draftId, title, variant, metadata, entry_id } = req.body;
 
   if (!payload || typeof payload !== "object") {
     return res.status(400).json({ error: "Payload Discord manquant." });
   }
 
   try {
-    // 1. GESTION PLANIFICATION
-    if (scheduledAt && new Date(scheduledAt) > new Date()) {
-      console.log("[Discord] Planification du post pour", scheduledAt);
-      await discordQueue.addToQueue(payload, scheduledAt);
-      return res.json({ success: true, scheduled: true, scheduledAt });
+    // 1. Ensure Draft Exists (Persistence)
+    let draft;
+    const draftData = {
+      title: title || "Post Discord",
+      variant: variant || "trade.simple",
+      payload,
+      sourceEntryId: entry_id || null, // Ensure compatibility between entry_id and sourceEntryId
+      metadata: metadata || {},
+    };
+
+    if (draftId) {
+      draft = await discordDraftsService.updateDraft(draftId, draftData);
+    } else {
+      draft = await discordDraftsService.createDraft(draftData);
     }
 
-    // 2. ENVOI DIRECT
-    console.log("[Discord] Envoi immédiat");
-    const message = await sendToDiscord(webhookUrl, payload);
-    console.log("[Discord] Message envoyé", { id: message?.id });
+    // 2. Logic: Schedule vs Immediate
+    if (scheduledAt && new Date(scheduledAt) > new Date()) {
+      // SCHEDULING
+      console.log("[Discord] Planification du post pour", scheduledAt);
 
-    res.json({
-      success: true,
-      messageId: message?.id || null,
-      channelId: message?.channel_id || null,
-      timestamp: message?.timestamp || null,
-    });
+      const updated = await discordDraftsService.updateDraft(draft.id, {
+        status: 'scheduled',
+        scheduledAt,
+      });
+
+      return res.json({ success: true, scheduled: true, scheduledAt, draft: updated });
+
+    } else {
+      // IMMEDIATE SEND
+      console.log("[Discord] Envoi immédiat (persisté)");
+
+      const message = await sendToDiscord(webhookUrl, payload);
+      console.log("[Discord] Message envoyé", { id: message?.id });
+
+      const updated = await discordDraftsService.markSent(draft.id, {
+        publishedAt: new Date().toISOString()
+      });
+
+      res.json({
+        success: true,
+        messageId: message?.id || null,
+        draft: updated
+      });
+    }
 
   } catch (error) {
     const reason = error?.response?.data?.message || JSON.stringify(error?.response?.data) || error.message || "Échec de l'envoi Discord.";
@@ -212,4 +292,9 @@ module.exports = {
   generateFromEntry,
   publishPayload,
   getDiscordStatus,
+  listDrafts,
+  getDraft,
+  createDraft,
+  updateDraft,
+  deleteDraft,
 };

@@ -71,6 +71,7 @@ const mapDraftRow = (row) => {
     metadata: parseMetadata(row.metadata),
     publishedTweetId: row.publishedTweetId || null,
     publishedAt: row.publishedAt || null,
+    scheduledAt: row.scheduledAt || null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -89,6 +90,15 @@ const getDraftById = async (id) => {
   return mapDraftRow(result.rows[0]);
 };
 
+const getDueDrafts = async () => {
+  const now = new Date().toISOString();
+  const result = await db.execute({
+    sql: "SELECT * FROM twitter_drafts WHERE status = 'scheduled' AND scheduledAt <= ?",
+    args: [now],
+  });
+  return result.rows.map(mapDraftRow);
+};
+
 const createDraft = async ({
   title = "",
   variant = "tweet.simple",
@@ -96,6 +106,7 @@ const createDraft = async ({
   payload = {},
   sourceEntryId = null,
   metadata = {},
+  scheduledAt = null,
 } = {}) => {
   const normalizedPayload = normalizePayload(payload);
   const serializedPayload = JSON.stringify(normalizedPayload);
@@ -103,8 +114,8 @@ const createDraft = async ({
   const timestamp = getTimestamp();
   const result = await db.execute({
     sql: `
-      INSERT INTO twitter_drafts (title, variant, status, payload, sourceEntryId, metadata, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO twitter_drafts(title, variant, status, payload, sourceEntryId, metadata, scheduledAt, createdAt, updatedAt)
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     args: [
       title,
@@ -113,6 +124,7 @@ const createDraft = async ({
       serializedPayload,
       sourceEntryId,
       serializedMetadata,
+      scheduledAt, // Use the scheduledAt argument directly
       timestamp,
       timestamp,
     ],
@@ -134,12 +146,16 @@ const updateDraft = async (id, updates = {}) => {
       ? serializeMetadata(updates.metadata)
       : serializeMetadata(existing.metadata);
   const timestamp = getTimestamp();
+
+  // Gestion du scheduledAt
+  const nextScheduledAt = updates.scheduledAt !== undefined ? updates.scheduledAt : existing.scheduledAt;
+
   await db.execute({
     sql: `
       UPDATE twitter_drafts
-      SET title = ?, variant = ?, status = ?, payload = ?, sourceEntryId = ?, metadata = ?, updatedAt = ?
+      SET title = ?, variant = ?, status = ?, payload = ?, sourceEntryId = ?, metadata = ?, scheduledAt = ?, updatedAt = ?
       WHERE id = ?
-    `,
+      `,
     args: [
       updates.title !== undefined ? updates.title : existing.title,
       updates.variant !== undefined ? updates.variant : existing.variant,
@@ -147,6 +163,7 @@ const updateDraft = async (id, updates = {}) => {
       nextPayload,
       updates.sourceEntryId !== undefined ? updates.sourceEntryId : existing.sourceEntryId,
       nextMetadata,
+      nextScheduledAt,
       timestamp,
       id,
     ],
@@ -164,8 +181,8 @@ const markPublished = async (id, { tweetId, publishedAt }) => {
     sql: `
       UPDATE twitter_drafts
       SET status = ?, publishedTweetId = ?, publishedAt = ?, updatedAt = ?
-      WHERE id = ?
-    `,
+    WHERE id = ?
+      `,
     args: ["published", tweetId, publishedAt, timestamp, id],
   });
   return getDraftById(id);
@@ -186,4 +203,5 @@ module.exports = {
   updateDraft,
   markPublished,
   deleteDraft,
+  getDueDrafts,
 };
