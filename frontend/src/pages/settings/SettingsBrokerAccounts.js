@@ -86,7 +86,6 @@ const SettingsBrokerAccounts = () => {
   const [formState, setFormState] = useState(getDefaultForm("mt5"));
   const [submitting, setSubmitting] = useState(false);
   const [syncingAccountId, setSyncingAccountId] = useState(null);
-  const [syncSuccess, setSyncSuccess] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "info" });
   const [importingAccountId, setImportingAccountId] = useState(null);
   const [twitterIntegration, setTwitterIntegration] = useState(null);
@@ -180,7 +179,6 @@ const SettingsBrokerAccounts = () => {
     if (!file) return;
     setImportingAccountId(accountId);
     setError(null);
-    setSyncSuccess(null);
     try {
       const result = await importBrokerCsv(accountId, file);
       const inserted = result?.tradesCount ?? 0;
@@ -189,7 +187,6 @@ const SettingsBrokerAccounts = () => {
         inserted > 0
           ? `${inserted} nouveau(x) trade(s) importé(s).`
           : `Aucun nouveau trade dans ce fichier (${retrieved} lu(s)).`;
-      setSyncSuccess(message);
       setSnackbar({
         open: true,
         message,
@@ -210,7 +207,6 @@ const SettingsBrokerAccounts = () => {
   const handleSync = async (accountId) => {
     setSyncingAccountId(accountId);
     setError(null);
-    setSyncSuccess(null);
     try {
       const result = await syncBrokerAccount(accountId);
       const inserted = result?.tradesCount ?? 0;
@@ -218,7 +214,6 @@ const SettingsBrokerAccounts = () => {
       const message = inserted > 0
         ? `${inserted} nouveau(x) trade(s) importé(s).`
         : `Aucun nouveau trade (${retrieved} récupéré(s) depuis l'API).`;
-      setSyncSuccess(message);
       setSnackbar({
         open: true,
         message,

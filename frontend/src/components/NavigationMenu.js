@@ -170,7 +170,9 @@ const NavigationMenu = ({ onNavigate = () => { }, showBrand = true }) => {
       sx={{
         width: { xs: "100%", lg: 272 },
         flexShrink: 0,
-        height: "100%",
+        height: { xs: "100%", lg: "100vh" },
+        position: { lg: "sticky" },
+        top: 0,
         display: "flex",
         flexDirection: "column",
 

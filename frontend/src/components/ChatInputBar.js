@@ -2,8 +2,6 @@ import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
 // Imports ajoutés
-import AnalyticsIcon from "@mui/icons-material/Analytics";
-import ShowChartIcon from "@mui/icons-material/ShowChart";
 import {
   Box,
   CircularProgress,
@@ -17,22 +15,6 @@ import {
 // 'useState' est déjà importé, j'ajoute 'useMemo'
 import { useEffect, useState } from "react";
 import useSpeechCapture from "../features/analyzer/hooks/useSpeechCapture";
-
-// Définition des outils
-const TOOLS = {
-  analyse: {
-    label: "Analyse",
-    icon: <AnalyticsIcon fontSize="small" />,
-    description: "Analyser un plan ou une session (défaut)",
-    disabled: false,
-  },
-  trade: {
-    label: "Trade",
-    icon: <ShowChartIcon fontSize="small" />,
-    description: "Analyser un trade spécifique (entrée/sortie)",
-    disabled: false,
-  },
-};
 
 /**
  * Barre d'input fixe en bas de page, style chatbot.

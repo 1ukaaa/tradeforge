@@ -425,6 +425,7 @@ const PostEditor = ({ post, onSave, onClose, onPublish }) => {
         };
         const timer = setTimeout(() => onSave(updatedPost), 800);
         return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedEntry, generatedPost, variant, contentOverride, notes, activeImages, scheduledTime]);
 
     // Handlers

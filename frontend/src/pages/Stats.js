@@ -1053,7 +1053,6 @@ const AIInsights = ({ stats }) => {
 // =========================================================================
 
 export default function StatsPage() {
-  const theme = useTheme();
   const { loading, error, trades, aggregate } = useDashboardSummary();
 
   const stats = useMemo(() => {

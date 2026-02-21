@@ -19,7 +19,6 @@ import {
   useTheme
 } from "@mui/material";
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
 
 import ReactMarkdown from "react-markdown";
 import ChatInputBar from "../components/ChatInputBar";
@@ -148,9 +147,6 @@ const TradeForgeAI = () => {
   const [journalEntries, setJournalEntries] = useState([]);
 
   // Navigation state
-  const { state } = useLocation();
-
-  const suggestionClickCallback = useRef(null);
   const scrollRef = useRef(null);
 
   // 1. Charger le plan et les réglages
@@ -200,10 +196,6 @@ const TradeForgeAI = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSuggestion = (suggestion) => {
-    handleSend(suggestion);
   };
 
   return (
