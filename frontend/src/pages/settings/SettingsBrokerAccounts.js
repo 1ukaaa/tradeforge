@@ -1,13 +1,20 @@
+import EditIcon from "@mui/icons-material/Edit";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Grid,
   IconButton,
+  MenuItem,
   Paper,
   Snackbar,
   Stack,
@@ -24,6 +31,7 @@ import {
   fetchBrokerAccounts,
   importBrokerCsv,
   syncBrokerAccount,
+  updateBrokerAccount,
 } from "../../services/brokerClient";
 import { fetchIntegrations } from "../../services/integrationsClient";
 
@@ -57,6 +65,13 @@ const SettingsSection = ({ title, subtitle, children, actions }) => {
   );
 };
 
+const getBrokerLogoFallback = (provider) => {
+  if (provider === "mt5" || provider === "ftmo") return "https://www.google.com/s2/favicons?domain=ftmo.com&sz=128";
+  if (provider === "myfundedfutures") return "https://www.google.com/s2/favicons?domain=myfundedfutures.com&sz=128";
+  if (provider === "hyperliquid") return "https://www.google.com/s2/favicons?domain=app.hyperliquid.xyz&sz=128";
+  return null;
+};
+
 const getDefaultForm = (type) => {
   if (type === "hyperliquid") {
     return {
@@ -68,12 +83,23 @@ const getDefaultForm = (type) => {
       address: "",
     };
   }
+  if (type === "myfundedfutures") {
+    return {
+      type,
+      name: "",
+      currency: "USD",
+      color: "#1d4ed8",
+      initialBalance: 50000,
+      phase: "evaluation",
+    };
+  }
   return {
     type: "mt5",
     name: "",
     currency: "EUR",
     color: "#6366f1",
     initialBalance: 100000,
+    phase: "evaluation",
   };
 };
 
@@ -91,6 +117,12 @@ const SettingsBrokerAccounts = () => {
   const [twitterIntegration, setTwitterIntegration] = useState(null);
   const [loadingIntegrations, setLoadingIntegrations] = useState(true);
   const [integrationsError, setIntegrationsError] = useState(null);
+
+  // Edit Dialog State
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editFormState, setEditFormState] = useState(null);
+
   const fileInputRefs = useRef({});
 
   const loadAccounts = () => {
@@ -129,7 +161,7 @@ const SettingsBrokerAccounts = () => {
   }, []);
 
   const isManualAccount = (account) =>
-    account?.provider === "ftmo" || account?.metadata?.importMode === "csv";
+    account?.provider === "ftmo" || account?.provider === "myfundedfutures" || account?.metadata?.importMode === "csv";
 
   const handleFormChange = (field) => (event) => {
     setFormState((prev) => ({ ...prev, [field]: event.target.value }));
@@ -152,8 +184,8 @@ const SettingsBrokerAccounts = () => {
       }
       await createBrokerAccount(formState);
       const successMessage =
-        formState.type === "mt5"
-          ? "Compte FTMO ajouté. Importez un CSV pour récupérer les trades."
+        formState.type === "mt5" || formState.type === "myfundedfutures"
+          ? "Compte ajouté. Importez un CSV pour récupérer les trades."
           : "Compte ajouté. Lancez une synchronisation pour récupérer les trades.";
       setSuccess(successMessage);
       setSnackbar({ open: true, message: successMessage, severity: "success" });
@@ -233,6 +265,47 @@ const SettingsBrokerAccounts = () => {
     setSnackbar((prev) => ({ ...prev, open: false }));
   };
 
+  const handleOpenEditDialog = (account) => {
+    setEditFormState({
+      id: account.id,
+      name: account.name || "",
+      currency: account.currency || "USD",
+      initialBalance: account.initialBalance || 50000,
+      phase: account.metadata?.phase || "evaluation",
+      type: account.provider,
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleCloseEditDialog = () => {
+    setEditDialogOpen(false);
+    setEditFormState(null);
+  };
+
+  const handleEditFormChange = (field) => (event) => {
+    setEditFormState((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editFormState?.id) return;
+    setEditSubmitting(true);
+    try {
+      await updateBrokerAccount(editFormState.id, {
+        name: editFormState.name,
+        currency: editFormState.currency,
+        initialBalance: editFormState.initialBalance,
+        phase: editFormState.phase,
+      });
+      loadAccounts();
+      setSnackbar({ open: true, message: "Compte modifié avec succès.", severity: "success" });
+      handleCloseEditDialog();
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message, severity: "error" });
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
   return (
     <Box>
       <SettingsSection
@@ -256,12 +329,22 @@ const SettingsBrokerAccounts = () => {
               }
             }}
           >
-            <ToggleButton value="mt5">FTMO (Import CSV)</ToggleButton>
-            <ToggleButton value="hyperliquid">HyperLiquid (API)</ToggleButton>
+            <ToggleButton value="mt5" sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+              <Avatar src={getBrokerLogoFallback("mt5")} sx={{ width: 24, height: 24 }} variant="rounded" />
+              FTMO (Import CSV)
+            </ToggleButton>
+            <ToggleButton value="myfundedfutures" sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+              <Avatar src={getBrokerLogoFallback("myfundedfutures")} sx={{ width: 24, height: 24 }} variant="rounded" />
+              MyFundedFutures
+            </ToggleButton>
+            <ToggleButton value="hyperliquid" sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+              <Avatar src={getBrokerLogoFallback("hyperliquid")} sx={{ width: 24, height: 24 }} variant="rounded" />
+              HyperLiquid (API)
+            </ToggleButton>
           </ToggleButtonGroup>
 
           <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12} md={formState.type === "hyperliquid" ? 6 : 4}>
               <TextField
                 label="Nom du compte"
                 value={formState.name}
@@ -271,31 +354,70 @@ const SettingsBrokerAccounts = () => {
                 InputProps={{ sx: { borderRadius: 2 } }}
               />
             </Grid>
-            <Grid item xs={6} md={3}>
+            <Grid item xs={6} md={formState.type === "hyperliquid" ? 3 : 2}>
               <TextField
+                select
                 label="Devise"
                 value={formState.currency}
                 onChange={handleFormChange("currency")}
                 fullWidth
                 variant="outlined"
                 InputProps={{ sx: { borderRadius: 2 } }}
-              />
+              >
+                <MenuItem value="EUR">EUR</MenuItem>
+                <MenuItem value="USD">USD</MenuItem>
+                <MenuItem value="USDT">USDT</MenuItem>
+                <MenuItem value="GBP">GBP</MenuItem>
+                <MenuItem value="CHF">CHF</MenuItem>
+              </TextField>
             </Grid>
-            <Grid item xs={6} md={3}>
+            <Grid item xs={6} md={formState.type === "hyperliquid" ? 3 : 3}>
               <TextField
+                select
                 label="Solde initial"
-                type="number"
                 value={formState.initialBalance}
                 onChange={handleFormChange("initialBalance")}
                 fullWidth
                 variant="outlined"
                 InputProps={{ sx: { borderRadius: 2 } }}
-              />
+              >
+                <MenuItem value={5000}>5 000</MenuItem>
+                <MenuItem value={10000}>10 000</MenuItem>
+                <MenuItem value={25000}>25 000</MenuItem>
+                <MenuItem value={50000}>50 000</MenuItem>
+                <MenuItem value={100000}>100 000</MenuItem>
+                <MenuItem value={150000}>150 000</MenuItem>
+                <MenuItem value={200000}>200 000</MenuItem>
+                <MenuItem value={300000}>300 000</MenuItem>
+              </TextField>
             </Grid>
+            {formState.type !== "hyperliquid" && (
+              <Grid item xs={12} md={3}>
+                <TextField
+                  select
+                  label="Phase"
+                  value={formState.phase}
+                  onChange={handleFormChange("phase")}
+                  fullWidth
+                  variant="outlined"
+                  InputProps={{ sx: { borderRadius: 2 } }}
+                >
+                  <MenuItem value="evaluation">Évaluation / Challenge</MenuItem>
+                  <MenuItem value="funded">Financé / Validé</MenuItem>
+                </TextField>
+              </Grid>
+            )}
             {formState.type === "mt5" ? (
               <Grid item xs={12}>
                 <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
                   Les comptes FTMO utilisent désormais un import manuel. Ajoutez le compte, puis
+                  cliquez sur &laquo;&nbsp;Importer un CSV&nbsp;&raquo; dans la section Synchronisation.
+                </Alert>
+              </Grid>
+            ) : formState.type === "myfundedfutures" ? (
+              <Grid item xs={12}>
+                <Alert severity="info" variant="outlined" sx={{ borderRadius: 2 }}>
+                  Les comptes MyFundedFutures utilisent un import manuel. Ajoutez le compte, puis
                   cliquez sur &laquo;&nbsp;Importer un CSV&nbsp;&raquo; dans la section Synchronisation.
                 </Alert>
               </Grid>
@@ -366,6 +488,9 @@ const SettingsBrokerAccounts = () => {
               >
                 <Box>
                   <Stack direction="row" alignItems="center" spacing={1.5} mb={0.5}>
+                    {getBrokerLogoFallback(account.provider) && (
+                      <Avatar src={getBrokerLogoFallback(account.provider)} sx={{ width: 24, height: 24, borderRadius: 1 }} />
+                    )}
                     <Typography fontWeight={700} variant="h6">{account.name}</Typography>
                     <Chip
                       label={account.status || "connecté"}
@@ -373,6 +498,14 @@ const SettingsBrokerAccounts = () => {
                       size="small"
                       sx={{ height: 20, fontSize: 11, fontWeight: 700 }}
                     />
+                    {(account.provider === "ftmo" || account.provider === "myfundedfutures") && (
+                      <Chip
+                        label={account.metadata?.phase === "funded" ? "Financé" : "Évaluation"}
+                        color={account.metadata?.phase === "funded" ? "success" : "warning"}
+                        size="small"
+                        sx={{ height: 20, fontSize: 11, fontWeight: 700 }}
+                      />
+                    )}
                   </Stack>
                   <Typography variant="body2" color="text.secondary">
                     {account.provider?.toUpperCase()} • {account.currency} • Dernière synchro :
@@ -387,6 +520,13 @@ const SettingsBrokerAccounts = () => {
                   )}
                 </Box>
                 <Stack direction="row" spacing={1} alignItems="center">
+                  <IconButton
+                    onClick={() => handleOpenEditDialog(account)}
+                    size="small"
+                    sx={{ color: "text.secondary", bgcolor: alpha(theme.palette.text.secondary, 0.05), '&:hover': { bgcolor: alpha(theme.palette.text.secondary, 0.1) } }}
+                  >
+                    <EditIcon fontSize="small" />
+                  </IconButton>
                   {isManualAccount(account) ? (
                     <>
                       <input
@@ -489,6 +629,84 @@ const SettingsBrokerAccounts = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onClose={handleCloseEditDialog} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ fontWeight: 700 }}>Modifier le compte</DialogTitle>
+        <DialogContent dividers>
+          {editFormState && (
+            <Stack spacing={3} sx={{ mt: 1 }}>
+              <TextField
+                label="Nom du compte"
+                value={editFormState.name}
+                onChange={handleEditFormChange("name")}
+                fullWidth
+                variant="outlined"
+                InputProps={{ sx: { borderRadius: 2 } }}
+              />
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <TextField
+                    select
+                    label="Devise"
+                    value={editFormState.currency}
+                    onChange={handleEditFormChange("currency")}
+                    fullWidth
+                    variant="outlined"
+                    InputProps={{ sx: { borderRadius: 2 } }}
+                  >
+                    <MenuItem value="EUR">EUR</MenuItem>
+                    <MenuItem value="USD">USD</MenuItem>
+                    <MenuItem value="USDT">USDT</MenuItem>
+                    <MenuItem value="GBP">GBP</MenuItem>
+                    <MenuItem value="CHF">CHF</MenuItem>
+                  </TextField>
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField
+                    select
+                    label="Solde initial"
+                    value={editFormState.initialBalance}
+                    onChange={handleEditFormChange("initialBalance")}
+                    fullWidth
+                    variant="outlined"
+                    InputProps={{ sx: { borderRadius: 2 } }}
+                  >
+                    <MenuItem value={5000}>5 000</MenuItem>
+                    <MenuItem value={10000}>10 000</MenuItem>
+                    <MenuItem value={25000}>25 000</MenuItem>
+                    <MenuItem value={50000}>50 000</MenuItem>
+                    <MenuItem value={100000}>100 000</MenuItem>
+                    <MenuItem value={150000}>150 000</MenuItem>
+                    <MenuItem value={200000}>200 000</MenuItem>
+                    <MenuItem value={300000}>300 000</MenuItem>
+                  </TextField>
+                </Grid>
+              </Grid>
+              {editFormState.type !== "hyperliquid" && (
+                <TextField
+                  select
+                  label="Phase"
+                  value={editFormState.phase}
+                  onChange={handleEditFormChange("phase")}
+                  fullWidth
+                  variant="outlined"
+                  InputProps={{ sx: { borderRadius: 2 } }}
+                >
+                  <MenuItem value="evaluation">Évaluation / Challenge</MenuItem>
+                  <MenuItem value="funded">Financé / Validé</MenuItem>
+                </TextField>
+              )}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={handleCloseEditDialog} sx={{ borderRadius: 2, fontWeight: 600 }}>Annuler</Button>
+          <Button onClick={handleEditSubmit} variant="contained" disabled={editSubmitting} sx={{ borderRadius: 2, fontWeight: 700 }}>
+            {editSubmitting ? "Enregistrement..." : "Enregistrer"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

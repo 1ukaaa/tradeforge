@@ -789,6 +789,54 @@ const upsertBrokerAccount = async (account) => {
   return mapAccountRow(result.rows[0]);
 };
 
+const updateBrokerAccount = async (id, data) => {
+  const account = await getBrokerAccountById(id);
+  if (!account) {
+    throw new Error("Compte introuvable.");
+  }
+
+  const timestamp = new Date().toISOString();
+
+  // Update phase if provided
+  const targetMetadata = { ...account.metadata };
+  if (data.phase) {
+    targetMetadata.phase = data.phase;
+  }
+
+  await db.execute({
+    sql: `
+      UPDATE broker_accounts 
+      SET 
+        name = COALESCE(?, name),
+        currency = COALESCE(?, currency),
+        initialBalance = COALESCE(?, initialBalance),
+        color = COALESCE(?, color),
+        metadata = ?,
+        updatedAt = ?
+      WHERE id = ?
+    `,
+    args: [
+      data.name !== undefined ? data.name : null,
+      data.currency !== undefined ? data.currency : null,
+      data.initialBalance !== undefined ? toNumber(data.initialBalance) : null,
+      data.color !== undefined ? data.color : null,
+      serializeMetadata(targetMetadata),
+      timestamp,
+      id,
+    ],
+  });
+
+  // Update journal entries if the account name changed
+  if (data.name && data.name !== account.name) {
+    await db.execute({
+      sql: `UPDATE entries SET account = ? WHERE account = ?`,
+      args: [data.name, account.name],
+    });
+  }
+
+  return getBrokerAccountById(id);
+};
+
 const bulkUpsertBrokerTrades = async (accountId, trades = []) => {
   const beforeCount = await getTradeCountForAccount(accountId);
   if (!Array.isArray(trades) || trades.length === 0) {
@@ -883,7 +931,7 @@ const saveIntegration = async (
   return getIntegrationByAccountId(accountId);
 };
 
-const createManualFtmoAccount = async ({ name, currency, color, initialBalance }) => {
+const createManualFtmoAccount = async ({ name, currency, color, initialBalance, phase }) => {
   const timestamp = new Date().toISOString();
   const suffix = Math.floor(Math.random() * 100000);
   const externalId = `ftmo-${Date.now()}-${suffix}`;
@@ -905,7 +953,7 @@ const createManualFtmoAccount = async ({ name, currency, color, initialBalance }
       toNumber(initialBalance) || 0,
       "pending",
       null,
-      serializeMetadata({ importMode: "csv" }),
+      serializeMetadata({ importMode: "csv", phase: phase || "evaluation" }),
       timestamp,
       timestamp,
     ],
@@ -923,6 +971,46 @@ const createManualFtmoAccount = async ({ name, currency, color, initialBalance }
   return getBrokerAccountById(accountId);
 };
 
+const createMyFundedFuturesAccount = async ({ name, currency, color, initialBalance, phase }) => {
+  const timestamp = new Date().toISOString();
+  const suffix = Math.floor(1000 + Math.random() * 9000);
+  const externalId = `mff-manual-${Date.now()}`;
+  const accountName = name || `MFF #${suffix}`;
+  const result = await db.execute({
+    sql: `
+      INSERT INTO broker_accounts
+      (externalId, name, provider, type, currency, color, initialBalance, currentBalance, status, lastSyncAt, metadata, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    args: [
+      externalId,
+      accountName,
+      "myfundedfutures",
+      "futures",
+      currency || "USD",
+      color || "#1d4ed8",
+      toNumber(initialBalance) || 0,
+      toNumber(initialBalance) || 0,
+      "pending",
+      null,
+      serializeMetadata({ importMode: "csv", phase: phase || "evaluation" }),
+      timestamp,
+      timestamp,
+    ],
+  });
+
+  const accountId = Number(result.lastInsertRowid);
+
+  await saveIntegration(accountId, {
+    type: "myfundedfutures_csv",
+    status: "pending",
+    credentials: null,
+    metadata: { importMode: "csv" },
+  });
+
+  return getBrokerAccountById(accountId);
+};
+
 const createMt5Account = async ({
   name,
   currency,
@@ -931,9 +1019,10 @@ const createMt5Account = async ({
   login,
   password,
   server,
+  phase,
 }) => {
   if (!login || !password || !server) {
-    return createManualFtmoAccount({ name, currency, color, initialBalance });
+    return createManualFtmoAccount({ name, currency, color, initialBalance, phase });
   }
   const timestamp = new Date().toISOString();
   const externalId = `mt5-${login}`;
@@ -954,7 +1043,7 @@ const createMt5Account = async ({
       toNumber(initialBalance) || 0,
       "connected",
       null,
-      serializeMetadata({}),
+      serializeMetadata({ phase: phase || "evaluation" }),
       timestamp,
       timestamp,
     ],
@@ -1190,8 +1279,10 @@ module.exports = {
   getBrokerTrades,
   getBrokerPositions,
   upsertBrokerAccount,
+  updateBrokerAccount,
   bulkUpsertBrokerTrades,
   createMt5Account,
+  createMyFundedFuturesAccount,
   createHyperliquidAccount,
   syncBrokerAccount,
   importBrokerCsv,

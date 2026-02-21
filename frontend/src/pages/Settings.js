@@ -54,7 +54,7 @@ const Settings = () => {
           zIndex: 1
         }}
       >
-        <Container maxWidth="xl">
+        <Container maxWidth={false}>
           <Typography
             variant="h3"
             fontWeight={800}
@@ -76,7 +76,7 @@ const Settings = () => {
       </Box>
 
       {/* MAIN CONTENT CONTAINER */}
-      <Container maxWidth="xl" sx={{ mt: -6, pb: 8, position: 'relative', zIndex: 2 }}>
+      <Container maxWidth={false} sx={{ mt: -6, pb: 8, position: 'relative', zIndex: 2 }}>
 
         {/* HORIZONTAL NAVIGATION */}
         <Paper

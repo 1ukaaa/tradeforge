@@ -159,7 +159,7 @@ export default function TradingDashboard() {
     [selectedAccountId, trades, tradesByAccount]
   );
 
-  const historyData = useMemo(() => buildFullHistory(visibleTrades, currentStats?.initialBalance), [visibleTrades, currentStats]);
+  const historyData = useMemo(() => buildFullHistory(visibleTrades, 0), [visibleTrades]);
   const chartData = useMemo(() => {
     if (!historyData.length) return [];
     const range = CHART_RANGE_LOOKUP[chartRange];
@@ -390,13 +390,13 @@ export default function TradingDashboard() {
               mb: 2,
               alignItems: "stretch",
             }}>
-              {/* Solde Actuel — full card with sparkline */}
+              {/* PnL Total — full card with sparkline */}
               <StatCard
-                label="Solde Actuel"
-                value={currentStats.currentBalance}
+                label="PnL Total"
+                value={currentStats.realizedPnl}
                 type="currency"
                 currency={currentStats.currency}
-                trend={currentStats.gainPercent >= 0 ? "positive" : "negative"}
+                trend={currentStats.realizedPnl >= 0 ? "positive" : "negative"}
                 trendValue={currentStats.gainPercent}
                 sparkData={sparkData}
               />
@@ -438,7 +438,7 @@ export default function TradingDashboard() {
                   range={chartRange}
                   onRangeChange={setChartRange}
                   rangeOptions={CHART_RANGE_OPTIONS}
-                  currentBalance={currentStats.currentBalance}
+                  currentBalance={currentStats.realizedPnl}
                   currency={currentStats.currency}
                 />
               </Box>

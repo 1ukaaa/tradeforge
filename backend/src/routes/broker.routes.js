@@ -15,6 +15,7 @@ router.get('/accounts', brokerController.getBrokerAccounts);
 router.get('/trades', brokerController.getBrokerTrades);
 router.get('/positions', brokerController.getBrokerPositions);
 router.post('/accounts', brokerController.createBrokerAccount);
+router.put('/accounts/:id', brokerController.updateBrokerAccount);
 router.post('/accounts/:id/sync', brokerController.syncBrokerAccount);
 router.post(
   '/accounts/:id/import',

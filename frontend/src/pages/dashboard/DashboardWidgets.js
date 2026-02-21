@@ -222,7 +222,7 @@ export const PerformanceChart = memo(({ data, range, onRangeChange, rangeOptions
         <Box>
           <SectionLabel>Performance</SectionLabel>
           <Typography sx={{ fontWeight: 700, fontSize: "1.05rem", letterSpacing: "-0.02em", color: "text.primary" }}>
-            Évolution du Capital
+            Évolution du PnL
           </Typography>
         </Box>
 

@@ -391,6 +391,7 @@ const Journal = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [assetFilter, setAssetFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
+  const [accountFilter, setAccountFilter] = useState("");
 
   const [formModalOpen, setFormModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -479,9 +480,13 @@ const Journal = () => {
           return false;
         }
       }
+      // 4. Account filter
+      if (accountFilter && entry.account !== accountFilter) {
+        return false;
+      }
       return true;
     });
-  }, [entries, searchQuery, assetFilter, dateFilter]);
+  }, [entries, searchQuery, assetFilter, dateFilter, accountFilter]);
 
   const stats = useMemo(() => {
     if (filteredEntries.length === 0) return { winRate: 0, total: 0, bestAsset: "N/A" };
@@ -623,14 +628,38 @@ const Journal = () => {
             sx={{ minWidth: 150, '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
           />
 
+          {/* Account Filter */}
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>Compte</InputLabel>
+            <Select
+              value={accountFilter}
+              label="Compte"
+              onChange={(e) => setAccountFilter(e.target.value)}
+              sx={{ borderRadius: 2 }}
+            >
+              <MenuItem value=""><em>Tous</em></MenuItem>
+              {Object.keys(
+                entries.reduce((acc, e) => {
+                  if (e.account) acc[e.account] = true;
+                  return acc;
+                }, {})
+              )
+                .sort()
+                .map((a) => (
+                  <MenuItem key={a} value={a}>{a}</MenuItem>
+                ))}
+            </Select>
+          </FormControl>
+
           {/* Clear Filters (if active) */}
-          {(searchQuery || assetFilter || dateFilter) && (
+          {(searchQuery || assetFilter || dateFilter || accountFilter) && (
             <Button
               size="small"
               onClick={() => {
                 setSearchQuery("");
                 setAssetFilter("");
                 setDateFilter("");
+                setAccountFilter("");
               }}
               sx={{ minWidth: "auto", textTransform: "none", color: "text.secondary" }}
             >

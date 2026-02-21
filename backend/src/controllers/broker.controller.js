@@ -56,7 +56,7 @@ const createBrokerAccount = async (req, res) => {
   try {
     let account;
     if (type === "mt5") {
-      const { name, currency, color, initialBalance, login, password, server } = req.body;
+      const { name, currency, color, initialBalance, login, password, server, phase } = req.body;
       account = await brokerService.createMt5Account({
         name,
         currency,
@@ -65,6 +65,7 @@ const createBrokerAccount = async (req, res) => {
         login,
         password,
         server,
+        phase,
       });
     } else if (type === "hyperliquid") {
       const { name, currency, color, initialBalance, address } = req.body;
@@ -74,6 +75,15 @@ const createBrokerAccount = async (req, res) => {
         color,
         initialBalance,
         address,
+      });
+    } else if (type === "myfundedfutures") {
+      const { name, currency, color, initialBalance, phase } = req.body;
+      account = await brokerService.createMyFundedFuturesAccount({
+        name,
+        currency,
+        color,
+        initialBalance,
+        phase,
       });
     } else {
       return res.status(400).json({ error: "Type d'intégration non supporté." });
@@ -93,6 +103,23 @@ const syncBrokerAccount = async (req, res) => {
   } catch (error) {
     console.error("Erreur synchronisation compte broker:", error);
     res.status(500).json({ error: error.message || "Impossible de synchroniser le compte." });
+  }
+};
+
+const updateBrokerAccount = async (req, res) => {
+  const { id } = req.params;
+  const data = req.body;
+
+  if (!data) {
+    return res.status(400).json({ error: "Données de mise à jour requises." });
+  }
+
+  try {
+    const account = await brokerService.updateBrokerAccount(Number(id), data);
+    res.json({ account });
+  } catch (error) {
+    console.error("Erreur modification compte broker:", error);
+    res.status(500).json({ error: error.message || "Impossible de modifier le compte." });
   }
 };
 
@@ -119,6 +146,7 @@ module.exports = {
   getBrokerTrades,
   getBrokerPositions,
   createBrokerAccount,
+  updateBrokerAccount,
   syncBrokerAccount,
   importBrokerCsv,
 };

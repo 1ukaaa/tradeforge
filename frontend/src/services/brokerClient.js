@@ -45,6 +45,16 @@ export const createBrokerAccount = async (payload) => {
   return data.account;
 };
 
+export const updateBrokerAccount = async (accountId, payload) => {
+  const response = await fetch(`${BROKER_ENDPOINT}/accounts/${accountId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await ensureSuccess(response, "Impossible de modifier le compte.");
+  return data.account;
+};
+
 export const syncBrokerAccount = async (accountId) => {
   const response = await fetch(`${BROKER_ENDPOINT}/accounts/${accountId}/sync`, {
     method: "POST",
