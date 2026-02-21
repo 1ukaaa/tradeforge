@@ -28,6 +28,7 @@ import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import TrendingDownRoundedIcon from "@mui/icons-material/TrendingDownRounded";
 import TrendingFlatRoundedIcon from "@mui/icons-material/TrendingFlatRounded";
 import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
+import { cleanAssetName } from "../../utils/assetUtils";
 
 // ─── Design Tokens ────────────────────────────────────────────────
 const NEON_BLUE = "#4F8EF7";
@@ -311,21 +312,21 @@ export const PerformanceChart = memo(({ data, range, onRangeChange, rangeOptions
 // ASSET HEATMAP — dynamic from real trade data
 // ─────────────────────────────────────────────────────────────────
 
-// Strip common broker suffixes: USOIL.cash → USOIL, EURUSD_raw → EURUSD
-const cleanAssetName = (raw = "") =>
-  raw.replace(/[._-](cash|pro|raw|ecn|std|mini|micro|cfds?|spot)$/i, "").toUpperCase();
-
 // Build per-asset aggregates from a trades array
 const buildAssetData = (trades = [], initialBalance = 0) => {
+  const threshold = initialBalance * 0.001; // 0.1% threshold for breakeven
   const map = new Map();
   for (const t of trades) {
     const name = cleanAssetName(t.asset || t.symbol || t.pair || "?");
     const pnl = Number(t.pnl) || 0;
-    if (!map.has(name)) map.set(name, { name, totalPnl: 0, count: 0, wins: 0 });
+    if (!map.has(name)) map.set(name, { name, totalPnl: 0, count: 0, relevantCount: 0, wins: 0 });
     const r = map.get(name);
     r.totalPnl += pnl;
     r.count += 1;
-    if (pnl > 0) r.wins += 1;
+    if (Math.abs(pnl) > threshold) {
+      r.relevantCount += 1;
+      if (pnl > threshold) r.wins += 1;
+    }
   }
   const entries = [...map.values()];
   if (!entries.length) return [];
@@ -336,7 +337,7 @@ const buildAssetData = (trades = [], initialBalance = 0) => {
     .map((e) => ({
       ...e,
       size: Math.max(1, Math.round((Math.abs(e.totalPnl) / totalAbs) * 1000)) || e.count,
-      winRate: e.count > 0 ? (e.wins / e.count) * 100 : 0,
+      winRate: e.relevantCount > 0 ? (e.wins / e.relevantCount) * 100 : 0,
       pnlPct: (e.totalPnl / denominator) * 100,
     }))
     .sort((a, b) => Math.abs(b.totalPnl) - Math.abs(a.totalPnl));
@@ -539,7 +540,7 @@ export const TradeHistory = memo(({ trades = [], page, setPage, pageSize, accoun
                 const accName = accountsMap.get(trade.brokerAccountId)?.name || "";
                 const params = new URLSearchParams({
                   tradeId: String(trade.id || trade._id || ""),
-                  asset: trade.asset || "",
+                  asset: cleanAssetName(trade.asset || ""),
                   date: trade.date || "",
                   dir: trade.direction || "",
                   pnl: String(trade.pnl ?? 0),
@@ -563,7 +564,7 @@ export const TradeHistory = memo(({ trades = [], page, setPage, pageSize, accoun
               </Typography>
               {/* Pair */}
               <Typography sx={{ fontFamily: MONO_FONT, fontSize: "0.8rem", fontWeight: 700, color: "text.primary" }}>
-                {trade.asset || "—"}
+                {cleanAssetName(trade.asset || "") || "—"}
               </Typography>
               {/* Type */}
               <Box sx={{

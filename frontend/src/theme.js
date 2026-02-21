@@ -90,6 +90,11 @@ const createForgeTheme = (mode = "dark") => {
     t,
     isDark,
     mono: baseTypography.mono,
+    gradients: {
+      hero: isDark
+        ? "linear-gradient(180deg, #1E1E24 0%, #0A0A0F 100%)"
+        : "linear-gradient(180deg, #F1F5F9 0%, #FFFFFF 100%)",
+    },
     shadows: {
       floating: isDark
         ? "0 16px 40px rgba(0,0,0,0.5)"

@@ -15,7 +15,6 @@ import { NavLink, useLocation } from "react-router-dom";
 import BrandLogo from "./BrandLogo";
 
 // ─── Icons ────────────────────────────────────────────────────────
-import AssessmentRoundedIcon from "@mui/icons-material/AssessmentRounded";
 import CalculateRoundedIcon from "@mui/icons-material/CalculateRounded";
 import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
 import DashboardCustomizeRoundedIcon from "@mui/icons-material/DashboardCustomizeRounded";
@@ -29,7 +28,6 @@ import TwitterIcon from "@mui/icons-material/Twitter";
 // ─── Nav Definitions ─────────────────────────────────────────────
 const MAIN_NAV = [
   { to: "/", label: "Dashboard", icon: <InsightsRoundedIcon /> },
-  { to: "/stats", label: "Stats", icon: <AssessmentRoundedIcon /> },
   { to: "/tradeforge-ai", label: "TradeForge AI", icon: <TaskAltRoundedIcon /> },
 ];
 

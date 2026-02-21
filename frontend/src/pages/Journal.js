@@ -3,6 +3,7 @@
 import {
   Alert,
   alpha,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -31,6 +32,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { fetchBrokerAccounts, fetchBrokerSummary } from "../services/brokerClient";
 import { deleteJournalEntry, fetchJournalEntries, saveJournalEntry, updateJournalEntry } from "../services/journalClient";
+import { cleanAssetName, COMMON_ASSETS } from "../utils/assetUtils";
 
 // Icons
 import AddIcon from "@mui/icons-material/Add";
@@ -45,32 +47,9 @@ const RESULT_COLORS = {
   Breakeven: "info"
 };
 
-const ASSET_CATEGORIES = {
-  "Énergies": [
-    { value: "CL", label: "CL (Pétrole brut)" },
-    { value: "HO", label: "HO (Heating Oil)" },
-    { value: "RB", label: "RB (Gasoline)" }
-  ],
-  "Indices": [
-    { value: "MNQ", label: "MNQ (Micro Nasdaq)" },
-    { value: "MES", label: "MES (Micro S&P 500)" },
-    { value: "MYM", label: "MYM (Micro Dow Jones)" }
-  ],
-  "Métaux": [
-    { value: "MGC", label: "MGC (Micro Or)" },
-    { value: "SIL", label: "SIL (Micro Argent)" }
-  ],
-  "Cryptos": [
-    { value: "MBT", label: "MBT (Micro Bitcoin)" },
-    { value: "MET", label: "MET (Micro Ether)" }
-  ]
-};
-
 const getAssetCategory = (assetValue) => {
-  for (const [category, assets] of Object.entries(ASSET_CATEGORIES)) {
-    if (assets.find(a => a.value === assetValue)) return category;
-  }
-  return "Autre";
+  const found = COMMON_ASSETS.find((a) => a.value === assetValue);
+  return found ? found.group : "Autre";
 };
 
 
@@ -194,17 +173,40 @@ const JournalFormModal = ({ open, entry, prefill, onClose, onSave, brokerAssets 
         <Stack spacing={3} sx={{ mt: 1 }}>
           <Stack direction="row" spacing={2}>
             <TextField fullWidth variant="outlined" label="Date" type="date" name="date" value={formData.date} onChange={handleChange} InputLabelProps={{ shrink: true }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }} />
-            <FormControl fullWidth variant="outlined">
-              <InputLabel>Actif</InputLabel>
-              <Select name="asset" value={formData.asset} label="Actif" onChange={handleChange} sx={{ borderRadius: 2 }}>
-                {brokerAssets.length > 0
-                  ? brokerAssets.map((a) => (
-                    <MenuItem key={a} value={a}>{a}</MenuItem>
-                  ))
-                  : <MenuItem value={formData.asset || ""}>{formData.asset || "—"}</MenuItem>
+            <Autocomplete
+              freeSolo
+              fullWidth
+              options={COMMON_ASSETS}
+              groupBy={(option) => option.group}
+              getOptionLabel={(option) => {
+                if (typeof option === 'string') return option;
+                return option.label || '';
+              }}
+              value={
+                formData.asset
+                  ? COMMON_ASSETS.find((a) => a.value === formData.asset) || formData.asset
+                  : null
+              }
+              onChange={(e, newValue) => {
+                let val = "";
+                if (typeof newValue === "string") val = newValue;
+                else if (newValue && newValue.value) val = newValue.value;
+                setFormData({ ...formData, asset: val });
+              }}
+              onInputChange={(e, newInputValue, reason) => {
+                if (reason === "input") {
+                  setFormData({ ...formData, asset: newInputValue });
                 }
-              </Select>
-            </FormControl>
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Actif"
+                  variant="outlined"
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                />
+              )}
+            />
           </Stack>
 
           <Stack direction="row" spacing={2}>
@@ -387,6 +389,8 @@ const Journal = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [assetFilter, setAssetFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
 
   const [formModalOpen, setFormModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -409,7 +413,7 @@ const Journal = () => {
     fetchBrokerSummary()
       .then((data) => {
         const trades = data?.trades || [];
-        const unique = [...new Set(trades.map((t) => t.asset).filter(Boolean))].sort();
+        const unique = [...new Set(trades.map((t) => cleanAssetName(t.asset)).filter(Boolean))].sort();
         setBrokerAssets(unique);
       })
       .catch(() => { });
@@ -434,7 +438,8 @@ const Journal = () => {
       const date = searchParams.get("date") || "";
       const dir = searchParams.get("dir") || "";
       const pnl = parseFloat(searchParams.get("pnl") || "0");
-      setFormPrefill({ trade_id: tradeId, asset, date, direction: dir, pnl });
+      const account = searchParams.get("account") || "";
+      setFormPrefill({ trade_id: tradeId, asset, date, direction: dir, pnl, account });
       setCurrentEntry(null);
       setFormModalOpen(true);
     }
@@ -454,6 +459,7 @@ const Journal = () => {
 
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
+      // 1. Text search
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         const asset = (entry.asset || "").toLowerCase();
@@ -462,15 +468,29 @@ const Journal = () => {
           return false;
         }
       }
+      // 2. Asset filter
+      if (assetFilter && entry.asset !== assetFilter) {
+        return false;
+      }
+      // 3. Date filter
+      if (dateFilter) {
+        const entryDate = entry.date ? new Date(entry.date).toISOString().slice(0, 10) : "";
+        if (entryDate !== dateFilter) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [entries, searchQuery]);
+  }, [entries, searchQuery, assetFilter, dateFilter]);
 
   const stats = useMemo(() => {
     if (filteredEntries.length === 0) return { winRate: 0, total: 0, bestAsset: "N/A" };
     const total = filteredEntries.length;
     const wins = filteredEntries.filter(e => e.result === 'Win').length;
-    const winRate = Math.round((wins / total) * 100);
+    const losses = filteredEntries.filter(e => e.result === 'Loss').length;
+    const relevantTotal = wins + losses;
+    const winRate = relevantTotal > 0 ? Math.round((wins / relevantTotal) * 100) : 0;
+
     const assetsCount = filteredEntries.reduce((acc, e) => { acc[e.asset] = (acc[e.asset] || 0) + 1; return acc; }, {});
     const bestAsset = Object.keys(assetsCount).reduce((a, b) => assetsCount[a] > assetsCount[b] ? a : b, "N/A");
     return { winRate, total, bestAsset };
@@ -550,17 +570,74 @@ const Journal = () => {
 
       {/* MAIN CONTENT */}
       <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', borderBottom: `1px solid ${theme.palette.divider}`, pb: 1, pt: 2 }}>
-          <SearchIcon color="action" sx={{ mr: 2, fontSize: 20 }} />
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          spacing={2}
+          alignItems={{ xs: "stretch", md: "center" }}
+          sx={{ mb: 4, pb: 2, borderBottom: `1px solid ${theme.palette.divider}` }}
+        >
+          {/* Text Search */}
+          <Box sx={{ display: 'flex', alignItems: 'center', flex: 1, px: 2, py: 1, bgcolor: alpha(theme.palette.divider, 0.04), borderRadius: 2 }}>
+            <SearchIcon color="action" sx={{ mr: 1, fontSize: 20 }} />
+            <TextField
+              placeholder="Rechercher par actif, description..."
+              variant="standard"
+              InputProps={{ disableUnderline: true, style: { fontSize: '0.95rem', fontWeight: 500 } }}
+              fullWidth
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </Box>
+
+          {/* Asset Filter */}
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>Actif</InputLabel>
+            <Select
+              value={assetFilter}
+              label="Actif"
+              onChange={(e) => setAssetFilter(e.target.value)}
+              sx={{ borderRadius: 2 }}
+            >
+              <MenuItem value=""><em>Tous</em></MenuItem>
+              {Object.keys(
+                entries.reduce((acc, e) => {
+                  if (e.asset) acc[e.asset] = true;
+                  return acc;
+                }, {})
+              )
+                .sort()
+                .map((a) => (
+                  <MenuItem key={a} value={a}>{a}</MenuItem>
+                ))}
+            </Select>
+          </FormControl>
+
+          {/* Date Filter */}
           <TextField
-            placeholder="Rechercher par actif, description..."
-            variant="standard"
-            InputProps={{ disableUnderline: true, style: { fontSize: '1rem', fontWeight: 400 } }}
-            fullWidth
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            label="Date"
+            type="date"
+            size="small"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            sx={{ minWidth: 150, '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
           />
-        </Box>
+
+          {/* Clear Filters (if active) */}
+          {(searchQuery || assetFilter || dateFilter) && (
+            <Button
+              size="small"
+              onClick={() => {
+                setSearchQuery("");
+                setAssetFilter("");
+                setDateFilter("");
+              }}
+              sx={{ minWidth: "auto", textTransform: "none", color: "text.secondary" }}
+            >
+              Effacer
+            </Button>
+          )}
+        </Stack>
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>

@@ -29,6 +29,7 @@ import {
 } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { getCurrencySymbol } from "../utils/accountUtils";
+import { cleanAssetName, COMMON_ASSETS } from "../utils/assetUtils";
 import BrandLogo from "./BrandLogo";
 
 // --- Visualisateur Markdown (Clean & Minimaliste) ---
@@ -57,9 +58,9 @@ const SimpleMarkdownViewer = ({ content }) => {
       {blocks.map((block, index) => {
         if (block.type === "paragraph") {
           return (
-            <Typography key={index} variant="body2" sx={{ 
-              fontFamily: theme.typography.fontFamily, 
-              lineHeight: 1.8, 
+            <Typography key={index} variant="body2" sx={{
+              fontFamily: theme.typography.fontFamily,
+              lineHeight: 1.8,
               fontSize: "0.95rem",
               color: alpha(theme.palette.text.primary, 0.9)
             }}>
@@ -69,10 +70,10 @@ const SimpleMarkdownViewer = ({ content }) => {
         }
         if (block.type === "heading") {
           return (
-            <Typography key={index} variant="h6" sx={{ 
-              fontWeight: 700, 
-              mt: 2, 
-              fontSize: "1rem", 
+            <Typography key={index} variant="h6" sx={{
+              fontWeight: 700,
+              mt: 2,
+              fontSize: "1rem",
               color: theme.palette.secondary.main,
               letterSpacing: "0.02em"
             }}>
@@ -119,7 +120,7 @@ const EditableAnalysis = ({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isDark = theme.palette.mode === "dark";
-  
+
   const [copied, setCopied] = useState(false);
   const [editableMeta, setEditableMeta] = useState(initialMetadata || {});
 
@@ -142,7 +143,7 @@ const EditableAnalysis = ({
   }, [accountOptions, defaultAccountId, editableMeta.accountId]);
 
   const selectedAccount = accountOptions.find(a => a.id === (editableMeta.accountId || defaultAccountId));
-  
+
   const availableBrokerTrades = useMemo(() => {
     if (!brokerTrades.length || !selectedAccount) return brokerTrades;
     return brokerTrades.filter((t) => t.brokerAccountId === selectedAccount.id);
@@ -155,7 +156,7 @@ const EditableAnalysis = ({
 
   const handleMetaChange = (field) => (e) => setEditableMeta(prev => ({ ...prev, [field]: e.target.value }));
   const handleTagsChange = (e, v) => setEditableMeta(prev => ({ ...prev, tags: v.map(val => (typeof val === 'string' ? val : val.inputValue)) }));
-  
+
   const handleBrokerTradeChange = (_, newTrade) => {
     if (!newTrade) {
       setEditableMeta(prev => ({ ...prev, brokerTradeId: undefined, brokerTradeLabel: undefined }));
@@ -167,7 +168,7 @@ const EditableAnalysis = ({
       brokerTradeLabel: formatBrokerTradeOption(newTrade),
       accountId: newTrade.brokerAccountId,
       pnlAmount: newTrade.pnl,
-      symbol: prev.symbol || newTrade.symbol,
+      symbol: prev.symbol || cleanAssetName(newTrade.symbol),
     }));
   };
 
@@ -182,21 +183,21 @@ const EditableAnalysis = ({
 
   return (
     <Stack direction="row" spacing={2} sx={{ width: "100%", alignItems: "flex-start" }}>
-      
+
       {/* Avatar (Sticky on Desktop) */}
-      <Box sx={{ 
-        position: isMobile ? "static" : "sticky", 
+      <Box sx={{
+        position: isMobile ? "static" : "sticky",
         top: 20,
         mt: 1.5
       }}>
-         <Box sx={{
-            width: 36, height: 36, borderRadius: "12px",
-            bgcolor: alpha(theme.palette.primary.main, 0.1),
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: theme.palette.primary.main
-         }}>
-            <BrandLogo glyphSize={20} showText={false} />
-         </Box>
+        <Box sx={{
+          width: 36, height: 36, borderRadius: "12px",
+          bgcolor: alpha(theme.palette.primary.main, 0.1),
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: theme.palette.primary.main
+        }}>
+          <BrandLogo glyphSize={20} showText={false} />
+        </Box>
       </Box>
 
       {/* Main Card Container - SPLIT VIEW */}
@@ -212,8 +213,8 @@ const EditableAnalysis = ({
       }}>
 
         {/* === LEFT PANEL: CONTENT (65%) === */}
-        <Box sx={{ 
-          flex: { md: "1 1 65%" }, 
+        <Box sx={{
+          flex: { md: "1 1 65%" },
           p: { xs: 2, md: 3 },
           borderRight: { md: `1px solid ${theme.palette.divider}` }
         }}>
@@ -226,24 +227,24 @@ const EditableAnalysis = ({
             onChange={handleMetaChange("title")}
             InputProps={{
               disableUnderline: true,
-              sx: { 
-                fontSize: "1.25rem", 
-                fontWeight: 700, 
+              sx: {
+                fontSize: "1.25rem",
+                fontWeight: 700,
                 mb: 2,
-                color: theme.palette.text.primary 
+                color: theme.palette.text.primary
               }
             }}
           />
-          
+
           <Divider sx={{ mb: 3, borderColor: alpha(theme.palette.divider, 0.5) }} />
 
           {/* Content Viewer */}
           <SimpleMarkdownViewer content={content} />
-          
+
           {/* Copy Action (Inline for left panel) */}
           <Box sx={{ mt: 4, display: "flex", gap: 1 }}>
-            <Button 
-              size="small" 
+            <Button
+              size="small"
               startIcon={copied ? <DoneRoundedIcon /> : <ContentCopyRoundedIcon />}
               onClick={handleCopy}
               sx={{ color: "text.secondary", fontSize: "0.75rem" }}
@@ -254,7 +255,7 @@ const EditableAnalysis = ({
         </Box>
 
         {/* === RIGHT PANEL: INSPECTOR / METADATA (35%) === */}
-        <Box sx={{ 
+        <Box sx={{
           flex: { md: "0 0 320px" }, // Fixed width on desktop
           bgcolor: isDark ? alpha(theme.palette.background.default, 0.4) : alpha(theme.palette.background.default, 0.6),
           p: 2.5,
@@ -262,37 +263,71 @@ const EditableAnalysis = ({
           flexDirection: "column",
           gap: 2.5
         }}>
-          
+
           <Typography variant="overline" sx={{ color: "text.secondary", fontWeight: 700, letterSpacing: "0.1em" }}>
             Propriétés
           </Typography>
 
           {/* 1. Context Fields */}
           <Stack spacing={2}>
-             <TextField
-                label="Symbole"
-                size="small"
-                variant="outlined"
-                fullWidth
-                value={editableMeta.symbol || ""}
-                onChange={handleMetaChange("symbol")}
-                InputProps={{
-                  startAdornment: <InputAdornment position="start"><NumbersIcon fontSize="inherit" /></InputAdornment>,
-                  sx: { bgcolor: theme.palette.background.paper }
-                }}
-              />
-              <TextField
-                label="Timeframe"
-                size="small"
-                variant="outlined"
-                fullWidth
-                value={editableMeta.timeframe || ""}
-                onChange={handleMetaChange("timeframe")}
-                InputProps={{
-                  startAdornment: <InputAdornment position="start"><CalendarTodayIcon fontSize="inherit" /></InputAdornment>,
-                  sx: { bgcolor: theme.palette.background.paper }
-                }}
-              />
+            <Autocomplete
+              freeSolo
+              options={COMMON_ASSETS}
+              groupBy={(option) => option.group}
+              getOptionLabel={(option) => {
+                if (typeof option === 'string') return option;
+                return option.label || '';
+              }}
+              value={
+                editableMeta.symbol
+                  ? COMMON_ASSETS.find((a) => a.value === editableMeta.symbol) || editableMeta.symbol
+                  : null
+              }
+              onChange={(e, newValue) => {
+                let val = "";
+                if (typeof newValue === "string") val = newValue;
+                else if (newValue && newValue.value) val = newValue.value;
+                setEditableMeta(prev => ({ ...prev, symbol: val }));
+              }}
+              onInputChange={(e, newInputValue, reason) => {
+                if (reason === "input") {
+                  setEditableMeta(prev => ({ ...prev, symbol: newInputValue }));
+                }
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Symbole"
+                  size="small"
+                  variant="outlined"
+                  fullWidth
+                  InputProps={{
+                    ...params.InputProps,
+                    startAdornment: (
+                      <>
+                        <InputAdornment position="start" sx={{ pl: 1 }}>
+                          <NumbersIcon fontSize="inherit" />
+                        </InputAdornment>
+                        {params.InputProps.startAdornment}
+                      </>
+                    ),
+                    sx: { bgcolor: theme.palette.background.paper }
+                  }}
+                />
+              )}
+            />
+            <TextField
+              label="Timeframe"
+              size="small"
+              variant="outlined"
+              fullWidth
+              value={editableMeta.timeframe || ""}
+              onChange={handleMetaChange("timeframe")}
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><CalendarTodayIcon fontSize="inherit" /></InputAdornment>,
+                sx: { bgcolor: theme.palette.background.paper }
+              }}
+            />
           </Stack>
 
           <Divider sx={{ borderStyle: "dashed" }} />
@@ -300,54 +335,54 @@ const EditableAnalysis = ({
           {/* 2. Financials (Only if Trade) */}
           {isTrade && (
             <Stack spacing={2}>
-               <TextField
-                  select
-                  label="Compte"
-                  size="small"
-                  fullWidth
-                  value={editableMeta.accountId || selectedAccount?.id || ""}
-                  onChange={(e) => {
-                    const acc = accountOptions.find(a => a.id === e.target.value);
-                    setEditableMeta(prev => ({ ...prev, accountId: acc?.id, accountName: acc?.name, pnlCurrency: acc?.currency }));
-                  }}
-                  InputProps={{ sx: { bgcolor: theme.palette.background.paper } }}
-                >
-                  {accountOptions.map((acc) => <MenuItem key={acc.id} value={acc.id}>{acc.name}</MenuItem>)}
-               </TextField>
+              <TextField
+                select
+                label="Compte"
+                size="small"
+                fullWidth
+                value={editableMeta.accountId || selectedAccount?.id || ""}
+                onChange={(e) => {
+                  const acc = accountOptions.find(a => a.id === e.target.value);
+                  setEditableMeta(prev => ({ ...prev, accountId: acc?.id, accountName: acc?.name, pnlCurrency: acc?.currency }));
+                }}
+                InputProps={{ sx: { bgcolor: theme.palette.background.paper } }}
+              >
+                {accountOptions.map((acc) => <MenuItem key={acc.id} value={acc.id}>{acc.name}</MenuItem>)}
+              </TextField>
 
-               {/* PnL Highlight Box */}
-               <Paper variant="outlined" sx={{ 
-                 p: 1.5, 
-                 bgcolor: alpha(pnlColor, 0.05), 
-                 borderColor: alpha(pnlColor, 0.3),
-                 display: "flex",
-                 flexDirection: "column",
-                 gap: 1
-               }}>
-                 <Stack direction="row" justifyContent="space-between" alignItems="center">
-                    <Typography variant="caption" color="text.secondary">Résultat (PnL)</Typography>
-                    {isWin ? <TrendingUpIcon sx={{ color: pnlColor, fontSize: 18 }} /> : isLoss ? <TrendingDownIcon sx={{ color: pnlColor, fontSize: 18 }} /> : <AccountBalanceWalletIcon sx={{ color: "text.disabled", fontSize: 18 }} />}
-                 </Stack>
-                 <Stack direction="row" spacing={1}>
-                   <TextField
-                      variant="standard"
-                      placeholder="0.00"
-                      type="number"
-                      value={editableMeta.pnlAmount ?? ""}
-                      onChange={handleMetaChange("pnlAmount")}
-                      InputProps={{
-                        disableUnderline: true,
-                        sx: { fontSize: "1.4rem", fontWeight: 700, color: pnlColor }
-                      }}
-                      sx={{ flex: 1 }}
-                   />
-                   <Typography sx={{ alignSelf: "center", color: pnlColor, fontWeight: 600 }}>
-                      {getCurrencySymbol(editableMeta.pnlCurrency)}
-                   </Typography>
-                 </Stack>
-               </Paper>
+              {/* PnL Highlight Box */}
+              <Paper variant="outlined" sx={{
+                p: 1.5,
+                bgcolor: alpha(pnlColor, 0.05),
+                borderColor: alpha(pnlColor, 0.3),
+                display: "flex",
+                flexDirection: "column",
+                gap: 1
+              }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="caption" color="text.secondary">Résultat (PnL)</Typography>
+                  {isWin ? <TrendingUpIcon sx={{ color: pnlColor, fontSize: 18 }} /> : isLoss ? <TrendingDownIcon sx={{ color: pnlColor, fontSize: 18 }} /> : <AccountBalanceWalletIcon sx={{ color: "text.disabled", fontSize: 18 }} />}
+                </Stack>
+                <Stack direction="row" spacing={1}>
+                  <TextField
+                    variant="standard"
+                    placeholder="0.00"
+                    type="number"
+                    value={editableMeta.pnlAmount ?? ""}
+                    onChange={handleMetaChange("pnlAmount")}
+                    InputProps={{
+                      disableUnderline: true,
+                      sx: { fontSize: "1.4rem", fontWeight: 700, color: pnlColor }
+                    }}
+                    sx={{ flex: 1 }}
+                  />
+                  <Typography sx={{ alignSelf: "center", color: pnlColor, fontWeight: 600 }}>
+                    {getCurrencySymbol(editableMeta.pnlCurrency)}
+                  </Typography>
+                </Stack>
+              </Paper>
 
-               {availableBrokerTrades.length > 0 && (
+              {availableBrokerTrades.length > 0 && (
                 <Autocomplete
                   options={availableBrokerTrades}
                   value={selectedBrokerTrade}
@@ -358,7 +393,7 @@ const EditableAnalysis = ({
                     <TextField {...params} label="Lier import broker" size="small" sx={{ bgcolor: theme.palette.background.paper }} />
                   )}
                 />
-               )}
+              )}
             </Stack>
           )}
 
@@ -372,26 +407,28 @@ const EditableAnalysis = ({
               onChange={handleTagsChange}
               renderTags={(value, getTagProps) =>
                 value.map((option, index) => (
-                  <Chip 
-                    label={option} 
-                    size="small" 
-                    {...getTagProps({ index })} 
+                  <Chip
+                    label={option}
+                    size="small"
+                    {...getTagProps({ index })}
                     sx={{ bgcolor: alpha(theme.palette.secondary.main, 0.1), color: theme.palette.secondary.main, border: "none", borderRadius: 1 }}
                   />
                 ))
               }
               renderInput={(params) => (
-                <TextField 
-                  {...params} 
-                  label="Tags" 
-                  placeholder="Stratégie, Psy..." 
+                <TextField
+                  {...params}
+                  label="Tags"
+                  placeholder="Stratégie, Psy..."
                   size="small"
-                  InputProps={{ ...params.InputProps, startAdornment: (
-                    <>
-                      <InputAdornment position="start"><LabelIcon fontSize="inherit" sx={{ opacity: 0.5 }} /></InputAdornment>
-                      {params.InputProps.startAdornment}
-                    </>
-                  ), sx: { bgcolor: theme.palette.background.paper } }}
+                  InputProps={{
+                    ...params.InputProps, startAdornment: (
+                      <>
+                        <InputAdornment position="start"><LabelIcon fontSize="inherit" sx={{ opacity: 0.5 }} /></InputAdornment>
+                        {params.InputProps.startAdornment}
+                      </>
+                    ), sx: { bgcolor: theme.palette.background.paper }
+                  }}
                 />
               )}
             />

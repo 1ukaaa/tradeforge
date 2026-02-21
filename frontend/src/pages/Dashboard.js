@@ -91,9 +91,11 @@ const computeDailyPnl = (trades = []) => {
     .reduce((sum, t) => sum + (Number(t.pnl) || 0), 0);
 };
 
-const computeWinRate = (trades = []) => {
-  if (!trades.length) return 0;
-  return (trades.filter((t) => (Number(t.pnl) || 0) > 0).length / trades.length) * 100;
+const computeWinRate = (trades = [], initialBalance = 0) => {
+  const threshold = initialBalance * 0.001; // 0.1% du capital initial
+  const relevantTrades = trades.filter((t) => Math.abs(Number(t.pnl) || 0) > threshold);
+  if (!relevantTrades.length) return 0;
+  return (relevantTrades.filter((t) => (Number(t.pnl) || 0) > threshold).length / relevantTrades.length) * 100;
 };
 
 const computeProfitFactor = (trades = []) => {
@@ -168,7 +170,7 @@ export default function TradingDashboard() {
 
   const sparkData = useMemo(() => buildSparkline(historyData), [historyData]);
   const dailyPnl = useMemo(() => computeDailyPnl(visibleTrades), [visibleTrades]);
-  const winRate = useMemo(() => computeWinRate(visibleTrades), [visibleTrades]);
+  const winRate = useMemo(() => computeWinRate(visibleTrades, currentStats?.initialBalance), [visibleTrades, currentStats]);
   const profitFactor = useMemo(() => computeProfitFactor(visibleTrades), [visibleTrades]);
 
   const handleAccountSelect = useCallback((id) => {
@@ -457,6 +459,7 @@ export default function TradingDashboard() {
                   page={recentPage}
                   setPage={setRecentPage}
                   pageSize={RECENT_ACTIVITY_PAGE_SIZE}
+                  accountsMap={accountsMap}
                 />
               </Box>
               {/* Sidebar: Goals only (Mes Comptes removed — use the top dropdown) */}
