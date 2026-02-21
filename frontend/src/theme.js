@@ -1,203 +1,211 @@
 import { alpha, createTheme } from "@mui/material/styles";
 
-// 1. PALETTE (INCHANGÉE PAR RAPPORT À CELLE QUE TU AS VALIDÉE)
-const forgePalette = {
-  obsidian: "#0A0A0F",
-  nightfall: "#121218",
-  graphite: "#1E1E24",
-  steel: "#2A2A32",
-  slate: "#4A4A52",
-  accentBlue: "#3B82F6",
-  accentNeutral: "#F4F6FF",
-  ember: "#F15A29",
-  emberGlow: "#FF8A65",
-  sand: "#F4F6FF",
-  dune: "#0F1729",
-  porcelain: "#FFFFFF",
-  fog: "#F7F8FA",
-};
-
-// 2. GRADIENTS (INCHANGÉS)
-const gradients = {
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. PALETTE TOKENS — Single source of truth for every colour in the app
+// ─────────────────────────────────────────────────────────────────────────────
+const tokens = {
+  // Dark palette
   dark: {
-    hero: `linear-gradient(160deg, ${forgePalette.graphite} 0%, ${forgePalette.obsidian} 100%)`,
-    card: `linear-gradient(180deg, ${forgePalette.nightfall} 0%, ${alpha(forgePalette.obsidian, 0.95)} 100%)`,
-    chip: `linear-gradient(120deg, ${alpha(forgePalette.accentBlue, 0.15)}, ${alpha(forgePalette.accentBlue, 0.1)})`,
-    warning: `linear-gradient(120deg, ${alpha(forgePalette.ember, 0.3)}, ${alpha(forgePalette.emberGlow, 0.2)})`,
+    bg: "#0E0E12",   // page background — unified across sidebar & content
+    surface: "#16161C",   // slightly elevated surfaces (cards, panels)
+    elevated: "#1C1C24",   // 2nd level elevation (hover states, tooltips)
+    border: "rgba(255,255,255,0.07)",
+    borderHov: "rgba(255,255,255,0.14)",
   },
+  // Light palette
   light: {
-    // Gradients mis à jour pour le mode clair
-    hero: `linear-gradient(160deg, ${forgePalette.porcelain} 0%, ${forgePalette.fog} 100%)`,
-    card: `linear-gradient(180deg, ${alpha(forgePalette.porcelain, 0.98)} 0%, ${alpha(forgePalette.fog, 0.9)} 100%)`,
-    chip: `linear-gradient(120deg, ${alpha(forgePalette.accentBlue, 0.15)}, ${alpha(forgePalette.accentBlue, 0.1)})`,
-    warning: `linear-gradient(120deg, ${alpha(forgePalette.ember, 0.3)}, ${alpha(forgePalette.emberGlow, 0.2)})`,
+    bg: "#F0F2F7",   // soft blue-grey page background
+    surface: "#FFFFFF",   // clean white cards
+    elevated: "#F7F9FC",   // slight hover elevation
+    border: "rgba(15,23,42,0.09)",
+    borderHov: "rgba(15,23,42,0.18)",
   },
+  // Dark-mode neon accents (fluorescent — only work on dark backgrounds)
+  neonGreen: "#00FF66",
+  neonRed: "#FF2D55",
+  // Light-mode semantic accents (rich, readable on white — non-fluorescent)
+  lightPositive: "#0F766E",  // deep teal  — gain/profit
+  lightNegative: "#9F1239",  // rose-cardinal — loss/negative
+  // Shared
+  accentBlue: "#4F8EF7",
+  white: "#FFFFFF",
+  nearBlack: "#0E0E12",
 };
 
-// 3. RADIUS (INCHANGÉ)
-const sharedRadius = 8;
-
-// 4. TYPOGRAPHIE (INCHANGÉE)
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. TYPOGRAPHY
+// ─────────────────────────────────────────────────────────────────────────────
 const baseTypography = {
-  fontFamily: `"Space Grotesk", "Inter", "Segoe UI", "Roboto", sans-serif`,
+  fontFamily: `"Inter", "Space Grotesk", "Segoe UI", sans-serif`,
+  mono: `"JetBrains Mono", "SF Mono", "Fira Code", monospace`,
   button: { fontWeight: 600, textTransform: "none", letterSpacing: "0.02em" },
-  h1: { fontWeight: 600, letterSpacing: "-0.02em" },
-  h2: { fontWeight: 600, letterSpacing: "-0.015em" },
-  h3: { fontWeight: 600, letterSpacing: "-0.01em" },
-  h4: { fontWeight: 600 },
-  mono: `"JetBrains Mono","Fira Code",monospace`,
+  h1: { fontWeight: 700, letterSpacing: "-0.03em" },
+  h2: { fontWeight: 700, letterSpacing: "-0.025em" },
+  h3: { fontWeight: 600, letterSpacing: "-0.02em" },
+  h4: { fontWeight: 600, letterSpacing: "-0.015em" },
+  h5: { fontWeight: 600 },
+  h6: { fontWeight: 600 },
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. THEME FACTORY
+// ─────────────────────────────────────────────────────────────────────────────
 const createForgeTheme = (mode = "dark") => {
   const isDark = mode === "dark";
+  const t = isDark ? tokens.dark : tokens.light;
 
-  // 5. NOUVELLE PALETTE MUI
   const palette = {
     mode,
-    // ================== MODE SOMBRE (INCHANGÉ) ==================
-    primary: isDark ? {
-      main: forgePalette.accentNeutral, // Blanc/Sable
-      contrastText: forgePalette.obsidian,
-    } : {
-      // ================== MODE CLAIR (MODIFIÉ) ==================
-      main: forgePalette.accentBlue, // Le bleu devient la couleur primaire
-      contrastText: forgePalette.porcelain,
+    primary: {
+      // Dark: white pill / Light: blue pill
+      main: isDark ? tokens.white : tokens.accentBlue,
+      contrastText: isDark ? tokens.nearBlack : tokens.white,
     },
-    secondary: isDark ? {
-      main: forgePalette.accentBlue,
-      contrastText: forgePalette.obsidian,
-    } : {
-      main: forgePalette.dune, // Le noir/bleu foncé devient secondaire
-      contrastText: forgePalette.porcelain,
+    secondary: {
+      main: tokens.accentBlue,
+      contrastText: tokens.white,
+    },
+    // Positive/negative semantic colours differ per mode
+    success: {
+      main: isDark ? tokens.neonGreen : tokens.lightPositive,
     },
     error: {
-      main: forgePalette.ember,
-      light: forgePalette.emberGlow,
+      main: isDark ? tokens.neonRed : tokens.lightNegative,
+      light: isDark ? "#FF6B87" : "#BE185D",
     },
     background: {
-      default: isDark ? forgePalette.obsidian : forgePalette.fog, // Fond gris clair
-      paper: isDark ? forgePalette.nightfall : forgePalette.porcelain, // Fond blanc pur
+      default: t.bg,
+      paper: t.surface,
     },
     text: {
-      primary: isDark ? forgePalette.sand : forgePalette.dune,
-      secondary: isDark ? alpha(forgePalette.sand, 0.65) : alpha(forgePalette.dune, 0.65),
+      primary: isDark ? "rgba(255,255,255,0.92)" : "rgba(15,23,42,0.92)",
+      secondary: isDark ? "rgba(255,255,255,0.42)" : "rgba(15,23,42,0.52)",
     },
-    divider: alpha(isDark ? "#FFFFFF" : "#0F1729", 0.1),
+    divider: t.border,
   };
 
+  // Custom tokens exposed on theme.forge
   const forge = {
-    palette: forgePalette,
-    gradients: isDark ? gradients.dark : gradients.light,
-    radius: sharedRadius,
+    tokens,
+    t,
+    isDark,
+    mono: baseTypography.mono,
     shadows: {
-      floating: isDark ? "0 10px 20px rgba(0,0,0,0.2)" : "0 10px 20px rgba(15,23,42,0.1)",
-      glow: `0 0 15px ${alpha(forgePalette.accentBlue, 0.2)}`,
+      floating: isDark
+        ? "0 16px 40px rgba(0,0,0,0.5)"
+        : "0 8px 32px rgba(15,23,42,0.12)",
+      glow: (color) => `0 0 20px ${color}40, 0 0 8px ${color}20`,
     },
   };
 
   return createTheme({
     forge,
-    typography: baseTypography,
     palette,
-    shape: {
-      borderRadius: sharedRadius,
-    },
+    typography: baseTypography,
+    shape: { borderRadius: 12 },
     components: {
+
+      // ── Global body ────────────────────────────────────────────────
       MuiCssBaseline: {
         styleOverrides: {
+          "*, *::before, *::after": { boxSizing: "border-box" },
           body: {
-            backgroundColor: palette.background.default,
+            backgroundColor: t.bg,
             backgroundImage: isDark
-              ? "radial-gradient(circle at 20% 20%, #1b2d3f 0%, #05060a 55%)"
-              : `linear-gradient(160deg, ${forgePalette.porcelain} 0%, ${forgePalette.fog} 100%)`,
+              ? "none"
+              : `radial-gradient(ellipse at 60% 0%, rgba(79,142,247,0.06) 0%, transparent 60%),
+                 radial-gradient(ellipse at 0% 80%, rgba(0,255,102,0.04) 0%, transparent 50%)`,
             backgroundAttachment: "fixed",
-            backgroundRepeat: "no-repeat",
             minHeight: "100vh",
           },
         },
       },
+
+      // ── Paper / Cards ──────────────────────────────────────────────
       MuiPaper: {
-        defaultProps: {
-          elevation: 0,
-        },
+        defaultProps: { elevation: 0 },
         styleOverrides: {
           root: {
-            borderRadius: sharedRadius,
-            border: `1px solid ${alpha(isDark ? "#FFFFFF" : "#0F1729", 0.1)}`,
             backgroundImage: "none",
-            backgroundColor: palette.background.paper,
+            backgroundColor: t.surface,
+            border: `1px solid ${t.border}`,
+            borderRadius: 12,
           },
         },
       },
+
+      // ── Buttons ────────────────────────────────────────────────────
       MuiButton: {
-        defaultProps: {
-          disableElevation: true,
-        },
+        defaultProps: { disableElevation: true },
         styleOverrides: {
           root: {
-            borderRadius: sharedRadius,
-            padding: "10px 22px",
-            letterSpacing: "0.06em",
+            borderRadius: 10,
+            padding: "9px 20px",
+            letterSpacing: "0.02em",
+            fontWeight: 600,
           },
           containedPrimary: {
-            // Dark: White button (primary.main is White)
-            // Light: Blue button (primary.main is Blue)
-            background: palette.primary.main,
-            color: palette.primary.contrastText,
-            boxShadow: !isDark ? `0 4px 12px ${alpha(palette.primary.main, 0.2)}` : "none",
+            background: isDark
+              ? tokens.white
+              : tokens.accentBlue,
+            color: isDark ? tokens.nearBlack : tokens.white,
+            boxShadow: isDark
+              ? "none"
+              : `0 4px 14px ${alpha(tokens.accentBlue, 0.3)}`,
             "&:hover": {
-              background: alpha(palette.primary.main, 0.85),
+              background: isDark
+                ? alpha(tokens.white, 0.88)
+                : alpha(tokens.accentBlue, 0.88),
             },
           },
           containedSecondary: {
-            // Dark: Blue button (secondary.main is Blue)
-            // Light: Dark button (secondary.main is Dark)
-            background: palette.secondary.main,
-            color: palette.secondary.contrastText,
-            boxShadow: "none",
-            "&:hover": {
-              background: alpha(palette.secondary.main, 0.85),
-            },
+            background: tokens.accentBlue,
+            color: tokens.white,
+            boxShadow: `0 4px 14px ${alpha(tokens.accentBlue, 0.28)}`,
+            "&:hover": { background: alpha(tokens.accentBlue, 0.88) },
           },
           outlined: {
-            borderWidth: "1px",
-            borderColor: alpha(isDark ? "#FFFFFF" : "#0F1729", 0.2),
-            color: isDark ? palette.text.secondary : palette.text.primary,
+            borderColor: t.border,
+            color: isDark ? alpha(tokens.white, 0.7) : alpha(tokens.nearBlack, 0.7),
             "&:hover": {
-              borderColor: palette.primary.main,
-              color: palette.primary.main,
-              background: alpha(palette.primary.main, 0.05),
+              borderColor: t.borderHov,
+              backgroundColor: isDark
+                ? alpha(tokens.white, 0.04)
+                : alpha(tokens.nearBlack, 0.04),
             },
-          },
-          text: {
-            color: palette.secondary.main,
           },
         },
       },
+
+      // ── Chip ───────────────────────────────────────────────────────
       MuiChip: {
-        defaultProps: {
-          variant: "outlined",
-        },
         styleOverrides: {
           root: {
             borderRadius: 999,
             fontWeight: 600,
+            fontSize: "0.75rem",
             letterSpacing: "0.04em",
-            backgroundImage: forge.gradients.chip,
-            borderColor: alpha(forgePalette.accentBlue, 0.3),
-            color: forgePalette.accentBlue, // Always Blue
+            backgroundColor: isDark
+              ? alpha(tokens.accentBlue, 0.12)
+              : alpha(tokens.accentBlue, 0.08),
+            borderColor: alpha(tokens.accentBlue, 0.28),
+            color: tokens.accentBlue,
           },
         },
       },
+
+      // ── Tabs ───────────────────────────────────────────────────────
       MuiTabs: {
         styleOverrides: {
           root: {
-            borderRadius: sharedRadius,
+            borderRadius: 10,
             padding: 6,
-            backgroundColor: alpha(isDark ? "#FFFFFF" : "#0F1729", 0.04),
+            backgroundColor: isDark
+              ? alpha(tokens.white, 0.04)
+              : alpha(tokens.nearBlack, 0.04),
           },
           indicator: {
-            backgroundColor: forgePalette.accentBlue, // Always Blue
+            backgroundColor: tokens.accentBlue,
             height: 3,
             borderRadius: 3,
           },
@@ -207,39 +215,39 @@ const createForgeTheme = (mode = "dark") => {
         styleOverrides: {
           root: {
             fontWeight: 600,
-            fontSize: "0.95rem",
-            color: alpha(isDark ? "#FFFFFF" : "#0F1729", 0.6),
-            "&.Mui-selected": {
-              color: forgePalette.accentBlue, // Always Blue
-            },
+            fontSize: "0.9rem",
+            color: isDark
+              ? alpha(tokens.white, 0.5)
+              : alpha(tokens.nearBlack, 0.5),
+            "&.Mui-selected": { color: tokens.accentBlue },
           },
         },
       },
+
+      // ── Divider ────────────────────────────────────────────────────
       MuiDivider: {
         styleOverrides: {
-          root: {
-            borderColor: alpha(isDark ? "#FFFFFF" : "#0F1729", 0.1),
-          },
+          root: { borderColor: t.border },
         },
       },
+
+      // ── Dialog ────────────────────────────────────────────────────
       MuiDialog: {
         styleOverrides: {
           paper: {
-            border: `1px solid ${alpha(isDark ? "#FFFFFF" : "#0F1729", 0.1)}`,
-            boxShadow: forge.shadows.floating,
             backgroundImage: "none",
-            backgroundColor: palette.background.paper,
+            backgroundColor: t.surface,
+            border: `1px solid ${t.border}`,
           },
         },
       },
-      MuiSnackbarContent: {
+
+      // ── ListItemButton ─────────────────────────────────────────────
+      MuiListItemButton: {
         styleOverrides: {
           root: {
-            borderRadius: sharedRadius,
-            backgroundImage: forge.gradients.chip,
-            color: forgePalette.accentBlue,
-            border: `1px solid ${alpha(forgePalette.accentBlue, 0.3)}`,
-            backgroundColor: isDark ? forgePalette.nightfall : forgePalette.porcelain,
+            borderRadius: 8,
+            transition: "background 0.15s, color 0.15s",
           },
         },
       },

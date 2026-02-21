@@ -39,3 +39,17 @@ export const generateGeminiImage = async ({ prompt }) => {
   }
   return data;
 };
+
+export const requestChatAnalysis = async ({ rawText, plan, recentTrades }) => {
+  const response = await fetch(`${GEMINI_ENDPOINT}/chat`, {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ rawText, plan, recentTrades }),
+  });
+
+  const data = await ensureSuccess(response, "Impossible de générer l'analyse.");
+  if (!data?.result) {
+    throw new Error("Réponse vide de l'assistant.");
+  }
+  return data.result;
+};

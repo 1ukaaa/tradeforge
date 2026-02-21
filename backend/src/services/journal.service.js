@@ -1,38 +1,38 @@
 // backend/src/services/journal.service.js
 const db = require("../core/database");
-const { serializeMetadata, parseMetadata } = require("../core/utils");
 
-// Note l'ajout de "async" devant la fonction
 const getJournalEntryById = async (id) => {
-  // Syntaxe Turso : db.execute({ sql: "...", args: [...] })
   const result = await db.execute({
     sql: "SELECT * FROM entries WHERE id = ?",
     args: [id]
   });
-  
-  // Turso renvoie un tableau 'rows'. S'il est vide, c'est null.
+
   const row = result.rows[0];
   if (!row) return null;
-  
-  return { ...row, metadata: parseMetadata(row.metadata) };
+
+  return {
+    ...row,
+    images: row.images ? JSON.parse(row.images) : []
+  };
 };
 
-const insertJournalEntry = async ({ type, content, plan, transcript, metadata, createdAt }) => {
-  const timestamp = createdAt || new Date().toISOString();
-  
+const insertJournalEntry = async ({ date, asset, direction, result_outcome, account, setup, images, trade_id }) => {
+  const timestamp = new Date().toISOString();
+  const imagesStr = Array.isArray(images) ? JSON.stringify(images) : "[]";
+
   const result = await db.execute({
-    sql: "INSERT INTO entries (type, content, plan, transcript, metadata, createdAt) VALUES (?, ?, ?, ?, ?, ?)",
-    args: [type, content, plan || "", transcript || "", serializeMetadata(metadata), timestamp]
+    sql: "INSERT INTO entries (date, asset, direction, result, account, setup, images, createdAt, trade_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    args: [date || timestamp, asset || "", direction || "", result_outcome || "", account || "", setup || "", imagesStr, timestamp, trade_id || null]
   });
 
-  // Pour récupérer l'ID inséré avec LibSQL, c'est lastInsertRowid (attention c'est un BigInt parfois, on convertit)
   return getJournalEntryById(Number(result.lastInsertRowid));
 };
 
-const updateJournalEntry = async ({ id, type, content, plan, transcript, metadata }) => {
+const updateJournalEntry = async ({ id, date, asset, direction, result_outcome, account, setup, images, trade_id }) => {
+  const imagesStr = Array.isArray(images) ? JSON.stringify(images) : "[]";
   const result = await db.execute({
-    sql: "UPDATE entries SET type = ?, content = ?, plan = ?, transcript = ?, metadata = ? WHERE id = ?",
-    args: [type, content, plan || "", transcript || "", serializeMetadata(metadata), id]
+    sql: "UPDATE entries SET date = ?, asset = ?, direction = ?, result = ?, account = ?, setup = ?, images = ?, trade_id = ? WHERE id = ?",
+    args: [date, asset, direction, result_outcome, account, setup, imagesStr, trade_id || null, id]
   });
 
   if (result.rowsAffected === 0) {
@@ -50,10 +50,10 @@ const deleteJournalEntry = async (id) => {
 };
 
 const getJournalEntries = async () => {
-  const result = await db.execute("SELECT * FROM entries ORDER BY createdAt DESC");
+  const result = await db.execute("SELECT * FROM entries ORDER BY date DESC, createdAt DESC");
   return result.rows.map((row) => ({
     ...row,
-    metadata: parseMetadata(row.metadata),
+    images: row.images ? JSON.parse(row.images) : [],
   }));
 };
 

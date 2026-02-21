@@ -3,27 +3,19 @@ import MicOffIcon from "@mui/icons-material/MicOff";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
 // Imports ajoutés
 import AnalyticsIcon from "@mui/icons-material/Analytics";
-import CheckIcon from "@mui/icons-material/Check";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
-import TuneIcon from "@mui/icons-material/Tune";
 import {
   Box,
   CircularProgress,
   IconButton,
-  ListItemIcon,
-  ListItemText,
-  // Composants de Menu ajoutés
-  Menu,
-  MenuItem,
   Paper,
   TextField,
   Tooltip,
-  Typography,
   alpha,
   useTheme
 } from "@mui/material";
 // 'useState' est déjà importé, j'ajoute 'useMemo'
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import useSpeechCapture from "../features/analyzer/hooks/useSpeechCapture";
 
 // Définition des outils
@@ -49,17 +41,10 @@ const TOOLS = {
 const ChatInputBar = ({
   onSend,
   loading,
-  onSuggestionClick,
-  // Nouvelles props pour gérer l'outil actif
-  activeTool,
-  onToolChange,
+  onSuggestionClick
 }) => {
   const theme = useTheme();
   const [text, setText] = useState("");
-
-  // État pour le menu des outils
-  const [menuAnchorEl, setMenuAnchorEl] = useState(null);
-  const isMenuOpen = Boolean(menuAnchorEl);
 
   // Hook de capture vocale
   const { isSupported, isRecording, startRecording, stopRecording } =
@@ -85,23 +70,6 @@ const ChatInputBar = ({
     }
   };
 
-  // --- Nouveaux Handlers pour le menu Outils ---
-  const handleToolsClick = (event) => {
-    setMenuAnchorEl(event.currentTarget);
-  };
-
-  const handleToolsClose = () => {
-    setMenuAnchorEl(null);
-  };
-
-  const handleToolSelect = (toolKey) => {
-    if (!TOOLS[toolKey].disabled) {
-      onToolChange(toolKey);
-    }
-    handleToolsClose();
-  };
-  // --- Fin des nouveaux handlers ---
-
   // Ce hook permet au parent (TradeForgeAI) de remplir le champ de texte
   useEffect(() => {
     if (onSuggestionClick) {
@@ -110,11 +78,6 @@ const ChatInputBar = ({
       };
     }
   }, [onSuggestionClick]);
-
-  // Récupère l'icône de l'outil actif pour l'afficher sur le bouton
-  const ActiveToolIcon = useMemo(() => {
-    return TOOLS[activeTool]?.icon || <TuneIcon />;
-  }, [activeTool]);
 
   return (
     <Box
@@ -149,18 +112,6 @@ const ChatInputBar = ({
               : "0 20px 40px rgba(15,23,42,0.1)",
         }}
       >
-        {/* --- NOUVEAU BOUTON OUTILS --- */}
-        <Tooltip title={`Outil actif : ${TOOLS[activeTool]?.label || "Outils"}`}>
-          <span>
-            <IconButton
-              color={activeTool === "trade" ? "secondary" : "primary"}
-              onClick={handleToolsClick}
-            >
-              {ActiveToolIcon}
-            </IconButton>
-          </span>
-        </Tooltip>
-        {/* --- FIN NOUVEAU BOUTON OUTILS --- */}
 
         {/* Bouton Micro */}
         <Tooltip
@@ -235,61 +186,6 @@ const ChatInputBar = ({
           )}
         </IconButton>
       </Paper>
-
-      {/* --- NOUVEAU MENU OUTILS --- */}
-      <Menu
-        anchorEl={menuAnchorEl}
-        open={isMenuOpen}
-        onClose={handleToolsClose}
-        anchorOrigin={{
-          vertical: "top",
-          horizontal: "left",
-        }}
-        transformOrigin={{
-          vertical: "bottom",
-          horizontal: "left",
-        }}
-        PaperProps={{
-          sx: {
-            mb: 1, // Marge en dessous de l'ancre
-            borderRadius: 3,
-            border: (theme) => `1px solid ${theme.palette.divider}`,
-            boxShadow: (theme) =>
-              theme.palette.mode === "dark"
-                ? "0 10px 30px rgba(0,0,0,0.4)"
-                : "0 10px 30px rgba(15,23,42,0.1)",
-          },
-        }}
-      >
-        <Typography variant="overline" sx={{ px: 2, pt: 1, color: "text.secondary" }}>
-          Outils
-        </Typography>
-
-        {/* Outils fonctionnels */}
-        {Object.entries(TOOLS)
-          .filter(([, tool]) => !tool.disabled)
-          .map(([key, tool]) => (
-            <MenuItem
-              key={key}
-              onClick={() => handleToolSelect(key)}
-              selected={key === activeTool}
-            >
-              <ListItemIcon>
-                {key === activeTool ? (
-                  <CheckIcon fontSize="small" color="primary" />
-                ) : (
-                  tool.icon
-                )}
-              </ListItemIcon>
-              <ListItemText
-                primary={tool.label}
-                secondary={tool.description}
-                primaryTypographyProps={{ fontWeight: 600 }}
-              />
-            </MenuItem>
-          ))}
-      </Menu>
-      {/* --- FIN NOUVEAU MENU OUTILS --- */}
     </Box>
   );
 };

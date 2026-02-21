@@ -43,12 +43,10 @@ const AppLayout = () => {
               zIndex: (theme) => theme.zIndex.appBar,
               px: 2,
               py: 1.5,
-              backgroundColor: (theme) => theme.palette.background.default,
+              backgroundColor: (theme) => theme.palette.background.paper,
               borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
-              boxShadow: (theme) =>
-                theme.palette.mode === "dark"
-                  ? "0 6px 20px rgba(0,0,0,0.35)"
-                  : "0 6px 20px rgba(15,23,42,0.08)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
             }}
           >
             <BrandLogo glyphSize={32} showText={false} />

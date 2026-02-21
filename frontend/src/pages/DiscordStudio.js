@@ -324,8 +324,8 @@ const EditorToolbar = ({ currentVariant, onVariantChange, sourceEntry, onOpenSou
                 {sourceEntry ? (
                     <Stack direction="row" spacing={1} alignItems="center">
                         <Chip
-                            avatar={<Avatar src={sourceEntry.metadata?.images?.[0]?.src} sx={{ width: 24, height: 24 }}>{sourceEntry.metadata?.symbol?.[0]}</Avatar>}
-                            label={sourceEntry.metadata?.symbol || "Source"}
+                            avatar={<Avatar src={sourceEntry.images?.[0]} sx={{ width: 24, height: 24 }}>{sourceEntry.asset?.[0]}</Avatar>}
+                            label={sourceEntry.asset || "Source"}
                             onDelete={onOpenSource}
                             deleteIcon={<EditIcon sx={{ fontSize: '14px !important' }} />}
                             onClick={onOpenSource}
@@ -430,10 +430,9 @@ const PostEditor = ({ post, onSave, onClose, onPublish }) => {
     // Handlers
     const handleSelectEntry = (entry) => {
         setSelectedEntry(entry);
-        if (entry?.metadata?.images) {
-            const journalImgs = entry.metadata.images
-                .filter(i => i.src)
-                .map((i, idx) => ({ id: `journal-${i.id || Date.now()}-${idx}`, src: i.src, type: 'journal' }));
+        if (entry?.images && Array.isArray(entry.images)) {
+            const journalImgs = entry.images
+                .map((src, idx) => ({ id: `journal-${Date.now()}-${idx}`, src, type: 'journal' }));
             setActiveImages(journalImgs);
         } else {
             setActiveImages([]);
@@ -655,11 +654,11 @@ const PostEditor = ({ post, onSave, onClose, onPublish }) => {
                         {journalEntries.slice(0, 6).map(entry => (
                             <ListItemButton key={entry.id} onClick={() => handleSelectEntry(entry)} sx={{ borderRadius: 2, mb: 1 }}>
                                 <ListItemAvatar>
-                                    <Avatar variant="rounded" src={entry.metadata?.images?.[0]?.src} sx={{ bgcolor: theme.palette.primary.main }}>{entry.type[0].toUpperCase()}</Avatar>
+                                    <Avatar variant="rounded" src={entry.images?.[0]} sx={{ bgcolor: theme.palette.primary.main }}>{entry.asset?.[0]}</Avatar>
                                 </ListItemAvatar>
                                 <ListItemText
-                                    primary={<Typography fontWeight={600}>{entry.metadata?.title || "Entrée sans titre"}</Typography>}
-                                    secondary={entry.metadata?.symbol}
+                                    primary={<Typography fontWeight={600}>{entry.asset || "Trade"}</Typography>}
+                                    secondary={entry.date}
                                 />
                                 <ArrowForwardIcon color="action" fontSize="small" />
                             </ListItemButton>

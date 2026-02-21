@@ -31,8 +31,19 @@ const generateImage = async (req, res) => {
   }
 };
 
+const generateChat = async (req, res) => {
+  try {
+    const result = await geminiService.generateChatAnalysis(req.body);
+    res.json(result);
+  } catch (err) {
+    const status = err?.status || (err?.name === "RateLimitError" ? 429 : 500);
+    res.status(status).json({ error: err.message });
+  }
+};
+
 module.exports = {
   generateText,
   generateStructured,
   generateImage,
+  generateChat,
 };

@@ -640,6 +640,44 @@ const buildTradesForSummary = (positionsDesc) =>
     };
   });
 
+const buildPerformanceHistory = (trades, initialBalance) => {
+  const sorted = [...trades].sort((a, b) => new Date(a.openedAt) - new Date(b.openedAt));
+  const today = new Date();
+  const startDate = new Date(today.getTime() - (HISTORY_DAYS - 1) * 24 * 60 * 60 * 1000);
+  let runningValue = initialBalance;
+  const applied = new Set();
+
+  sorted.forEach((trade) => {
+    if (new Date(trade.closedAt || trade.openedAt) < startDate) {
+      runningValue += trade.pnl;
+      applied.add(trade.id || trade.externalTradeId || `${trade.brokerAccountId}-${trade.openedAt}`);
+    }
+  });
+
+  const history = [];
+  for (let day = 0; day < HISTORY_DAYS; day += 1) {
+    const currentDay = new Date(startDate.getTime() + day * 24 * 60 * 60 * 1000);
+    const endOfDay = new Date(currentDay);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    sorted.forEach((trade) => {
+      const closeDate = new Date(trade.closedAt || trade.openedAt);
+      const tradeKey = trade.id || trade.externalTradeId || `${trade.brokerAccountId}-${trade.openedAt}`;
+      if (!applied.has(tradeKey) && closeDate <= endOfDay) {
+        runningValue += trade.pnl;
+        applied.add(tradeKey);
+      }
+    });
+
+    history.push({
+      date: currentDay.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }),
+      value: Math.round(runningValue * 100) / 100,
+    });
+  }
+
+  return history;
+};
+
 const getDashboardSummary = async () => {
   const accounts = await getBrokerAccounts();
   if (!accounts.length) {
@@ -661,6 +699,10 @@ const getDashboardSummary = async () => {
   const totalMonthly = enrichedAccounts.reduce((sum, account) => sum + account.monthlyProfit, 0);
   const totalWeekly = enrichedAccounts.reduce((sum, account) => sum + account.weeklyProfit, 0);
 
+  // Note: buildPerformanceHistory is defined later in the file.
+  // In JS, variables bound by `const` are NOT hoisted. We need to define
+  // buildPerformanceHistory before it is used, or hoist it via function declaration,
+  // or use module.exports. Let's just pass positions to it.
   const aggregateHistory = buildPerformanceHistory(positionsAsc, totalInitial);
 
   const aggregate = {
@@ -1111,44 +1153,6 @@ const importBrokerCsv = async (accountId, file) => {
   };
 };
 
-const buildPerformanceHistory = (trades, initialBalance) => {
-  const sorted = [...trades].sort((a, b) => new Date(a.openedAt) - new Date(b.openedAt));
-  const today = new Date();
-  const startDate = new Date(today.getTime() - (HISTORY_DAYS - 1) * 24 * 60 * 60 * 1000);
-  let runningValue = initialBalance;
-  const applied = new Set();
-
-  sorted.forEach((trade) => {
-    if (new Date(trade.closedAt || trade.openedAt) < startDate) {
-      runningValue += trade.pnl;
-      applied.add(trade.id || trade.externalTradeId || `${trade.brokerAccountId}-${trade.openedAt}`);
-    }
-  });
-
-  const history = [];
-  for (let day = 0; day < HISTORY_DAYS; day += 1) {
-    const currentDay = new Date(startDate.getTime() + day * 24 * 60 * 60 * 1000);
-    const endOfDay = new Date(currentDay);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    sorted.forEach((trade) => {
-      const closeDate = new Date(trade.closedAt || trade.openedAt);
-      const tradeKey = trade.id || trade.externalTradeId || `${trade.brokerAccountId}-${trade.openedAt}`;
-      if (!applied.has(tradeKey) && closeDate <= endOfDay) {
-        runningValue += trade.pnl;
-        applied.add(tradeKey);
-      }
-    });
-
-    history.push({
-      date: currentDay.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }),
-      value: Math.round(runningValue * 100) / 100,
-    });
-  }
-
-  return history;
-};
-
 const computeAccountMetrics = (account, trades) => {
   const accountTrades = trades.filter((trade) => trade.brokerAccountId === account.id);
   const initialBalance = toNumber(account.initialBalance);
@@ -1179,15 +1183,6 @@ const computeAccountMetrics = (account, trades) => {
   };
 };
 
-const getLatestTradeTimestamp = (trades, fallbackIso) => {
-  const fallbackMs = toTimestampMs(fallbackIso);
-  const latest = trades.reduce((max, trade) => {
-    const candidateMs = toTimestampMs(trade?.closedAt || trade?.openedAt);
-    if (!candidateMs) return max;
-    return candidateMs > max ? candidateMs : max;
-  }, fallbackMs || 0);
-  return latest > 0 ? new Date(latest).toISOString() : fallbackIso;
-};
 
 module.exports = {
   getBrokerAccounts,

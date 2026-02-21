@@ -92,11 +92,11 @@ const formatDate = (dateString) => {
 };
 
 const mapEntryImagesToAttachments = (entry) => {
-    if (!entry?.metadata?.images) return [];
-    return entry.metadata.images.filter(i => i?.src).map((img, idx) => ({
-        id: img.id || `entry-${entry.id}-${idx}-${Date.now()}`,
-        src: img.src,
-        caption: img.caption || entry.metadata?.title
+    if (!entry?.images || !Array.isArray(entry.images)) return [];
+    return entry.images.map((img, idx) => ({
+        id: `entry-${entry.id}-${idx}-${Date.now()}`,
+        src: img,
+        caption: entry.asset || "Trade"
     }));
 };
 
@@ -223,8 +223,8 @@ const EditorToolbar = ({ currentVariant, onVariantChange, sourceEntry, onOpenSou
                 {sourceEntry ? (
                     <Stack direction="row" spacing={1} alignItems="center">
                         <Chip
-                            avatar={<Avatar src={sourceEntry.metadata?.images?.[0]?.src} sx={{ width: 24, height: 24 }}>{sourceEntry.metadata?.symbol?.[0]}</Avatar>}
-                            label={sourceEntry.metadata?.symbol || "Source"}
+                            avatar={<Avatar src={sourceEntry.images?.[0]} sx={{ width: 24, height: 24 }}>{sourceEntry.asset?.[0]}</Avatar>}
+                            label={sourceEntry.asset || "Source"}
                             onDelete={onOpenSource}
                             deleteIcon={<EditIcon sx={{ fontSize: '14px !important' }} />}
                             onClick={onOpenSource}
@@ -370,7 +370,7 @@ const PostEditor = ({ draft, onSave, onClose, onPublish, onDelete }) => {
     const openJournalDialog = async () => { setEntryDialogOpen(true); if (journalEntries.length === 0) setJournalEntries(await fetchJournalEntries()); };
     const attachEntry = (e) => {
         const att = mapEntryImagesToAttachments(e);
-        setEditorDraft(p => { const nt = [...p.payload.tweets]; if (nt[0] && nt[0].media.length === 0) nt[0].media = att; return { ...p, sourceEntryId: e.id, metadata: { ...p.metadata, sourceSymbol: e.metadata?.symbol }, payload: { ...p.payload, tweets: nt } }; });
+        setEditorDraft(p => { const nt = [...p.payload.tweets]; if (nt[0] && nt[0].media.length === 0) nt[0].media = att; return { ...p, sourceEntryId: e.id, metadata: { ...p.metadata, sourceSymbol: e.asset }, payload: { ...p.payload, tweets: nt } }; });
         setEntryDialogOpen(false);
     };
 
@@ -524,8 +524,8 @@ const PostEditor = ({ draft, onSave, onClose, onPublish, onDelete }) => {
                     <List>
                         {journalEntries.slice(0, 5).map(entry => (
                             <ListItemButton key={entry.id} onClick={() => attachEntry(entry)} sx={{ borderRadius: 2, mb: 1 }}>
-                                <ListItemAvatar><Avatar variant="rounded" src={entry.metadata?.images?.[0]?.src}>{entry.metadata?.symbol?.[0]}</Avatar></ListItemAvatar>
-                                <ListItemText primary={<Typography fontWeight={600}>{entry.metadata?.title || "Entrée"}</Typography>} secondary={entry.type} />
+                                <ListItemAvatar><Avatar variant="rounded" src={entry.images?.[0]}>{entry.asset?.[0]}</Avatar></ListItemAvatar>
+                                <ListItemText primary={<Typography fontWeight={600}>{entry.asset || "Trade"}</Typography>} secondary={entry.setup || entry.date} />
                                 <ArrowBackIcon sx={{ transform: 'rotate(180deg)' }} color="action" fontSize="small" />
                             </ListItemButton>
                         ))}

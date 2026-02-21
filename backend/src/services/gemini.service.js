@@ -254,9 +254,44 @@ const generateImage = async ({ prompt }) => {
   };
 };
 
+const generateChatAnalysis = async ({ rawText, plan, recentTrades }) => {
+  if (!rawText || typeof rawText !== "string") {
+    throw new Error("Texte manquant.");
+  }
+
+  const tradesStr = recentTrades && Array.isArray(recentTrades)
+    ? JSON.stringify(recentTrades.map(t => ({
+      date: t.date, asset: t.asset, direction: t.direction, result: t.result, account: t.account, setup: t.setup
+    }))).substring(0, 100000)
+    : "[]";
+
+  const prompt = `Tu es TradeForge AI, l'assistant expert en analyse quantitative de trading de Luka.
+Ton objectif est de répondre aux questions de l'utilisateur sur ses performances de trading, son plan et son journal.
+Tu as accès à son plan de trading et à la liste de ses trades récents (au format JSON).
+
+### PLAN DE TRADING:
+${plan || 'Aucun'}
+
+### TRADES RÉCENTS DU JOURNAL:
+${tradesStr}
+
+### QUESTION DE L'UTILISATEUR:
+${rawText}
+
+Réponds avec une analyse claire, chiffrée (si pertinent) et concise. N'invente jamais de données qui ne sont pas dans les trades fournis. Sois précis et aide Luka à s'améliorer. Structure ta réponse avec du Markdown (gras, puces).
+`;
+
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }]
+  };
+
+  const result = await callGeminiAPI(payload);
+  return { result };
+};
 
 module.exports = {
   generateAnalysis,
   generateStructuredAnalysis,
   generateImage,
+  generateChatAnalysis,
 };
