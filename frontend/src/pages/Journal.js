@@ -538,7 +538,7 @@ const Journal = () => {
       {/* HERO HEADER */}
       {/* HERO HEADER - 2026 Minimalist */}
       <Box sx={{ pt: 8, pb: 4, px: { xs: 2, md: 4 }, bgcolor: "background.default" }}>
-        <Container maxWidth="xl">
+        <Container maxWidth={false} sx={{ px: { xs: 2, sm: 4, xl: 8 } }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={4}>
             <Box>
               <Typography variant="h2" fontWeight={700} letterSpacing="-0.03em" sx={{ color: 'text.primary' }}>
@@ -574,7 +574,7 @@ const Journal = () => {
       </Box>
 
       {/* MAIN CONTENT */}
-      <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, sm: 4, xl: 8 } }}>
         <Stack
           direction={{ xs: "column", md: "row" }}
           spacing={2}

@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from "react";
 
 import ReactMarkdown from "react-markdown";
 import ChatInputBar from "../components/ChatInputBar";
+import { fetchBrokerPositions } from "../services/brokerClient";
 import { fetchJournalEntries } from "../services/journalClient";
 import { fetchPlan } from "../services/planClient";
 import { buildPlanDescription } from "../utils/planUtils";
@@ -145,11 +146,12 @@ const TradeForgeAI = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [journalEntries, setJournalEntries] = useState([]);
+  const [brokerPositions, setBrokerPositions] = useState([]);
 
   // Navigation state
   const scrollRef = useRef(null);
 
-  // 1. Charger le plan et les réglages
+  // 1. Charger le plan, les entrées journal et les positions broker
   useEffect(() => {
     const loadPrereqs = async () => {
       try {
@@ -161,6 +163,11 @@ const TradeForgeAI = () => {
         const entries = await fetchJournalEntries();
         setJournalEntries(entries || []);
       } catch (e) { console.error("Erreur chargement journal:", e); }
+
+      try {
+        const positions = await fetchBrokerPositions();
+        setBrokerPositions(positions || []);
+      } catch (e) { console.error("Erreur chargement positions broker:", e); }
     };
     loadPrereqs();
   }, []);
@@ -181,10 +188,38 @@ const TradeForgeAI = () => {
 
     try {
       const { requestChatAnalysis } = await import("../services/aiClient");
+
+      // Fusionner les positions broker (source principale) + entrées journal manuelle
+      // Les positions broker contiennent les vrais trades (CL, EURUSD, etc.) importés
+      const brokerTradesForAI = brokerPositions.map(p => ({
+        date: p.closedAt || p.openedAt || p.date,
+        asset: p.symbol || p.asset,
+        direction: p.direction,
+        result: p.pnl >= 0 ? 'win' : 'loss',
+        pnl: p.pnl,
+        account: p.accountName,
+        currency: p.currency,
+        setup: p.setup || null,
+        source: 'broker'
+      }));
+
+      const journalTradesForAI = journalEntries.map(e => ({
+        date: e.date,
+        asset: e.asset,
+        direction: e.direction,
+        result: e.result,
+        account: e.account,
+        setup: e.setup,
+        source: 'journal'
+      }));
+
+      // Broker positions en priorité, puis entrées journal sans doublon de date+asset
+      const allTrades = [...brokerTradesForAI, ...journalTradesForAI];
+
       const analysisResult = await requestChatAnalysis({
         rawText,
         plan: planDescription,
-        recentTrades: journalEntries
+        recentTrades: allTrades
       });
 
       const newAiMsg = { id: Date.now() + 1, role: 'ai', text: analysisResult };
@@ -237,10 +272,10 @@ const TradeForgeAI = () => {
               sx={{ height: 24, fontSize: 11, fontWeight: 600 }}
             />
           )}
-          {journalEntries.length > 0 && (
+          {(brokerPositions.length > 0 || journalEntries.length > 0) && (
             <Chip
               icon={<DescriptionIcon sx={{ fontSize: 14 }} />}
-              label={`${journalEntries.length} Trades liés`}
+              label={`${brokerPositions.length + journalEntries.length} Trades chargés`}
               size="small"
               color="info"
               variant="outlined"

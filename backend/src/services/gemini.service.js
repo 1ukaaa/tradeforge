@@ -267,18 +267,25 @@ const generateChatAnalysis = async ({ rawText, plan, recentTrades }) => {
 
   const prompt = `Tu es TradeForge AI, l'assistant expert en analyse quantitative de trading de Luka.
 Ton objectif est de répondre aux questions de l'utilisateur sur ses performances de trading, son plan et son journal.
-Tu as accès à son plan de trading et à la liste de ses trades récents (au format JSON).
 
-### PLAN DE TRADING:
+### PLAN DE TRADING (contexte, ne limite PAS l'analyse aux instruments du plan):
 ${plan || 'Aucun'}
 
-### TRADES RÉCENTS DU JOURNAL:
+### DONNÉES DE TRADING (deux sources fusionnées):
+Les trades ci-dessous proviennent de deux sources:
+- source "broker": trades réels importés depuis le courtier/CSV (contiennent le champ "pnl" en valeur monétaire, "result" = "win" si pnl >= 0 sinon "loss")
+- source "journal": entrées manuelles du journal (contiennent le champ "result" comme texte libre ex: "win", "loss", "be")
+
+IMPORTANT: Analysez TOUS les actifs présents dans ces données, y compris CL (pétrole), même s'ils ne figurent pas dans le plan de trading.
+Le champ "asset" ou "symbol" contient le ticker (ex: "CL" pour le pétrole brut, "EURUSD", "NAS100", etc.)
+Le champ "direction" peut être "LONG", "SHORT", "BUY", "SELL", "CLOSE LONG", "CLOSE SHORT".
+
 ${tradesStr}
 
 ### QUESTION DE L'UTILISATEUR:
 ${rawText}
 
-Réponds avec une analyse claire, chiffrée (si pertinent) et concise. N'invente jamais de données qui ne sont pas dans les trades fournis. Sois précis et aide Luka à s'améliorer. Structure ta réponse avec du Markdown (gras, puces).
+Réponds avec une analyse claire, chiffrée (si pertinent) et concise. Base-toi UNIQUEMENT sur les données fournies ci-dessus. N'invente jamais de données absentes. Sois précis et aide Luka à s'améliorer. Structure ta réponse avec du Markdown (gras, puces, tableaux si utile).
 `;
 
   const payload = {
