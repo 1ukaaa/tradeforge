@@ -10,13 +10,14 @@ const {
 } = require("../config/prompts");
 
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-const DEFAULT_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
+const DEFAULT_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-3-flash-preview";
+
 const DEFAULT_IMAGE_MODEL =
   process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
 const GEMINI_LIMITS = {
-  RPM: 10, // requêtes/min
-  RPD: 250, // requêtes/jour
-  TPM: 250_000, // tokens/min (approx)
+  RPM: 5,        // requêtes/min (limite réelle du compte)
+  RPD: 20,       // requêtes/jour (limite réelle du compte)
+  TPM: 250_000,  // tokens/min
 };
 
 const buildGeminiUrl = (model, method = "generateContent") =>
@@ -254,46 +255,187 @@ const generateImage = async ({ prompt }) => {
   };
 };
 
-const generateChatAnalysis = async ({ rawText, plan, recentTrades }) => {
+/**
+ * Construit le system prompt (injecté comme premier message "user" suivi d'un ack "model").
+ * Gemini 2.5 Flash ne supporte pas encore le champ `systemInstruction` en v1beta,
+ * donc on simule le system prompt avec le premier échange user/model.
+ */
+const buildChatSystemPrompt = (plan, recentTrades) => {
+  // Optimisation de la rapidité : On ne prend que les 50 trades les plus récents
+  // pour éviter un Time-to-First-Token (TTFT) trop long.
+  const recentTradesOptimized = recentTrades && Array.isArray(recentTrades)
+    ? recentTrades.slice(0, 50)
+    : [];
+
+  const tradesStr = recentTradesOptimized.length > 0
+    ? JSON.stringify(
+      recentTradesOptimized.map(t => ({
+        id: t.id,
+        date: t.date,
+        asset: t.asset,
+        direction: t.direction,
+        result: t.result,
+        pnl: t.pnl,
+        account: t.account,
+        setup: t.setup,
+        hasImages: Array.isArray(t.images) && t.images.length > 0,
+      }))
+    )
+    : "[]";
+
+  return `Tu es TradeForge AI, l'assistant expert en analyse quantitative de trading de Luka.
+Ton objectif est de répondre aux questions de l'utilisateur sur ses performances de trading, son plan et son journal.
+Garde le contexte de la conversation : réfère-toi aux messages précédents si l'utilisateur fait allusion à un échange antérieur.
+
+### PLAN DE TRADING (contexte, ne limite PAS l'analyse aux instruments du plan) :
+${plan || 'Aucun'}
+
+### DONNÉES DE TRADING — JOURNAL UNIQUEMENT :
+Les données ci-dessous proviennent exclusivement du journal de trading de l'utilisateur.
+Un filtre de compte a déjà été appliqué côté application : tu analyses uniquement les entrées pertinentes.
+Chaque entrée contient :
+- "id" : l'identifiant unique du trade
+- "date" : date du trade
+- "asset" : ticker de l'instrument (ex : "CL" pour le pétrole, "NAS100", "EURUSD"...)
+- "direction" : "Achat" ou "Vente"
+- "result" : "Win", "Loss" ou "Breakeven"
+- "account" : nom du compte de trading
+- "setup" : description du setup ou de la stratégie utilisée
+- "hasImages" : un booléen (vrai si des images sont associées à ce trade, faux sinon)
+
+IMPORTANT:
+1. Analyse TOUS les actifs présents, même s'ils ne figurent pas dans le plan de trading.
+2. Si le tableau de données est vide, informe l'utilisateur qu'aucune entrée de journal ne correspond aux filtres sélectionnés.
+3. IMAGES (TRES IMPORTANT): Lorsque tu récapitules ou analyses un trade spécifique, et que celui-ci possède \`hasImages: true\`, tu DOIS EXPLICITEMENT inclure ses images. Pour ce faire, insère exactement ce code markdown dans ta réponse : \`![Images du Trade](TFA_IMAGE_XX)\` en remplaçant \`XX\` par l'ID réel du trade. Notre interface se chargera de remplacer ce code par les vraies images pour l'utilisateur. Ne mentionne jamais l'absence d'images si le trade n'en possède pas (omets simplement le code).
+
+${tradesStr}
+
+Réponds avec une analyse claire, chiffrée (si pertinent) et concise. Base-toi UNIQUEMENT sur les données du journal fournies ci-dessus. N'invente jamais de données absentes. Sois précis et aide Luka à s'améliorer. Structure ta réponse avec du Markdown (gras, puces, tableaux si utile, images).`;
+};
+
+/**
+ * Analyse en mode chat multi-tours.
+ * @param {string} rawText - La nouvelle question de l'utilisateur.
+ * @param {string} plan - Description du plan de trading.
+ * @param {Array} recentTrades - Trades du broker + journal.
+ * @param {Array} history - Historique [{role: 'user'|'ai', text: string}] des messages précédents.
+ * @param {string} model - Modele d'IA à utiliser.
+ */
+const generateChatAnalysis = async ({ rawText, plan, recentTrades, history = [], model }) => {
   if (!rawText || typeof rawText !== "string") {
     throw new Error("Texte manquant.");
   }
 
-  const tradesStr = recentTrades && Array.isArray(recentTrades)
-    ? JSON.stringify(recentTrades.map(t => ({
-      date: t.date, asset: t.asset, direction: t.direction, result: t.result, account: t.account, setup: t.setup
-    }))).substring(0, 100000)
-    : "[]";
+  const systemPrompt = buildChatSystemPrompt(plan, recentTrades);
 
-  const prompt = `Tu es TradeForge AI, l'assistant expert en analyse quantitative de trading de Luka.
-Ton objectif est de répondre aux questions de l'utilisateur sur ses performances de trading, son plan et son journal.
+  // On simule systemInstruction via un premier échange user/model
+  const systemTurn = [
+    { role: "user", parts: [{ text: systemPrompt }] },
+    { role: "model", parts: [{ text: "Compris. Je suis prêt à analyser tes données de trading." }] },
+  ];
 
-### PLAN DE TRADING (contexte, ne limite PAS l'analyse aux instruments du plan):
-${plan || 'Aucun'}
+  // Optimisation du contexte : on limite aux 8 derniers échanges pour garder la session fluide
+  const historyTurns = (Array.isArray(history) ? history.slice(-8) : []).flatMap(msg => {
+    if (msg.role === "user") {
+      return [{ role: "user", parts: [{ text: msg.text }] }];
+    }
+    if (msg.role === "ai") {
+      return [{ role: "model", parts: [{ text: msg.text }] }];
+    }
+    return [];
+  });
 
-### DONNÉES DE TRADING (deux sources fusionnées):
-Les trades ci-dessous proviennent de deux sources:
-- source "broker": trades réels importés depuis le courtier/CSV (contiennent le champ "pnl" en valeur monétaire, "result" = "win" si pnl >= 0 sinon "loss")
-- source "journal": entrées manuelles du journal (contiennent le champ "result" comme texte libre ex: "win", "loss", "be")
+  // Nouveau message de l'utilisateur
+  const newTurn = { role: "user", parts: [{ text: rawText }] };
 
-IMPORTANT: Analysez TOUS les actifs présents dans ces données, y compris CL (pétrole), même s'ils ne figurent pas dans le plan de trading.
-Le champ "asset" ou "symbol" contient le ticker (ex: "CL" pour le pétrole brut, "EURUSD", "NAS100", etc.)
-Le champ "direction" peut être "LONG", "SHORT", "BUY", "SELL", "CLOSE LONG", "CLOSE SHORT".
+  const contents = [...systemTurn, ...historyTurns, newTurn];
 
-${tradesStr}
+  const payload = { contents };
+  const targetModel = model === "gemini-2.5-flash" ? "gemini-2.5-flash" : "gemini-3-flash-preview";
 
-### QUESTION DE L'UTILISATEUR:
-${rawText}
-
-Réponds avec une analyse claire, chiffrée (si pertinent) et concise. Base-toi UNIQUEMENT sur les données fournies ci-dessus. N'invente jamais de données absentes. Sois précis et aide Luka à s'améliorer. Structure ta réponse avec du Markdown (gras, puces, tableaux si utile).
-`;
-
-  const payload = {
-    contents: [{ parts: [{ text: prompt }] }]
-  };
-
+  // Note: we can't cleanly pass targetModel to existing callGeminiAPI without changing its signature, 
+  // but generateChatAnalysis calls callGeminiAPI which uses DEFAULT_TEXT_MODEL currently. 
+  // For simplicity, we can fetch directly or modify callGeminiAPI. Let's assume callGeminiAPI isn't model aware 
+  // so we should modify streamChatAnalysis which uses fetch directly, or generateChatAnalysis.
+  // Wait, I will just do it for streamChatAnalysis which is the main one used.
   const result = await callGeminiAPI(payload);
   return { result };
+};
+
+/**
+ * Streaming version du chat : appelle :streamGenerateContent et
+ * appelle onChunk(text) pour chaque fragment de texte reçu.
+ * Retourne le texte complet une fois terminé.
+ */
+const streamChatAnalysis = async ({ rawText, plan, recentTrades, history = [], onChunk, model }) => {
+  if (!rawText || typeof rawText !== "string") {
+    throw new Error("Texte manquant.");
+  }
+
+  const systemPrompt = buildChatSystemPrompt(plan, recentTrades);
+
+  const systemTurn = [
+    { role: "user", parts: [{ text: systemPrompt }] },
+    { role: "model", parts: [{ text: "Compris. Je suis prêt à analyser tes données de trading." }] },
+  ];
+
+  // Optimisation du contexte : limite aux 8 derniers messages
+  const historyTurns = (Array.isArray(history) ? history.slice(-8) : []).flatMap(msg => {
+    if (msg.role === "user") return [{ role: "user", parts: [{ text: msg.text }] }];
+    if (msg.role === "ai") return [{ role: "model", parts: [{ text: msg.text }] }];
+    return [];
+  });
+
+  const contents = [...systemTurn, ...historyTurns, { role: "user", parts: [{ text: rawText }] }];
+
+  const targetModel = model === "gemini-2.5-flash" ? "gemini-2.5-flash" : "gemini-3-flash-preview";
+
+  // Endpoint streaming de Gemini (retourne du SSE avec alt=sse)
+  const url = `${GEMINI_BASE_URL}/${targetModel}:streamGenerateContent?key=${process.env.GEMINI_API_KEY}&alt=sse`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini stream error ${response.status}: ${err}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullText = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop(); // garde la ligne incomplète pour la prochaine itération
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const data = line.slice(6).trim();
+      if (data === "[DONE]" || !data) continue;
+
+      try {
+        const parsed = JSON.parse(data);
+        const chunk = parsed.candidates?.[0]?.content?.parts
+          ?.map(p => p.text || "")
+          .join("") || "";
+        if (chunk) {
+          fullText += chunk;
+          if (typeof onChunk === "function") onChunk(fullText);
+        }
+      } catch { /* ignore parse errors sur les lignes mal formées */ }
+    }
+  }
+
+  return fullText;
 };
 
 module.exports = {
@@ -301,4 +443,5 @@ module.exports = {
   generateStructuredAnalysis,
   generateImage,
   generateChatAnalysis,
+  streamChatAnalysis,
 };

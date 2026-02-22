@@ -13,6 +13,7 @@ const brokerRoutes = require('./broker.routes');
 const integrationsRoutes = require('./integrations.routes');
 const twitterRoutes = require('./twitter.routes');
 const discordRoutes = require('./discord.routes');
+const aiMemoryRoutes = require('./aiMemory.routes');
 
 const router = Router();
 
@@ -28,5 +29,6 @@ router.use('/broker', brokerRoutes);
 router.use('/integrations', integrationsRoutes);
 router.use('/twitter', twitterRoutes);
 router.use('/discord', discordRoutes);
+router.use('/ai-memory', aiMemoryRoutes);
 
 module.exports = router;
