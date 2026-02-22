@@ -23,6 +23,7 @@ import InsightsRoundedIcon from "@mui/icons-material/InsightsRounded";
 import RocketLaunchRoundedIcon from "@mui/icons-material/RocketLaunchRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
+import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
 import TwitterIcon from "@mui/icons-material/Twitter";
 
 // ─── Nav Definitions ─────────────────────────────────────────────
@@ -33,6 +34,7 @@ const MAIN_NAV = [
 
 const WORKSPACE_NAV = [
   { to: "/journal", label: "Journal", icon: <DashboardCustomizeRoundedIcon /> },
+  { to: "/investissements", label: "Investissements", icon: <TrendingUpRoundedIcon /> },
   { to: "/twitter", label: "Twitter Studio", icon: <TwitterIcon /> },
   { to: "/discord", label: "Discord Studio", icon: <ForumRoundedIcon /> },
   { to: "/calendar", label: "Calendrier", icon: <CalendarMonthRoundedIcon /> },

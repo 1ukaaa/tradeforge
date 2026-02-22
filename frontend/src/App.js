@@ -4,6 +4,7 @@ import Calculator from "./pages/Calculator";
 import Calendar from "./pages/Calendar";
 import Dashboard from "./pages/Dashboard";
 import DiscordStudio from "./pages/DiscordStudio";
+import Investment from "./pages/Investment";
 import Journal from "./pages/Journal";
 import Settings from "./pages/Settings";
 import TradeForgeAI from "./pages/TradeForgeAI";
@@ -18,6 +19,7 @@ const App = () => {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="tradeforge-ai" element={<TradeForgeAI />} />
           <Route path="journal" element={<Journal />} />
+          <Route path="investissements" element={<Investment />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="settings" element={<Settings />} />
           <Route path="twitter" element={<TwitterStudio />} />

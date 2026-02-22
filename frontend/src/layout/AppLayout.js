@@ -19,7 +19,7 @@ const AppLayout = () => {
     "/discord"
   ].includes(location.pathname);
 
-  const isDashboardPage = ["/", "/dashboard", "/settings", "/journal"].includes(location.pathname);
+  const isDashboardPage = ["/", "/dashboard", "/settings", "/journal", "/investissements"].includes(location.pathname);
 
   return (
     <Box
