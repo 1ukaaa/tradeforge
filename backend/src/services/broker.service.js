@@ -44,6 +44,19 @@ const toIsoTimestamp = (value) => {
   return typeof ms === "number" ? new Date(ms).toISOString() : null;
 };
 
+const getLatestTradeTimestamp = (trades = [], previousSyncAt = null) => {
+  let latestMs = toTimestampMs(previousSyncAt) || 0;
+  for (const trade of trades) {
+    const openedMs = toTimestampMs(trade.openedAt) || 0;
+    const closedMs = toTimestampMs(trade.closedAt) || 0;
+    const maxMs = Math.max(openedMs, closedMs);
+    if (maxMs > latestMs) {
+      latestMs = maxMs;
+    }
+  }
+  return latestMs ? new Date(latestMs).toISOString() : null;
+};
+
 const parseLocaleNumber = (value, fallback = null) => {
   if (value === null || value === undefined) return fallback;
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -183,6 +196,154 @@ const parseFtmoCsvTrades = (buffer, currency) => {
 
   if (!trades.length) {
     throw new Error("Aucun trade détecté dans le CSV fourni.");
+  }
+
+  return trades;
+};
+
+const mapMffRecordToOrder = (row) => {
+  const status = String(row["Status"] || row["status"] || "").trim().toLowerCase();
+  if (status !== "filled") return null;
+
+  const orderId = String(row["Order ID"] || row["orderId"]).trim();
+  const timestampRaw = row["Fill Time"] || row["Timestamp"];
+  const symbol = String(row["Product"] || "").trim();
+  const contract = String(row["Contract"] || "").trim();
+  const buySell = String(row["B/S"] || row["b/s"] || "").trim().toLowerCase();
+  const side = buySell === "buy" ? "LONG" : "SHORT";
+
+  const qtyRaw = row["Filled Qty"] !== undefined && row["Filled Qty"] !== "" ? row["Filled Qty"] : row["filledQty"];
+  const qty = parseLocaleNumber(qtyRaw);
+
+  const priceRaw = row["Avg Fill Price"] !== undefined && row["Avg Fill Price"] !== "" ? row["Avg Fill Price"] : (row["avgPrice"] || row["avg Fill Price"]);
+  const price = parseLocaleNumber(priceRaw);
+
+  const notionalStr = String(row["Notional Value"] || "").replace(/[^0-9.-]/g, "");
+  const notional = parseLocaleNumber(notionalStr);
+
+  const multiplierRaw = (notional && qty && price && (price * qty > 0)) ? notional / (price * qty) : 1;
+  const finalMultiplier = Math.round(multiplierRaw * 1000) / 1000;
+
+  return {
+    orderId,
+    timestamp: toTimestampMs(timestampRaw),
+    timestampStr: timestampRaw,
+    symbol: contract || symbol,
+    side,
+    qty,
+    price,
+    multiplier: finalMultiplier,
+    currency: String(row["Currency"] || "USD").trim(),
+    raw: row,
+  };
+};
+
+const parseMffCsvTrades = (buffer, defaultCurrency) => {
+  if (!buffer || !buffer.length) {
+    throw new Error("Fichier CSV vide.");
+  }
+  const content = buffer.toString("utf8").replace(/^\uFEFF/, "");
+  if (!content) {
+    throw new Error("Impossible de lire le contenu du CSV.");
+  }
+  const headerLine = content.split(/\r?\n/).find((line) => line.trim().length > 0);
+  if (!headerLine) {
+    throw new Error("Entête CSV introuvable.");
+  }
+  const delimiter = guessDelimiterFromLine(headerLine);
+  const records = parseCsv(content, {
+    columns: createHeaderMapper(),
+    skip_empty_lines: true,
+    delimiter,
+    trim: true,
+  });
+
+  const fills = records.map(mapMffRecordToOrder).filter(Boolean).sort((a, b) => a.timestamp - b.timestamp);
+
+  if (!fills.length) {
+    throw new Error("Aucun ordre exécuté (Filled) ne se trouve dans ce compte via le CSV fourni.");
+  }
+
+  const openPositions = {};
+  const trades = [];
+
+  for (let fill of fills) {
+    const sym = fill.symbol;
+    if (!openPositions[sym] || openPositions[sym].qty === 0) {
+      openPositions[sym] = {
+        side: fill.side,
+        qty: fill.qty,
+        cost: fill.qty * fill.price,
+        orders: [fill],
+        openedAt: fill.timestampStr,
+        multiplier: fill.multiplier,
+        currency: fill.currency
+      };
+      continue;
+    }
+
+    const pos = openPositions[sym];
+    if (pos.side === fill.side) {
+      pos.qty += fill.qty;
+      pos.cost += fill.qty * fill.price;
+      pos.orders.push(fill);
+    } else {
+      let remainingFillQty = fill.qty;
+
+      while (remainingFillQty > 0 && pos.qty > 0) {
+        const closedQty = Math.min(pos.qty, remainingFillQty);
+        const avgEntry = pos.cost / pos.qty;
+        const avgExit = fill.price;
+
+        const pnlPoints = pos.side === "LONG" ? (avgExit - avgEntry) : (avgEntry - avgExit);
+        const grossPnl = pnlPoints * closedQty * pos.multiplier;
+
+        trades.push({
+          externalTradeId: `${pos.orders[0].orderId}-${fill.orderId}`,
+          symbol: sym,
+          direction: pos.side,
+          volume: closedQty,
+          entryPrice: avgEntry,
+          exitPrice: avgExit,
+          pnl: grossPnl,
+          pnlCurrency: pos.currency || defaultCurrency,
+          openedAt: pos.openedAt,
+          closedAt: fill.timestampStr,
+          metadata: {
+            source: "myfundedfutures_csv",
+            importMode: "csv",
+            multiplier: pos.multiplier,
+            openOrderId: pos.orders[0].orderId,
+            closeOrderId: fill.orderId
+          },
+          raw: fill.raw
+        });
+
+        pos.qty -= closedQty;
+        pos.cost -= closedQty * avgEntry;
+        remainingFillQty -= closedQty;
+      }
+
+      if (pos.qty === 0) {
+        openPositions[sym] = null;
+      }
+
+      if (remainingFillQty > 0) {
+        openPositions[sym] = {
+          side: fill.side,
+          qty: remainingFillQty,
+          cost: remainingFillQty * fill.price,
+          orders: [fill],
+          openedAt: fill.timestampStr,
+          multiplier: fill.multiplier,
+          currency: fill.currency
+        };
+      }
+    }
+  }
+
+  if (!trades.length) {
+    throw new Error("Aucun trade clôturé n'a pu être calculé (besoin d'ouvertures puis de fermetures).");
   }
 
   return trades;
@@ -1194,14 +1355,19 @@ const importBrokerCsv = async (accountId, file) => {
     throw new Error("Compte introuvable.");
   }
   const integration = await getIntegrationByAccountId(accountId);
-  if (!integration || integration.type !== "ftmo_csv") {
-    throw new Error("Ce compte ne supporte pas l'import CSV FTMO.");
+  if (!integration || (integration.type !== "ftmo_csv" && integration.type !== "myfundedfutures_csv")) {
+    throw new Error("Ce compte ne supporte pas cet import CSV.");
   }
   if (!file?.buffer || !file.buffer.length) {
     throw new Error("Fichier CSV vide.");
   }
 
-  const trades = parseFtmoCsvTrades(file.buffer, account.currency);
+  let trades = [];
+  if (integration.type === "ftmo_csv") {
+    trades = parseFtmoCsvTrades(file.buffer, account.currency);
+  } else if (integration.type === "myfundedfutures_csv") {
+    trades = parseMffCsvTrades(file.buffer, account.currency);
+  }
   const insertedTrades = await bulkUpsertBrokerTrades(accountId, trades);
   const timestamp = new Date().toISOString();
   const latestTradeIso = getLatestTradeTimestamp(

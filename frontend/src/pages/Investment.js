@@ -173,6 +173,7 @@ export default function Investment() {
             }
         }, 1500);
         return () => { isMounted = false; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const totalPnL = data.currentPortValue - data.totalInvested;
