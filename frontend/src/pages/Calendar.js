@@ -471,7 +471,7 @@ const Calendar = () => {
           zIndex: 1
         }}
       >
-        <Container maxWidth="xl">
+        <Container maxWidth={false}>
           <Typography
             variant="h3"
             fontWeight={800}
@@ -493,7 +493,7 @@ const Calendar = () => {
       </Box>
 
       {/* CONTENT */}
-      <Container maxWidth="xl" sx={{ mt: -6, pb: 8, position: 'relative', zIndex: exporting ? 9999 : 2 }}> {/* Small tweaks for z-index if needed */}
+      <Container maxWidth={false} sx={{ mt: -6, pb: 8, position: 'relative', zIndex: exporting ? 9999 : 2 }}> {/* Small tweaks for z-index if needed */}
 
         {/* HORIZONTAL FILTERS */}
         {!exporting && (
@@ -565,7 +565,21 @@ const Calendar = () => {
               backdropFilter: "blur(10px)",
               minHeight: 700,
               // FullCalendar Customization
-              "& .fc": { fontFamily: 'inherit' },
+              "& .fc": {
+                fontFamily: 'inherit',
+                width: '100%',
+                maxWidth: '100%'
+              },
+              "& .fc-view": {
+                width: '100%'
+              },
+              "& .fc-scrollgrid": {
+                width: '100% !important'
+              },
+              "& .fc-scrollgrid-sync-table": {
+                width: '100% !important',
+                height: '100%'
+              },
               "& .fc-theme-standard td, & .fc-theme-standard th": { borderColor: theme.palette.divider },
               "& .fc-col-header-cell": {
                 py: 2,
