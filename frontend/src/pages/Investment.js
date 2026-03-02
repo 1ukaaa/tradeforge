@@ -249,8 +249,8 @@ export default function Investment() {
     const [txForm, setTxForm] = useState({ type: "buy", quantity: "", price: "", currency: "USD", tx_date: "", notes: "" });
     const [txLoading, setTxLoading] = useState(false);
     const [txMap, setTxMap] = useState({});                    // { [investmentId]: transactions[] }
-    const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
-    const [historyFilter, setHistoryFilter] = useState("all"); // 'all' | investmentId
+    // const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+    // const [historyFilter, setHistoryFilter] = useState("all"); // 'all' | investmentId
     const [showClosed, setShowClosed] = useState(false);     // toggle closed positions
     const [plShowPct, setPlShowPct] = useState(false);       // toggle P&L: amount vs percent
 
@@ -1334,7 +1334,7 @@ export default function Investment() {
                                         <Table size="small">
                                             <TableBody>
                                                 {data.investments.filter(i => i.quantity === 0).map((inv, idx) => {
-                                                    const dotColor = "#888";
+                                                    // const dotColor = "#888";
                                                     const isExpanded = expandedRow === inv.id;
                                                     const txs = txMap[inv.id] || [];
                                                     const txCount = txs.length;
