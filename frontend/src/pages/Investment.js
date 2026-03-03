@@ -12,6 +12,7 @@ import {
     Fade,
     IconButton,
     Tooltip as MuiTooltip,
+    Skeleton,
     Stack,
     Table,
     TableBody,
@@ -24,7 +25,7 @@ import {
     alpha,
     useTheme
 } from "@mui/material";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Area,
     AreaChart,
@@ -221,6 +222,7 @@ const renderActiveShape = (props) => {
 export default function Investment() {
     const theme = useTheme();
     const isDark = theme.palette.mode === "dark";
+    const isMobile = theme.breakpoints.values.sm > window.innerWidth;
 
     const [loading, setLoading] = useState(true);
     const [period, setPeriod] = useState("1y");
@@ -253,6 +255,7 @@ export default function Investment() {
     // const [historyFilter, setHistoryFilter] = useState("all"); // 'all' | investmentId
     const [showClosed, setShowClosed] = useState(false);     // toggle closed positions
     const [plShowPct, setPlShowPct] = useState(false);       // toggle P&L: amount vs percent
+    const [holdingsSort, setHoldingsSort] = useState("weight_desc"); // sort for holdings table
 
 
     const loadData = async (forceRefresh = false) => {
@@ -295,14 +298,17 @@ export default function Investment() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const totalPnL = data.currentPortValue - data.totalInvested;
-    const eurToUsdRate = data.eurToUsdRate || 1;
+    const totalPnL = useMemo(() => data.currentPortValue - data.totalInvested, [data.currentPortValue, data.totalInvested]);
+    const eurToUsdRate = useMemo(() => data.eurToUsdRate || 1, [data.eurToUsdRate]);
     const isUSD = currency === "USD";
     const multiplier = isUSD ? eurToUsdRate : 1;
     const cc = isUSD ? "USD" : "EUR";
-    const perfPct = data.totalInvested ? ((totalPnL / data.totalInvested) * 100).toFixed(2) : 0;
+    const perfPct = useMemo(() =>
+        data.totalInvested ? ((totalPnL / data.totalInvested) * 100).toFixed(2) : 0,
+        [totalPnL, data.totalInvested]
+    );
 
-    const handleAddInvestment = async () => {
+    const handleAddInvestment = useCallback(async () => {
         await addInvestment({
             ticker: form.ticker,
             quantity: parseFloat(form.quantity),
@@ -314,68 +320,99 @@ export default function Investment() {
         setForm({ ticker: "", quantity: "", average_price: "", buy_date: "", currency: "USD" });
         setCache({});
         loadData(true);
-    };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [form]);
 
-    const handleDelete = async (id) => {
+    const handleDelete = useCallback(async (id) => {
         await deleteInvestment(id);
         setCache({});
         loadData(true);
-    };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // ── Transaction handlers ──────────────────────────────────────
-    const loadTransactions = async (investmentId, force = false) => {
+    const loadTransactions = useCallback(async (investmentId, force = false) => {
         if (!force && txMap[investmentId]) return; // already cached
         try {
             const txs = await getTransactions(investmentId);
             setTxMap(prev => ({ ...prev, [investmentId]: txs }));
         } catch (e) { console.error(e); }
-    };
+    }, [txMap]);
 
-    const handleExpandRow = (invId) => {
-        if (expandedRow === invId) {
-            setExpandedRow(null);
-        } else {
-            setExpandedRow(invId);
+    const handleExpandRow = useCallback((invId) => {
+        setExpandedRow(prev => {
+            if (prev === invId) return null;
             loadTransactions(invId);
-        }
-    };
+            return invId;
+        });
+    }, [loadTransactions]);
 
-    const handleOpenTxDialog = (inv) => {
+    const handleOpenTxDialog = useCallback((inv) => {
         const defaultCurrency = (inv.native_currency || inv.currency || "USD").toUpperCase() === "EUR" ? "EUR" : "USD";
         setTxDialogInv(inv);
         setTxForm({ type: "buy", quantity: "", price: "", currency: defaultCurrency, tx_date: "", notes: "" });
-    };
+    }, []);
 
-    const handleAddTransaction = async () => {
+    const handleAddTransaction = useCallback(async () => {
         if (!txDialogInv) return;
         setTxLoading(true);
         try {
             await addTransaction(txDialogInv.id, txForm);
+            const savedInvId = txDialogInv.id;
             setTxDialogInv(null);
-            // Refresh transactions for this investment
-            await loadTransactions(txDialogInv.id, true);
+            await loadTransactions(savedInvId, true);
             setCache({});
             loadData(true);
         } catch (e) { console.error(e); }
         setTxLoading(false);
-    };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [txDialogInv, txForm, loadTransactions]);
 
-    const handleDeleteTransaction = async (txId, investmentId) => {
+    const handleDeleteTransaction = useCallback(async (txId, investmentId) => {
         await deleteTransaction(txId);
         await loadTransactions(investmentId, true);
         setCache({});
         loadData(true);
-    };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [loadTransactions]);
+
+    const handleDonutEnter = useCallback((_, index) => setActiveDonutIndex(index), []);
 
     // Donut chart data
-    const donutData = data.investments
+    const donutData = useMemo(() => data.investments
         .filter(inv => inv.current_value > 0)
         .map((inv, i) => ({
             ticker: inv.ticker,
             shortName: inv.longName ? (inv.longName.length > 20 ? inv.longName.slice(0, 20) + "…" : inv.longName) : inv.ticker,
             value: (inv.current_value || 0) * multiplier,
             color: DONUT_COLORS[i % DONUT_COLORS.length],
-        }));
+        })), [data.investments, multiplier]);
+
+    // Holdings sort options
+    const HOLDINGS_SORTS = [
+        { id: "weight_desc", label: "Poids" },
+        { id: "value_desc", label: "Valeur ↓" },
+        { id: "value_asc", label: "Valeur ↑" },
+        { id: "gain_desc", label: "+Value" },
+        { id: "loss_desc", label: "-Value" },
+        { id: "pct_desc", label: "Perf. ↑" },
+        { id: "pct_asc", label: "Perf. ↓" },
+    ];
+
+    const sortedInvestments = useMemo(() => {
+        const open = data.investments.filter(i => i.quantity > 0);
+        const sorted = [...open];
+        switch (holdingsSort) {
+            case "value_desc": sorted.sort((a, b) => (b.current_value || 0) - (a.current_value || 0)); break;
+            case "value_asc": sorted.sort((a, b) => (a.current_value || 0) - (b.current_value || 0)); break;
+            case "gain_desc": sorted.sort((a, b) => (b.profit_loss || 0) - (a.profit_loss || 0)); break;
+            case "loss_desc": sorted.sort((a, b) => (a.profit_loss || 0) - (b.profit_loss || 0)); break;
+            case "pct_desc": sorted.sort((a, b) => (b.profit_loss_pct || 0) - (a.profit_loss_pct || 0)); break;
+            case "pct_asc": sorted.sort((a, b) => (a.profit_loss_pct || 0) - (b.profit_loss_pct || 0)); break;
+            default: sorted.sort((a, b) => (b.current_value || 0) - (a.current_value || 0)); break; // weight_desc
+        }
+        return sorted;
+    }, [data.investments, holdingsSort]);
 
     const MANUAL_LOGOS = {
         // US Mega-caps
@@ -427,7 +464,13 @@ export default function Investment() {
 
             {/* ── HEADER ───────────────────────────────────── */}
             <Fade in timeout={400}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+                <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    justifyContent="space-between"
+                    alignItems={{ xs: "flex-start", sm: "center" }}
+                    gap={2}
+                    sx={{ mb: 4 }}
+                >
                     <Box>
                         <Typography
                             sx={{
@@ -527,8 +570,24 @@ export default function Investment() {
             </Fade>
 
             {loading ? (
-                <Box sx={{ py: 20, display: "flex", justifyContent: "center" }}>
-                    <CircularProgress color="secondary" />
+                <Box sx={{ pt: 1, pb: 6 }}>
+                    {/* KPI skeletons */}
+                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", md: "repeat(3,1fr)" }, gap: 2, mb: 3 }}>
+                        {[0, 1, 2].map(i => (
+                            <Skeleton key={i} variant="rounded" height={110} animation="wave"
+                                sx={{ borderRadius: "20px", bgcolor: isDark ? alpha("#FFF", 0.04) : alpha("#000", 0.06) }} />
+                        ))}
+                    </Box>
+                    {/* Chart skeleton */}
+                    <Skeleton variant="rounded" height={320} animation="wave"
+                        sx={{ borderRadius: "20px", mb: 2.5, bgcolor: isDark ? alpha("#FFF", 0.04) : alpha("#000", 0.06) }} />
+                    {/* Table rows skeleton */}
+                    <Skeleton variant="rounded" height={52} animation="wave"
+                        sx={{ borderRadius: "12px", mb: 1, bgcolor: isDark ? alpha("#FFF", 0.04) : alpha("#000", 0.06) }} />
+                    {[0, 1, 2, 3, 4].map(i => (
+                        <Skeleton key={i} variant="rounded" height={68} animation="wave"
+                            sx={{ borderRadius: "8px", mb: 0.5, bgcolor: isDark ? alpha("#FFF", 0.025) : alpha("#000", 0.04) }} />
+                    ))}
                 </Box>
             ) : (
                 <Fade in timeout={600}>
@@ -611,7 +670,7 @@ export default function Investment() {
                                                         innerRadius={72}
                                                         outerRadius={100}
                                                         dataKey="value"
-                                                        onMouseEnter={(_, index) => setActiveDonutIndex(index)}
+                                                        onMouseEnter={handleDonutEnter}
                                                         stroke="none"
                                                     >
                                                         {donutData.map((entry, index) => (
@@ -716,7 +775,7 @@ export default function Investment() {
                                     flexDirection: "column",
                                 }}
                             >
-                                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 3 }}>
+                                <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "flex-start" }} gap={1.5} sx={{ mb: 3 }}>
                                     <Box>
                                         <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", color: "text.primary", mb: 0.5 }}>
                                             Évolution du Portefeuille
@@ -727,7 +786,7 @@ export default function Investment() {
                                     </Box>
 
                                     {/* Period selector */}
-                                    <Stack direction="row" spacing={0.5} sx={{ bgcolor: isDark ? alpha("#FFF", 0.05) : alpha("#000", 0.03), p: 0.5, borderRadius: "10px" }}>
+                                    <Stack direction="row" flexWrap="wrap" gap={0.5} sx={{ bgcolor: isDark ? alpha("#FFF", 0.05) : alpha("#000", 0.03), p: 0.5, borderRadius: "10px" }}>
                                         {periods.map((opt) => (
                                             <Button
                                                 key={opt.value}
@@ -754,7 +813,7 @@ export default function Investment() {
                                     </Stack>
                                 </Stack>
 
-                                <Box sx={{ flex: 1, minHeight: 0 }}>
+                                <Box sx={{ height: 300, width: "100%" }}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart
                                             data={data.chart.map((c) => ({
@@ -857,19 +916,15 @@ export default function Investment() {
                             }}
                         >
                             {/* Table Header */}
-                            <Stack
-                                direction="row"
-                                alignItems="center"
-                                justifyContent="space-between"
-                                sx={{ px: 3, pt: 3, pb: 2, borderBottom: `1px solid ${theme.palette.divider}` }}
-                            >
-                                <Stack direction="row" alignItems="center" spacing={1.5}>
+                            <Box sx={{ px: 3, pt: 3, pb: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                                {/* Title row */}
+                                <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
                                     <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", color: "text.primary" }}>
                                         Actifs Détenus
                                     </Typography>
                                     {data.investments.length > 0 && (
                                         <Chip
-                                            label={data.investments.length}
+                                            label={sortedInvestments.length}
                                             size="small"
                                             sx={{
                                                 bgcolor: isDark ? alpha(accentColor, 0.15) : alpha(accentColor, 0.1),
@@ -881,9 +936,72 @@ export default function Investment() {
                                         />
                                     )}
                                 </Stack>
-                            </Stack>
 
-                            <TableContainer>
+                                {/* Sort pills — horizontal scroll on mobile */}
+                                <Box
+                                    sx={{
+                                        overflowX: "auto",
+                                        overflowY: "hidden",
+                                        /* hide scrollbar cross-browser */
+                                        scrollbarWidth: "none",
+                                        "&::-webkit-scrollbar": { display: "none" },
+                                        mx: -0.5,
+                                        px: 0.5,
+                                    }}
+                                >
+                                    <Box
+                                        sx={{
+                                            display: "inline-flex",
+                                            flexWrap: "nowrap",
+                                            gap: 0.5,
+                                            alignItems: "center",
+                                            bgcolor: isDark ? alpha("#FFF", 0.04) : alpha("#000", 0.03),
+                                            border: `1px solid ${isDark ? alpha("#FFF", 0.07) : alpha("#000", 0.07)}`,
+                                            borderRadius: "10px",
+                                            p: 0.5,
+                                            minWidth: "max-content",
+                                        }}
+                                    >
+                                        {HOLDINGS_SORTS.map((opt) => {
+                                            const isActive = holdingsSort === opt.id;
+                                            return (
+                                                <Box
+                                                    key={opt.id}
+                                                    onClick={() => setHoldingsSort(opt.id)}
+                                                    sx={{
+                                                        px: 1.4,
+                                                        py: 0.55,
+                                                        borderRadius: "7px",
+                                                        cursor: "pointer",
+                                                        fontSize: "0.72rem",
+                                                        fontWeight: isActive ? 700 : 500,
+                                                        letterSpacing: isActive ? "0.01em" : "0",
+                                                        transition: "all 0.15s",
+                                                        bgcolor: isActive ? accentColor : "transparent",
+                                                        color: isActive ? "#fff" : "text.secondary",
+                                                        boxShadow: isActive
+                                                            ? `0 2px 8px ${alpha(accentColor, isDark ? 0.45 : 0.3)}`
+                                                            : "none",
+                                                        "&:hover": {
+                                                            bgcolor: isActive
+                                                                ? accentColor
+                                                                : isDark ? alpha("#FFF", 0.08) : alpha("#000", 0.05),
+                                                            color: isActive ? "#fff" : "text.primary",
+                                                        },
+                                                        userSelect: "none",
+                                                        whiteSpace: "nowrap",
+                                                        flexShrink: 0,
+                                                    }}
+                                                >
+                                                    {opt.label}
+                                                </Box>
+                                            );
+                                        })}
+                                    </Box>
+                                </Box>
+                            </Box>
+
+                            <TableContainer sx={{ overflowX: "auto" }}>
                                 <Table>
                                     <TableHead>
                                         <TableRow
@@ -901,17 +1019,17 @@ export default function Investment() {
                                             }}
                                         >
                                             <TableCell sx={{ pl: 3 }}>Actif</TableCell>
-                                            <TableCell align="right">Quantité</TableCell>
-                                            <TableCell align="right">PRU</TableCell>
+                                            <TableCell align="right" sx={{ display: { xs: "none", md: "table-cell" } }}>Quantité</TableCell>
+                                            <TableCell align="right" sx={{ display: { xs: "none", sm: "table-cell" } }}>PRU</TableCell>
                                             <TableCell align="right">Prix Actuel</TableCell>
                                             <TableCell align="right">Valeur</TableCell>
                                             <TableCell align="right">+/- Value</TableCell>
-                                            <TableCell align="right">Poids</TableCell>
+                                            <TableCell align="right" sx={{ display: { xs: "none", lg: "table-cell" } }}>Poids</TableCell>
                                             <TableCell align="center" sx={{ pr: 3 }}>Actions</TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {data.investments.filter(i => i.quantity > 0).map((inv, idx) => {
+                                        {sortedInvestments.map((inv, idx) => {
                                             const logoUrl = MANUAL_LOGOS[inv.ticker]
                                                 || (inv.website ? `https://logo.clearbit.com/${inv.website}` : null);
                                             const isPos = (inv.profit_loss || 0) >= 0;
@@ -989,10 +1107,10 @@ export default function Investment() {
                                                             </Stack>
                                                         </TableCell>
 
-                                                        <TableCell align="right">
+                                                        <TableCell align="right" sx={{ display: { xs: "none", md: "table-cell" } }}>
                                                             {inv.quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })}
                                                         </TableCell>
-                                                        <TableCell align="right">
+                                                        <TableCell align="right" sx={{ display: { xs: "none", sm: "table-cell" } }}>
                                                             {new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc }).format(inv.average_price * multiplier)}
                                                         </TableCell>
                                                         <TableCell align="right">
@@ -1014,8 +1132,8 @@ export default function Investment() {
                                                             </Box>
                                                         </TableCell>
 
-                                                        {/* Weight */}
-                                                        <TableCell align="right">
+                                                        {/* Weight — hidden on mobile */}
+                                                        <TableCell align="right" sx={{ display: { xs: "none", lg: "table-cell" } }}>
                                                             <Stack alignItems="flex-end" spacing={0.5}>
                                                                 <Typography sx={{ fontFamily: MONO_FONT, fontSize: "0.82rem", fontWeight: 700, color: dotColor }}>
                                                                     {weight}%

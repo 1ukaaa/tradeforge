@@ -31,6 +31,7 @@ import {
   Stack,
   Tooltip,
   Typography,
+  useMediaQuery,
   useTheme
 } from "@mui/material";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -224,7 +225,7 @@ const AccountSelector = ({ accounts, selectedAccounts, onChange }) => {
         }}
       >
         <WorkOutlineIcon sx={{ fontSize: 12, color: allSelected ? 'text.secondary' : '#4F8EF7' }} />
-        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: allSelected ? 'text.secondary' : '#4F8EF7', whiteSpace: 'nowrap' }}>{label}</Typography>
+        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: allSelected ? 'text.secondary' : '#4F8EF7', whiteSpace: 'nowrap', display: { xs: 'none', sm: 'block' } }}>{label}</Typography>
         <FilterListIcon sx={{ fontSize: 11, color: 'text.secondary' }} />
       </Box>
       {open && (
@@ -288,7 +289,7 @@ const ModelSelector = ({ selectedModel, onChange }) => {
         }}
       >
         <AutoAwesomeIcon sx={{ fontSize: 12, color: '#7C3AED' }} />
-        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#7C3AED', whiteSpace: 'nowrap' }}>{label}</Typography>
+        <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#7C3AED', whiteSpace: 'nowrap', display: { xs: 'none', sm: 'block' } }}>{label}</Typography>
         <FilterListIcon sx={{ fontSize: 11, color: 'text.secondary' }} />
       </Box>
       {open && (
@@ -437,9 +438,10 @@ const generateSuggestedQuestions = (entries) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // SIDEBAR SESSIONS
 // ─────────────────────────────────────────────────────────────────────────────
-const SessionSidebar = ({ open, sessions, activeSessionId, onSelect, onCreate, onDelete, onRename }) => {
+const SessionSidebar = ({ open, sessions, activeSessionId, onSelect, onCreate, onDelete, onRename, onClose }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
 
@@ -451,18 +453,18 @@ const SessionSidebar = ({ open, sessions, activeSessionId, onSelect, onCreate, o
 
   const sidebarW = 240;
 
-  return (
+  const inner = (
     <Box
       sx={{
-        width: open ? sidebarW : 0,
-        minWidth: open ? sidebarW : 0,
+        width: sidebarW,
+        height: '100%',
         overflow: 'hidden',
-        transition: 'width 0.25s ease, min-width 0.25s ease',
         borderRight: `1px solid ${theme.palette.divider}`,
         bgcolor: isDark ? '#0E0E12' : '#F8FAFF',
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
+        boxShadow: isMobile ? '4px 0 24px rgba(0,0,0,0.35)' : 'none',
       }}
     >
       <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
@@ -564,6 +566,31 @@ const SessionSidebar = ({ open, sessions, activeSessionId, onSelect, onCreate, o
       </Box>
     </Box>
   );
+
+  if (!open) return null;
+
+  if (isMobile) {
+    return (
+      <ClickAwayListener onClickAway={onClose}>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0, left: 0, bottom: 0,
+            zIndex: 100,
+            display: 'flex',
+          }}
+        >
+          {inner}
+        </Box>
+      </ClickAwayListener>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexShrink: 0, transition: 'width 0.25s ease', width: open ? sidebarW : 0, overflow: 'hidden' }}>
+      {inner}
+    </Box>
+  );
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -572,6 +599,7 @@ const SessionSidebar = ({ open, sessions, activeSessionId, onSelect, onCreate, o
 const TradeForgeAI = () => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const accentBlue = '#4F8EF7';
 
   const [planDescription, setPlanDescription] = useState("");
@@ -607,6 +635,11 @@ const TradeForgeAI = () => {
   const remainingRequests = MAX_REQUESTS_PER_DAY - requestCount;
   const requestPct = (requestCount / MAX_REQUESTS_PER_DAY) * 100;
   const requestColor = requestCount >= MAX_REQUESTS_PER_DAY ? '#FF2D55' : requestCount >= Math.floor(MAX_REQUESTS_PER_DAY * 0.75) ? '#F59E0B' : accentBlue;
+
+  // Fermer la sidebar automatiquement sur mobile
+  useEffect(() => {
+    if (isMobile) setSidebarOpen(false);
+  }, [isMobile]);
 
   // Chargement initial
   useEffect(() => {
@@ -840,27 +873,28 @@ Base-toi UNIQUEMENT sur les données du journal fournies. N'invente aucun chiffr
         borderBottom: `1px solid ${isDark ? 'rgba(79,142,247,0.18)' : 'rgba(79,142,247,0.20)'}`,
         boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 16px rgba(15,23,42,0.06)',
         backdropFilter: 'blur(20px)',
-        px: { xs: 2, md: 3 }, py: 0,
+        px: { xs: 1.5, md: 3 },
         '&::before': {
           content: '""', position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
           background: `linear-gradient(90deg, transparent 0%, ${accentBlue} 40%, ${accentBlue} 60%, transparent 100%)`,
           opacity: isDark ? 0.7 : 0.5,
         },
       }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between" spacing={1.5} sx={{ py: 1.75 }}>
+        {/* ── Ligne principale ── */}
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ py: 1.25, minHeight: 56 }}>
 
-          {/* GAUCHE */}
-          <Stack direction="row" alignItems="center" spacing={1.5}>
+          {/* GAUCHE — identité */}
+          <Stack direction="row" alignItems="center" spacing={1}>
             {/* Toggle sidebar */}
             <IconButton
               size="small"
               onClick={() => setSidebarOpen(p => !p)}
-              sx={{ color: 'text.secondary', '&:hover': { color: accentBlue } }}
+              sx={{ color: 'text.secondary', '&:hover': { color: accentBlue }, flexShrink: 0 }}
             >
               <MenuIcon sx={{ fontSize: 18 }} />
             </IconButton>
 
-            {/* Avatar */}
+            {/* Avatar animé */}
             <Box sx={{ position: 'relative', flexShrink: 0 }}>
               <Box sx={{
                 position: 'absolute', inset: -4, borderRadius: '50%',
@@ -868,93 +902,78 @@ Base-toi UNIQUEMENT sur les données du journal fournies. N'invente aucun chiffr
                 animation: 'ai-glow 2.4s ease-in-out infinite',
                 '@keyframes ai-glow': { '0%, 100%': { opacity: 0.6, transform: 'scale(1)' }, '50%': { opacity: 1, transform: 'scale(1.15)' } },
               }} />
-              <Avatar sx={{ width: 36, height: 36, background: `linear-gradient(135deg, ${accentBlue} 0%, #7C3AED 100%)`, boxShadow: `0 0 14px ${alpha(accentBlue, 0.45)}`, border: `1.5px solid ${alpha(accentBlue, 0.4)}` }}>
-                <AutoAwesomeIcon sx={{ fontSize: 17, color: '#fff' }} />
+              <Avatar sx={{ width: 34, height: 34, background: `linear-gradient(135deg, ${accentBlue} 0%, #7C3AED 100%)`, boxShadow: `0 0 12px ${alpha(accentBlue, 0.4)}`, border: `1.5px solid ${alpha(accentBlue, 0.4)}` }}>
+                <AutoAwesomeIcon sx={{ fontSize: 16, color: '#fff' }} />
               </Avatar>
             </Box>
 
+            {/* Titre + statut */}
             <Box>
               <Stack direction="row" alignItems="center" spacing={1}>
-                <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, letterSpacing: '-0.01em', color: isDark ? 'rgba(255,255,255,0.95)' : 'rgba(15,23,42,0.95)', lineHeight: 1.1 }}>
+                <Typography sx={{ fontSize: { xs: '0.85rem', sm: '0.92rem' }, fontWeight: 800, letterSpacing: '-0.01em', color: isDark ? 'rgba(255,255,255,0.95)' : 'rgba(15,23,42,0.95)', lineHeight: 1.1 }}>
                   TradeForge AI
                 </Typography>
                 {/* LIVE badge */}
                 {(() => {
                   const lc = isDark ? '#00FF66' : '#0D9488';
                   return (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 0.85, py: 0.2, borderRadius: '999px', background: alpha(lc, isDark ? 0.12 : 0.08), border: `1px solid ${alpha(lc, isDark ? 0.3 : 0.22)}` }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 0.75, py: 0.2, borderRadius: '999px', background: alpha(lc, isDark ? 0.12 : 0.08), border: `1px solid ${alpha(lc, isDark ? 0.3 : 0.22)}` }}>
                       <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: lc, boxShadow: isDark ? `0 0 6px ${lc}` : 'none', animation: 'live-pulse 1.8s ease-in-out infinite', '@keyframes live-pulse': { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.35 } } }} />
-                      <Typography sx={{ fontSize: '0.58rem', fontWeight: 800, letterSpacing: '0.08em', color: lc }}>LIVE</Typography>
+                      <Typography sx={{ fontSize: '0.55rem', fontWeight: 800, letterSpacing: '0.08em', color: lc }}>LIVE</Typography>
                     </Box>
                   );
                 })()}
               </Stack>
-              <Typography sx={{ fontSize: '0.68rem', color: isDark ? 'rgba(255,255,255,0.38)' : 'rgba(15,23,42,0.42)', mt: 0.2, fontWeight: 500 }}>
+              {/* Sous-titre — masqué sur très petit écran */}
+              <Typography sx={{ fontSize: '0.65rem', color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(15,23,42,0.4)', mt: 0.1, fontWeight: 500, display: { xs: 'none', sm: 'block' } }}>
                 {filteredJournalEntries.length > 0
-                  ? `${filteredJournalEntries.length} analyse${filteredJournalEntries.length > 1 ? 's' : ''} · ${planDescription ? 'Plan chargé' : 'Sans plan'}`
+                  ? `${filteredJournalEntries.length} entrée${filteredJournalEntries.length > 1 ? 's' : ''} · ${planDescription ? 'Plan actif' : 'Sans plan'}`
                   : 'Aucune donnée chargée'}
               </Typography>
             </Box>
           </Stack>
 
-          {/* DROITE — contrôles */}
-          <Stack direction="row" alignItems="center" spacing={1.25} flexWrap="wrap">
+          {/* DROITE — actions compactes */}
+          <Stack direction="row" alignItems="center" spacing={0.5}>
+
+            {/* Sélecteur de modèle */}
             <ModelSelector selectedModel={selectedModel} onChange={setSelectedModel} />
+
+            {/* Sélecteur de compte */}
             <AccountSelector accounts={brokerAccounts} selectedAccounts={selectedAccounts} onChange={setSelectedAccounts} />
 
-            <Box sx={{ width: '1px', height: 18, bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(15,23,42,0.1)', display: { xs: 'none', sm: 'block' } }} />
+            {/* Séparateur */}
+            <Box sx={{ width: '1px', height: 18, mx: 0.5, bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(15,23,42,0.1)' }} />
 
-            {/* Compteur RPD */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.75, borderRadius: '10px', background: isDark ? alpha('#fff', 0.04) : alpha('#0F172A', 0.04), border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)'}`, minWidth: 115 }}>
-              <Box sx={{ flex: 1 }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.4}>
-                  <Typography sx={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: isDark ? 'rgba(255,255,255,0.38)' : 'rgba(15,23,42,0.4)' }}>Requêtes</Typography>
-                  <Typography sx={{ fontSize: '0.7rem', fontWeight: 800, color: requestColor, fontFamily: '"JetBrains Mono", monospace' }}>{remainingRequests}/{MAX_REQUESTS_PER_DAY}</Typography>
-                </Stack>
-                <Box sx={{ height: 3, borderRadius: 99, bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)', overflow: 'hidden' }}>
-                  <Box sx={{ height: '100%', width: `${100 - requestPct}%`, borderRadius: 99, bgcolor: requestColor, boxShadow: requestCount < MAX_REQUESTS_PER_DAY ? `0 0 6px ${requestColor}80` : 'none', transition: 'width 0.4s ease, background-color 0.3s' }} />
-                </Box>
-              </Box>
-            </Box>
-
-            {/* Plan actif */}
-            {planDescription && (
-              <Box sx={{ px: 1.1, py: 0.5, borderRadius: '8px', background: alpha(isDark ? '#00FF66' : '#0D9488', isDark ? 0.08 : 0.07), border: `1px solid ${alpha(isDark ? '#00FF66' : '#0D9488', 0.25)}`, display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                <DescriptionIcon sx={{ fontSize: 12, color: isDark ? '#00FF66' : '#0F766E' }} />
-                <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.05em', color: isDark ? '#00FF66' : '#0F766E' }}>PLAN</Typography>
-              </Box>
-            )}
-
-            <Box sx={{ width: '1px', height: 18, bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(15,23,42,0.1)', display: { xs: 'none', sm: 'block' } }} />
-
-            {/* Rapport hebdo */}
+            {/* Rapport hebdo — icône seule sur mobile, label sur desktop */}
             <Tooltip title="Générer le rapport de la semaine" placement="bottom">
               <Box
                 onClick={handleGenerateWeeklyReport}
                 sx={{
-                  display: 'flex', alignItems: 'center', gap: 0.75,
-                  px: 1.25, py: 0.6, borderRadius: '8px', cursor: 'pointer',
-                  background: `linear-gradient(135deg, ${alpha('#7C3AED', isDark ? 0.18 : 0.1)}, ${alpha('#4F8EF7', isDark ? 0.12 : 0.08)})`,
-                  border: `1px solid ${alpha('#7C3AED', 0.28)}`,
+                  display: 'flex', alignItems: 'center', gap: 0.6,
+                  px: { xs: 0.85, sm: 1.25 }, py: 0.65, borderRadius: '8px', cursor: 'pointer',
+                  background: `linear-gradient(135deg, ${alpha('#7C3AED', isDark ? 0.15 : 0.09)}, ${alpha('#4F8EF7', isDark ? 0.10 : 0.06)})`,
+                  border: `1px solid ${alpha('#7C3AED', 0.25)}`,
                   transition: 'all 0.15s',
-                  '&:hover': { background: `linear-gradient(135deg, ${alpha('#7C3AED', 0.26)}, ${alpha('#4F8EF7', 0.18)})`, borderColor: alpha('#7C3AED', 0.5) },
+                  '&:hover': { borderColor: alpha('#7C3AED', 0.55), background: `linear-gradient(135deg, ${alpha('#7C3AED', 0.24)}, ${alpha('#4F8EF7', 0.16)})` },
                 }}
               >
-                <AssessmentIcon sx={{ fontSize: 13, color: '#7C3AED' }} />
-                <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.03em', color: '#7C3AED', whiteSpace: 'nowrap' }}>Rapport hebdo</Typography>
+                <AssessmentIcon sx={{ fontSize: 14, color: '#7C3AED' }} />
+                <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, color: '#7C3AED', whiteSpace: 'nowrap', display: { xs: 'none', sm: 'block' } }}>Rapport hebdo</Typography>
               </Box>
             </Tooltip>
 
-            <Box sx={{ width: '1px', height: 18, bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(15,23,42,0.1)', display: { xs: 'none', sm: 'block' } }} />
+            {/* Séparateur */}
+            <Box sx={{ width: '1px', height: 18, mx: 0.5, bgcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(15,23,42,0.1)' }} />
 
-            {/* Reset messages session */}
-            <Tooltip title={`Effacer ce chat (${messages.length} messages)`} placement="bottom">
+            {/* Effacer le chat */}
+            <Tooltip title={messages.length > 0 ? `Effacer ce chat (${messages.length} msg)` : 'Aucun message'} placement="bottom">
               <span>
                 <IconButton
                   onClick={handleClearMessages}
                   disabled={messages.length === 0}
                   size="small"
-                  sx={{ width: 28, height: 28, border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(15,23,42,0.1)'}`, borderRadius: '8px', color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', '&:hover': { color: '#FF2D55', borderColor: 'rgba(255,45,85,0.4)', bgcolor: 'rgba(255,45,85,0.08)' }, '&.Mui-disabled': { opacity: 0.3 } }}
+                  sx={{ width: 30, height: 30, border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(15,23,42,0.1)'}`, borderRadius: '8px', color: isDark ? 'rgba(255,255,255,0.38)' : 'rgba(15,23,42,0.38)', '&:hover': { color: '#FF2D55', borderColor: 'rgba(255,45,85,0.4)', bgcolor: 'rgba(255,45,85,0.07)' }, '&.Mui-disabled': { opacity: 0.25 } }}
                 >
                   <DeleteOutlineIcon sx={{ fontSize: 14 }} />
                 </IconButton>
@@ -962,10 +981,45 @@ Base-toi UNIQUEMENT sur les données du journal fournies. N'invente aucun chiffr
             </Tooltip>
           </Stack>
         </Stack>
+
+        {/* ── Barre d'état condensée (requêtes + plan) ── */}
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1.5}
+          sx={{
+            pb: 0.85,
+            borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)'}`,
+            pt: 0.6,
+          }}
+        >
+          {/* Compteur requêtes — compact */}
+          <Tooltip title={`${remainingRequests} requête${remainingRequests > 1 ? 's' : ''} restante${remainingRequests > 1 ? 's' : ''} aujourd'hui`} placement="bottom">
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1 }}>
+              <Typography sx={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: isDark ? 'rgba(255,255,255,0.28)' : 'rgba(15,23,42,0.32)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                Requêtes
+              </Typography>
+              <Box sx={{ flex: 1, height: 3, borderRadius: 99, bgcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)', overflow: 'hidden', maxWidth: 120 }}>
+                <Box sx={{ height: '100%', width: `${100 - requestPct}%`, borderRadius: 99, bgcolor: requestColor, boxShadow: requestCount < MAX_REQUESTS_PER_DAY ? `0 0 5px ${requestColor}70` : 'none', transition: 'width 0.4s ease, background-color 0.3s' }} />
+              </Box>
+              <Typography sx={{ fontSize: '0.62rem', fontWeight: 800, color: requestColor, fontFamily: '"JetBrains Mono", monospace', flexShrink: 0 }}>
+                {remainingRequests}/{MAX_REQUESTS_PER_DAY}
+              </Typography>
+            </Stack>
+          </Tooltip>
+
+          {/* Badge Plan actif */}
+          {planDescription && (
+            <Stack direction="row" alignItems="center" spacing={0.5}>
+              <DescriptionIcon sx={{ fontSize: 11, color: isDark ? '#00FF66' : '#0F766E' }} />
+              <Typography sx={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.05em', color: isDark ? '#00FF66' : '#0F766E' }}>Plan actif</Typography>
+            </Stack>
+          )}
+        </Stack>
       </Box>
 
       {/* ── CORPS (sidebar + chat) ──────────────────────────────────────── */}
-      <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
 
         {/* Sidebar sessions */}
         <SessionSidebar
@@ -976,6 +1030,7 @@ Base-toi UNIQUEMENT sur les données du journal fournies. N'invente aucun chiffr
           onCreate={handleCreateSession}
           onDelete={handleDeleteSession}
           onRename={handleRenameSession}
+          onClose={() => setSidebarOpen(false)}
         />
 
         {/* Zone de chat */}
