@@ -222,7 +222,6 @@ const renderActiveShape = (props) => {
 export default function Investment() {
     const theme = useTheme();
     const isDark = theme.palette.mode === "dark";
-    const isMobile = theme.breakpoints.values.sm > window.innerWidth;
 
     const [loading, setLoading] = useState(true);
     const [period, setPeriod] = useState("1y");
