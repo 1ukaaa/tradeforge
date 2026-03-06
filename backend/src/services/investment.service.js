@@ -85,7 +85,7 @@ async function getPortfolioChartData(rawPeriod = '1y') {
     let txRows = [];
     try {
         const txResult = await db.execute(
-            `SELECT it.type, it.quantity, it.price, it.currency, it.tx_date
+            `SELECT it.investment_id, it.type, it.quantity, it.price, it.currency, it.tx_date
              FROM investment_transactions it
              ORDER BY it.tx_date ASC`
         );
@@ -129,21 +129,25 @@ async function getPortfolioChartData(rawPeriod = '1y') {
     // ── STEP 1: Fetch EUR/USD rate FIRST so we can normalize all prices ──
     const eurToUsdRate = await getEurToUsdRate();
 
-    // ── Now compute net invested in EUR using real transactions ───────
+    // ── Build per-investment cost map AND global total invested ─────────────
+    // perInvCost[investment_id] = net EUR amount deployed into that specific position
+    const perInvCost = {};
     let totalInvestedStatic = 0;
+
     if (txRows.length > 0) {
         for (const tx of txRows) {
-            const txAmount = parseFloat(tx.quantity) * parseFloat(tx.price); // total in tx.currency
+            const txAmount = parseFloat(tx.quantity) * parseFloat(tx.price);
             const txAmountEur = toEur(txAmount, tx.currency || 'USD', eurToUsdRate);
+            const invId = tx.investment_id ? String(tx.investment_id) : null;
+
             if (tx.type === 'buy') {
                 totalInvestedStatic += txAmountEur;
+                if (invId) perInvCost[invId] = (perInvCost[invId] || 0) + txAmountEur;
             } else if (tx.type === 'sell') {
-                totalInvestedStatic -= txAmountEur; // selling recovers capital
+                totalInvestedStatic -= txAmountEur;
+                if (invId) perInvCost[invId] = (perInvCost[invId] || 0) - txAmountEur;
             }
         }
-    } else {
-        // Fallback: no transaction data yet — use qty × PRU for active positions only
-        // (will be fixed once transactions are populated)
     }
 
     // ── Initialize caches ────────────────────────────────────────────────
@@ -178,6 +182,32 @@ async function getPortfolioChartData(rawPeriod = '1y') {
     const assetHistories = {}; // { ticker: { timeMs -> closeInEUR } }
     const allTimestampsSet = new Set();
     let currentPortValueStatic = 0;
+    
+    let totalDividendIncome = 0;
+    const allActivities = [];
+
+    // Push all transactions into allActivities
+    txRows.forEach(tx => {
+         const txDate = new Date(tx.tx_date);
+         const amount = tx.quantity * tx.price;
+         const amountEur = toEur(amount, tx.currency || 'USD', eurToUsdRate);
+         const inv = investments.find(i => String(i.id) === String(tx.investment_id));
+         const ticker = inv ? inv.ticker : 'Unknown';
+         const longName = inv ? inv.longName || inv.ticker : 'Unknown';
+
+         allActivities.push({
+             type: 'transaction',
+             txType: tx.type, // 'buy' or 'sell'
+             title: tx.type === 'buy' ? `Achat de ${ticker}` : `Vente de ${ticker}`,
+             timeMs: txDate.getTime(),
+             amount: amountEur,
+             amountStr: (tx.type === 'buy' ? '+' : '-') + new Intl.NumberFormat('fr-FR', {style: 'currency', currency: 'EUR'}).format(amountEur),
+             status: 'Complété',
+             color: tx.type === 'buy' ? 'success.main' : 'error.main',
+             icon: tx.type === 'buy' ? '📈' : '📉',
+             ticker: ticker
+         });
+    });
 
     // ── Compute totalInvested from real transaction flows ──────────────
     // We need eurToUsdRate first — it's fetched below in STEP 1, so we'll
@@ -187,7 +217,7 @@ async function getPortfolioChartData(rawPeriod = '1y') {
     await Promise.all(investments.map(async (inv) => {
         assetHistories[inv.ticker] = {};
         try {
-            const queryOptions = { period1, period2, interval };
+            const queryOptions = { period1, period2, interval, events: 'div' };
             const chartKey = `${inv.ticker}_${period}`;
             const quoteKey = inv.ticker;
             const nowTime = Date.now();
@@ -244,14 +274,32 @@ async function getPortfolioChartData(rawPeriod = '1y') {
 
             // ── Enrich investment object (all values in EUR) ─────────────
             inv.current_price = currentPriceEur;
-            inv.average_price = avgPriceEur;           // overwrite with EUR-normalized value
             inv.native_currency = nativeCurrency;      // expose for debugging
             inv.longName = quote.longName || quote.shortName || inv.ticker;
 
             inv.current_value = inv.quantity * currentPriceEur;
-            inv.invested_amount = inv.quantity * avgPriceEur;
+
+            // ── PRU : toujours utiliser le average_price stocké en base ──────────
+            // transaction.service.js maintient ce PRU en devise native de manière
+            // précise (LIFO / coût moyen pondéré). On le convertit en EUR au taux actuel.
+            // IMPORTANT : on NE recalcule PAS le PRU depuis perInvCost car ce calcul
+            // utilise le taux EUR/USD du JOUR et varie d'une requête à l'autre.
+            inv.average_price = avgPriceEur; // PRU stable en EUR
+
+            // ── Montant investi : utiliser les vraies transactions si dispo ──────
+            const invIdStr = String(inv.id);
+            const hasTxCost = perInvCost[invIdStr] !== undefined && perInvCost[invIdStr] > 0;
+
+            if (hasTxCost) {
+                // invested_amount = capital net déployé en EUR (achats - ventes)
+                inv.invested_amount = perInvCost[invIdStr];
+            } else {
+                // Pas de transactions → fallback qty × PRU
+                inv.invested_amount = inv.quantity * avgPriceEur;
+            }
+
             inv.profit_loss = inv.current_value - inv.invested_amount;
-            inv.profit_loss_pct = inv.invested_amount !== 0
+            inv.profit_loss_pct = inv.invested_amount > 0
                 ? (inv.profit_loss / inv.invested_amount) * 100
                 : 0;
 
@@ -277,6 +325,56 @@ async function getPortfolioChartData(rawPeriod = '1y') {
                     global.domainCache[inv.ticker] = null;
                 }
             }
+
+            // ── Dividends Processing ──────────────────────────────────────
+            const divs = chartRes.events?.dividends || chartRes.events?.dividend || [];
+            // "dividends" might be an array or an object in some API versions, usually an array array in yahoo-finance2 chart events
+            const divList = Array.isArray(divs) ? divs : Object.values(divs);
+            
+            const invIdStr2 = String(inv.id);
+            const myTxs = txRows.filter(t => String(t.investment_id) === invIdStr2).sort((a, b) => new Date(a.tx_date) - new Date(b.tx_date));
+
+            function getSharesAtDate(dateObj) {
+                if (myTxs.length > 0) {
+                    let s = 0;
+                    for (const tx of myTxs) {
+                        if (new Date(tx.tx_date) <= dateObj) {
+                            s += (tx.type === 'buy' ? parseFloat(tx.quantity) : -parseFloat(tx.quantity));
+                        } else {
+                            break;
+                        }
+                    }
+                    return s;
+                } else {
+                    if (!inv.buy_date || new Date(inv.buy_date) <= dateObj) {
+                        return inv.quantity;
+                    }
+                    return 0;
+                }
+            }
+
+            divList.forEach(div => {
+                const divDate = new Date(div.date);
+                if (divDate >= period1 && divDate <= period2) {
+                    const shares = getSharesAtDate(divDate);
+                    if (shares > 0) {
+                        const divAmountNative = shares * div.amount;
+                        const divAmountEur = toEur(divAmountNative, nativeCurrency, eurToUsdRate);
+                        totalDividendIncome += divAmountEur;
+                        allActivities.push({
+                            type: 'dividend',
+                            title: `Dividende ${inv.ticker}`,
+                            timeMs: divDate.getTime(),
+                            amount: divAmountEur,
+                            amountStr: '+' + new Intl.NumberFormat('fr-FR', {style: 'currency', currency: 'EUR'}).format(divAmountEur),
+                            status: 'Complété',
+                            color: 'success.main',
+                            icon: '📥',
+                            ticker: inv.ticker
+                        });
+                    }
+                }
+            });
 
         } catch (e) {
             console.error("Error fetching yahoo finance for", inv.ticker, e);
@@ -349,12 +447,17 @@ async function getPortfolioChartData(rawPeriod = '1y') {
         }
     });
 
+    allActivities.sort((a, b) => b.timeMs - a.timeMs);
+    const recentActivity = allActivities.slice(0, 15);
+
     return {
         investments: allInvestments, // all (active + closed) for frontend display
         chart: chartArray,
         totalInvested: totalInvestedStatic,   // EUR — net capital deployed (buys - sells)
         currentPortValue: currentPortValueStatic, // EUR — current market value of active positions
-        eurToUsdRate
+        eurToUsdRate,
+        totalDividendIncome,
+        recentActivity
     };
 }
 

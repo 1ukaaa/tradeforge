@@ -117,10 +117,51 @@ const streamChat = async (req, res) => {
   }
 };
 
+const streamInvestment = async (req, res) => {
+  const { rawText, recentActivity, investments, sessionId = "investment_default", model } = req.body;
+
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+
+  try {
+    const persistentHistory = await aiMemoryService.getHistoryForGemini(sessionId);
+    await aiMemoryService.saveMessage({ sessionId, role: 'user', text: rawText });
+
+    let fullText = "";
+    await geminiService.streamInvestmentAnalysis({
+      rawText,
+      recentActivity,
+      investments,
+      history: persistentHistory,
+      model,
+      onChunk: (accumulatedText) => {
+        fullText = accumulatedText;
+        send("chunk", { text: accumulatedText });
+      },
+    });
+
+    if (fullText) {
+      await aiMemoryService.saveMessage({ sessionId, role: 'ai', text: fullText });
+    }
+
+    send("done", { text: fullText });
+  } catch (err) {
+    send("error", { message: err.message || "Erreur interne." });
+  } finally {
+    res.end();
+  }
+};
+
 module.exports = {
   generateText,
   generateStructured,
   generateImage,
   generateChat,
   streamChat,
+  streamInvestment,
 };

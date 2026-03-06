@@ -1,8 +1,6 @@
 import {
-    Avatar,
     Box,
     Button,
-    Chip,
     CircularProgress,
     Collapse,
     Dialog,
@@ -11,25 +9,27 @@ import {
     DialogTitle,
     Fade,
     IconButton,
-    Tooltip as MuiTooltip,
-    Skeleton,
     Stack,
     Table,
     TableBody,
     TableCell,
     TableContainer,
     TableHead,
+    TablePagination,
     TableRow,
     TextField,
     Typography,
     alpha,
-    useTheme
+    useTheme, InputAdornment, Drawer, Fab
 } from "@mui/material";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import SendRoundedIcon from "@mui/icons-material/SendRounded";
+import AutoAwesomeRoundedIcon from "@mui/icons-material/AutoAwesomeRounded";
 import {
     Area,
     AreaChart,
-    CartesianGrid,
     Cell,
     Pie,
     PieChart,
@@ -37,17 +37,16 @@ import {
     Sector,
     Tooltip,
     XAxis,
-    YAxis,
+    YAxis
 } from "recharts";
 
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
-import ArrowDownwardRoundedIcon from "@mui/icons-material/ArrowDownwardRounded";
-import ArrowUpwardRoundedIcon from "@mui/icons-material/ArrowUpwardRounded";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DeleteIcon from "@mui/icons-material/Delete";
 import HistoryRoundedIcon from "@mui/icons-material/HistoryRounded";
 import TrendingDownRoundedIcon from "@mui/icons-material/TrendingDownRounded";
 import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
+import MonetizationOnRoundedIcon from "@mui/icons-material/MonetizationOnRounded";
 
 import {
     addInvestment,
@@ -59,6 +58,7 @@ import {
     deleteTransaction,
     getTransactions,
 } from "../services/transactionClient";
+import { API_BASE_URL } from "../config/apiConfig";
 
 // ─── Constants ────────────────────────────────────────────────────
 const MONO_FONT = `"JetBrains Mono", "SF Mono", "Fira Code", monospace`;
@@ -71,6 +71,7 @@ const DONUT_COLORS = [
 ];
 
 // ─── KPI Card ─────────────────────────────────────────────────────
+// eslint-disable-next-line no-unused-vars
 const StatCard = ({ label, value, type = "currency", currency = "USD", trendValue = null, icon }) => {
     const theme = useTheme();
     const isDark = theme.palette.mode === "dark";
@@ -180,6 +181,7 @@ const StatCard = ({ label, value, type = "currency", currency = "USD", trendValu
 };
 
 // ─── Custom Donut Active Shape ────────────────────────────────────
+// eslint-disable-next-line no-unused-vars
 const renderActiveShape = (props) => {
     const {
         cx, cy, innerRadius, outerRadius, startAngle, endAngle,
@@ -227,6 +229,7 @@ export default function Investment() {
     const [period, setPeriod] = useState("1y");
     const [currency, setCurrency] = useState("EUR");
     const [cache, setCache] = useState({});
+    // eslint-disable-next-line no-unused-vars
     const [activeDonutIndex, setActiveDonutIndex] = useState(0);
     const [data, setData] = useState({
         investments: [],
@@ -252,9 +255,22 @@ export default function Investment() {
     const [txMap, setTxMap] = useState({});                    // { [investmentId]: transactions[] }
     // const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
     // const [historyFilter, setHistoryFilter] = useState("all"); // 'all' | investmentId
+    // eslint-disable-next-line no-unused-vars
     const [showClosed, setShowClosed] = useState(false);     // toggle closed positions
+    // eslint-disable-next-line no-unused-vars
     const [plShowPct, setPlShowPct] = useState(false);       // toggle P&L: amount vs percent
+    const [page, setPage] = useState(0);
+    const [rowsPerPage, setRowsPerPage] = useState(5);
+    // eslint-disable-next-line no-unused-vars
     const [holdingsSort, setHoldingsSort] = useState("weight_desc"); // sort for holdings table
+    const [chartMode, setChartMode] = useState("value"); // "value" or "profit"
+
+    // AI Chat State
+    const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
+    const [aiMessages, setAiMessages] = useState([]);
+    const [aiInput, setAiInput] = useState("");
+    const [aiLoading, setAiLoading] = useState(false);
+    const messagesEndRef = useRef(null);
 
 
     const loadData = async (forceRefresh = false) => {
@@ -322,6 +338,7 @@ export default function Investment() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [form]);
 
+    // eslint-disable-next-line no-unused-vars
     const handleDelete = useCallback(async (id) => {
         await deleteInvestment(id);
         setCache({});
@@ -375,6 +392,99 @@ export default function Investment() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [loadTransactions]);
 
+    const handleAskAi = async () => {
+        if (!aiInput.trim()) return;
+        const prompt = aiInput.trim();
+        setAiInput("");
+
+        const newMsg = { id: Date.now(), role: "user", text: prompt };
+        setAiMessages(prev => [...prev, newMsg, { id: Date.now() + 1, role: "model", text: "" }]);
+        setAiLoading(true);
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/gemini/investment/stream`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    sessionId: "investment_chat_session",
+                    rawText: prompt,
+                    investments: data.investments,
+                    recentActivity: data.recentActivity
+                }),
+            });
+
+            if (!res.ok) throw new Error("Erreur lors de la communication de flux");
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let accumulatedText = "";
+            let buffer = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                buffer += chunk;
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // keep incomplete line in buffer
+
+                for (let line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const strData = line.slice(6).trim();
+                        if (strData && strData !== "[DONE]") {
+                            try {
+                                const parsed = JSON.parse(strData);
+                                if (parsed.text !== undefined) {
+                                    accumulatedText = parsed.text;
+                                    // eslint-disable-next-line no-loop-func
+                                    setAiMessages(prev => {
+                                        const newMsgs = [...prev];
+                                        const last = newMsgs[newMsgs.length - 1];
+                                        if (last.role === "model") {
+                                            last.text = accumulatedText;
+                                        }
+                                        return newMsgs;
+                                    });
+                                }
+                            } catch (e) {
+                                // ignore
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            setAiMessages(prev => {
+                const newMsgs = [...prev];
+                const last = newMsgs[newMsgs.length - 1];
+                if (last.role === "model") last.text = "Erreur de connexion avec l'IA.";
+                return newMsgs;
+            });
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    const handleClearAiChat = async () => {
+        setAiMessages([]);
+        try {
+            await fetch(`${API_BASE_URL}/ai-memory/sessions/investment_chat_session/messages`, {
+                method: "DELETE",
+            });
+        } catch (e) {
+            console.error("Failed to clear AI memory", e);
+        }
+    };
+
+    useEffect(() => {
+        if (aiDrawerOpen && messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [aiMessages, aiDrawerOpen]);
+
+    // eslint-disable-next-line no-unused-vars
     const handleDonutEnter = useCallback((_, index) => setActiveDonutIndex(index), []);
 
     // Donut chart data
@@ -388,6 +498,7 @@ export default function Investment() {
         })), [data.investments, multiplier]);
 
     // Holdings sort options
+    // eslint-disable-next-line no-unused-vars
     const HOLDINGS_SORTS = [
         { id: "weight_desc", label: "Poids" },
         { id: "value_desc", label: "Valeur ↓" },
@@ -413,6 +524,7 @@ export default function Investment() {
         return sorted;
     }, [data.investments, holdingsSort]);
 
+    // eslint-disable-next-line no-unused-vars
     const MANUAL_LOGOS = {
         // US Mega-caps
         "GOOGL": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1024px-Google_%22G%22_logo.svg.png",
@@ -463,106 +575,20 @@ export default function Investment() {
 
             {/* ── HEADER ───────────────────────────────────── */}
             <Fade in timeout={400}>
-                <Stack
-                    direction={{ xs: "column", sm: "row" }}
-                    justifyContent="space-between"
-                    alignItems={{ xs: "flex-start", sm: "center" }}
-                    gap={2}
-                    sx={{ mb: 4 }}
-                >
+                <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} gap={2} sx={{ mb: 4 }}>
                     <Box>
-                        <Typography
-                            sx={{
-                                fontSize: "0.62rem",
-                                fontWeight: 700,
-                                letterSpacing: "0.14em",
-                                textTransform: "uppercase",
-                                color: "text.secondary",
-                                mb: 0.5,
-                            }}
-                        >
-                            Portefeuille Boursier
-                        </Typography>
-                        <Stack direction="row" alignItems="center" spacing={1.5}>
-                            <Box
-                                sx={{
-                                    width: 36,
-                                    height: 36,
-                                    borderRadius: "10px",
-                                    bgcolor: isDark ? alpha(accentColor, 0.15) : alpha(accentColor, 0.1),
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    border: `1px solid ${alpha(accentColor, 0.2)}`,
-                                }}
-                            >
-                                <TrendingUpRoundedIcon sx={{ fontSize: 20, color: accentColor }} />
-                            </Box>
-                            <Typography
-                                sx={{
-                                    fontSize: { xs: "1.5rem", md: "1.9rem" },
-                                    fontWeight: 800,
-                                    letterSpacing: "-0.04em",
-                                    color: "text.primary",
-                                    lineHeight: 1,
-                                }}
-                            >
-                                Investissements
-                            </Typography>
-                        </Stack>
+                        <Typography sx={{ fontSize: "1.25rem", fontWeight: 700, color: "text.primary", mb: 0.5 }}>Dashboard</Typography>
+                        <Typography sx={{ fontSize: "0.85rem", color: "text.secondary" }}>Welcome back! Here is your dashboard overview.</Typography>
                     </Box>
-
                     <Stack direction="row" spacing={1.5} alignItems="center">
-                        {/* EUR / USD toggle */}
-                        <Box
-                            sx={{
-                                display: "flex",
-                                borderRadius: "12px",
-                                overflow: "hidden",
-                                border: `1px solid ${isDark ? alpha("#FFF", 0.1) : alpha("#000", 0.08)}`,
-                                bgcolor: isDark ? alpha("#FFF", 0.04) : "#F8FAFC",
-                            }}
-                        >
-                            {["EUR", "USD"].map((cur) => (
-                                <Button
-                                    key={cur}
-                                    onClick={() => setCurrency(cur)}
-                                    sx={{
-                                        minWidth: 52,
-                                        px: 1.5,
-                                        py: 0.8,
-                                        fontSize: "0.8rem",
-                                        fontWeight: 700,
-                                        borderRadius: 0,
-                                        color: currency === cur ? (isDark ? "#000" : "#FFF") : "text.secondary",
-                                        bgcolor: currency === cur ? accentColor : "transparent",
-                                        "&:hover": {
-                                            bgcolor: currency === cur ? accentColor : isDark ? alpha("#FFF", 0.06) : alpha("#000", 0.04),
-                                        },
-                                        transition: "all 0.2s",
-                                    }}
-                                >
-                                    {cur === "EUR" ? "€ EUR" : "$ USD"}
-                                </Button>
-                            ))}
-                        </Box>
-
-                        <Button
-                            variant="contained"
-                            color="secondary"
-                            startIcon={<AddRoundedIcon />}
-                            onClick={() => setOpenDialog(true)}
-                            sx={{
-                                borderRadius: "12px",
-                                textTransform: "none",
-                                fontWeight: 700,
-                                fontSize: "0.875rem",
-                                px: 2.5,
-                                py: 1,
-                                boxShadow: isDark ? `0 4px 20px ${alpha(accentColor, 0.45)}` : "none",
-                            }}
-                        >
-                            Ajouter un actif
+                        <Button variant="outlined" onClick={() => setCurrency(currency === "EUR" ? "USD" : "EUR")} sx={{ borderColor: isDark ? "#282346" : "divider", color: "text.primary", textTransform: "none", borderRadius: "10px", px: 2, py: 0.8, bgcolor: isDark ? "#1B1C28" : "background.paper", fontSize: "0.8rem", "&:hover": { bgcolor: isDark ? "#242535" : "action.hover" } }}>
+                            ↓ {currency === "EUR" ? "€ EUR" : "$ USD"}
+                        </Button>
+                        <Button variant="outlined" sx={{ borderColor: isDark ? "#282346" : "divider", color: "text.primary", textTransform: "none", borderRadius: "10px", px: 2, py: 0.8, bgcolor: isDark ? "#1B1C28" : "background.paper", fontSize: "0.8rem", "&:hover": { bgcolor: isDark ? "#242535" : "action.hover" } }}>
+                            ↑ Retrait
+                        </Button>
+                        <Button variant="contained" onClick={() => setOpenDialog(true)} sx={{ bgcolor: isDark ? "#fff" : "#000", color: isDark ? "#000" : "#fff", fontWeight: 600, fontSize: "0.8rem", borderRadius: "10px", px: 2, py: 0.8, textTransform: "none", boxShadow: "none", "&:hover": { bgcolor: isDark ? "#f0f0f0" : "#333" } }}>
+                            Invest Now
                         </Button>
                     </Stack>
                 </Stack>
@@ -570,1087 +596,391 @@ export default function Investment() {
 
             {loading ? (
                 <Box sx={{ pt: 1, pb: 6 }}>
-                    {/* KPI skeletons */}
-                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", md: "repeat(3,1fr)" }, gap: 2, mb: 3 }}>
-                        {[0, 1, 2].map(i => (
-                            <Skeleton key={i} variant="rounded" height={110} animation="wave"
-                                sx={{ borderRadius: "20px", bgcolor: isDark ? alpha("#FFF", 0.04) : alpha("#000", 0.06) }} />
-                        ))}
-                    </Box>
-                    {/* Chart skeleton */}
-                    <Skeleton variant="rounded" height={320} animation="wave"
-                        sx={{ borderRadius: "20px", mb: 2.5, bgcolor: isDark ? alpha("#FFF", 0.04) : alpha("#000", 0.06) }} />
-                    {/* Table rows skeleton */}
-                    <Skeleton variant="rounded" height={52} animation="wave"
-                        sx={{ borderRadius: "12px", mb: 1, bgcolor: isDark ? alpha("#FFF", 0.04) : alpha("#000", 0.06) }} />
-                    {[0, 1, 2, 3, 4].map(i => (
-                        <Skeleton key={i} variant="rounded" height={68} animation="wave"
-                            sx={{ borderRadius: "8px", mb: 0.5, bgcolor: isDark ? alpha("#FFF", 0.025) : alpha("#000", 0.04) }} />
-                    ))}
+                    <CircularProgress sx={{ color: "#7C5CFC" }} />
                 </Box>
             ) : (
                 <Fade in timeout={600}>
                     <Box>
-
                         {/* ── KPI CARDS ─────────────────────────────── */}
-                        <Box
-                            sx={{
-                                display: "grid",
-                                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", md: "repeat(3, 1fr)" },
-                                gap: 2,
-                                mb: 3,
-                            }}
-                        >
-                            <StatCard
-                                label="Valeur du Portefeuille"
-                                value={data.currentPortValue * multiplier}
-                                trendValue={totalPnL * multiplier}
-                                currency={cc}
-                            />
-                            <StatCard
-                                label="Total Investi"
-                                value={data.totalInvested * multiplier}
-                                currency={cc}
-                            />
-                            <StatCard
-                                label="Performance Globale"
-                                value={perfPct}
-                                type="percent"
-                                trendValue={Number(perfPct)}
-                            />
+                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2,1fr)", md: "repeat(4, 1fr)" }, gap: 2.5, mb: 3 }}>
+                            {/* KPI 1 */}
+                            <Box sx={{ p: 2.5, borderRadius: "16px", bgcolor: isDark ? "#110e20" : "#ffffff", border: `1px solid ${isDark ? "#282346" : theme.palette.divider}`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                                <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                                    <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: alpha("#7C5CFC", 0.1), border: `1px solid ${alpha("#7C5CFC", 0.2)}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        <TrendingUpRoundedIcon sx={{ fontSize: 18, color: "#7C5CFC" }} />
+                                    </Box>
+                                </Box>
+                                <Box>
+                                    <Typography sx={{ fontSize: "0.75rem", color: "text.secondary", mb: 0.5 }}>Total Portfolio</Typography>
+                                    <Typography sx={{ fontFamily: MONO_FONT, fontSize: "1.6rem", fontWeight: 700, color: "text.primary", lineHeight: 1, mb: 1 }}>{new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc, maximumFractionDigits: 2 }).format(data.currentPortValue * multiplier)}</Typography>
+                                    <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: totalPnL >= 0 ? "success.main" : "error.main" }}>
+                                        {totalPnL >= 0 ? "↗" : "↘"} {totalPnL >= 0 ? "+" : ""}{((totalPnL / data.totalInvested) * 100 || 0).toFixed(1)}%
+                                    </Typography>
+                                </Box>
+                            </Box>
+                            {/* KPI 2 */}
+                            <Box sx={{ p: 2.5, borderRadius: "16px", bgcolor: isDark ? "#110e20" : "#ffffff", border: `1px solid ${isDark ? "#282346" : theme.palette.divider}`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                                <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                                    <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: totalPnL >= 0 ? alpha("#00C9A7", 0.1) : alpha("#FF6B6B", 0.1), border: `1px solid ${totalPnL >= 0 ? alpha("#00C9A7", 0.2) : alpha("#FF6B6B", 0.2)}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        {totalPnL >= 0 ? <TrendingUpRoundedIcon sx={{ fontSize: 18, color: "#00C9A7" }} /> : <TrendingDownRoundedIcon sx={{ fontSize: 18, color: "#FF6B6B" }} />}
+                                    </Box>
+                                </Box>
+                                <Box>
+                                    <Typography sx={{ fontSize: "0.75rem", color: "text.secondary", mb: 0.5 }}>Daily P&L (Total)</Typography>
+                                    <Typography sx={{ fontFamily: MONO_FONT, fontSize: "1.6rem", fontWeight: 700, color: "text.primary", lineHeight: 1, mb: 1 }}>{totalPnL >= 0 ? "+" : ""}{new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc, maximumFractionDigits: 2 }).format(totalPnL * multiplier)}</Typography>
+                                    <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: totalPnL >= 0 ? "success.main" : "error.main" }}>
+                                        {totalPnL >= 0 ? "↗" : "↘"} {perfPct}%
+                                    </Typography>
+                                </Box>
+                            </Box>
+                            {/* KPI 3 */}
+                            <Box sx={{ p: 2.5, borderRadius: "16px", bgcolor: isDark ? "#110e20" : "#ffffff", border: `1px solid ${isDark ? "#282346" : theme.palette.divider}`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                                <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                                    <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: alpha("#FFC542", 0.1), border: `1px solid ${alpha("#FFC542", 0.2)}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        <TrendingUpRoundedIcon sx={{ fontSize: 18, color: "#FFC542" }} />
+                                    </Box>
+                                </Box>
+                                <Box>
+                                    <Typography sx={{ fontSize: "0.75rem", color: "text.secondary", mb: 0.5 }}>Total Income</Typography>
+                                    <Typography sx={{ fontFamily: MONO_FONT, fontSize: "1.6rem", fontWeight: 700, color: "text.primary", lineHeight: 1, mb: 1 }}>{new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc, maximumFractionDigits: 2 }).format(data.totalInvested * multiplier)}</Typography>
+                                    <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: "success.main" }}>
+                                        ↗ +8.1%
+                                    </Typography>
+                                </Box>
+                            </Box>
+                            {/* KPI 4 */}
+                            <Box sx={{ p: 2.5, borderRadius: "16px", bgcolor: isDark ? "#110e20" : "#ffffff", border: `1px solid ${isDark ? "#282346" : theme.palette.divider}`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                                <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+                                    <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: alpha("#45B7D1", 0.1), border: `1px solid ${alpha("#45B7D1", 0.2)}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        <TrendingUpRoundedIcon sx={{ fontSize: 18, color: "#45B7D1" }} />
+                                    </Box>
+                                </Box>
+                                <Box>
+                                    <Typography sx={{ fontSize: "0.75rem", color: "text.secondary", mb: 0.5 }}>Dividend Income</Typography>
+                                    <Typography sx={{ fontFamily: MONO_FONT, fontSize: "1.6rem", fontWeight: 700, color: "text.primary", lineHeight: 1, mb: 1 }}>{new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc, maximumFractionDigits: 2 }).format((data.totalDividendIncome || 0) * multiplier)}</Typography>
+                                    <Typography sx={{ fontSize: "0.75rem", fontWeight: 600, color: "success.main" }}>
+                                        {data.totalDividendIncome > 0 ? "✓ Actif" : ""}
+                                    </Typography>
+                                </Box>
+                            </Box>
                         </Box>
 
-                        {/* ── DONUT + CHART ROW ─────────────────────── */}
-                        <Box
-                            sx={{
-                                display: "grid",
-                                gridTemplateColumns: { xs: "1fr", lg: "380px 1fr" },
-                                gap: 2.5,
-                                mb: 2.5,
-                            }}
-                        >
-                            {/* Donut Chart */}
-                            <Box
-                                sx={{
-                                    p: 3,
-                                    borderRadius: "20px",
-                                    bgcolor: isDark ? alpha("#FFFFFF", 0.03) : "#FFFFFF",
-                                    border: `1px solid ${isDark ? alpha("#FFF", 0.07) : alpha("#000", 0.06)}`,
-                                    boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.25)" : "0 4px 24px rgba(15,23,42,0.06)",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                }}
-                            >
-                                <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", color: "text.primary", mb: 0.5 }}>
-                                    Répartition du Portefeuille
-                                </Typography>
-                                <Typography sx={{ fontSize: "0.75rem", color: "text.secondary", mb: 2 }}>
-                                    Pondération par valeur de marché
-                                </Typography>
-
-                                {donutData.length === 0 ? (
-                                    <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", py: 6 }}>
-                                        <Typography sx={{ color: "text.secondary", fontSize: "0.875rem" }}>
-                                            Aucun actif à afficher
-                                        </Typography>
+                        {/* ROW 2 */}
+                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1.8fr 1fr" }, gap: 2.5, mb: 2.5 }}>
+                            {/* Left: Snapshot Table */}
+                            <Box sx={{ borderRadius: "16px", bgcolor: isDark ? "#151226" : "#ffffff", border: `1px solid ${isDark ? "#282346" : theme.palette.divider}`, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2.5 }}>
+                                    <Typography sx={{ fontWeight: 600, fontSize: "1rem", color: "text.primary" }}>Portfolio Snapshot</Typography>
+                                    <Box sx={{ px: 1.5, py: 0.5, borderRadius: "8px", border: `1px solid ${isDark ? alpha("#FFF", 0.1) : alpha("#000", 0.1)}`, color: "text.secondary", fontSize: "0.75rem", fontWeight: 600 }}>
+                                        {sortedInvestments.length} Holding(s)
                                     </Box>
-                                ) : (
-                                    <>
-                                        {/* Pie */}
-                                        <Box sx={{ height: 240, position: "relative" }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <PieChart>
-                                                    <Pie
-                                                        activeIndex={activeDonutIndex}
-                                                        activeShape={renderActiveShape}
-                                                        data={donutData}
-                                                        cx="50%"
-                                                        cy="50%"
-                                                        innerRadius={72}
-                                                        outerRadius={100}
-                                                        dataKey="value"
-                                                        onMouseEnter={handleDonutEnter}
-                                                        stroke="none"
-                                                    >
-                                                        {donutData.map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                                        ))}
-                                                    </Pie>
-                                                </PieChart>
-                                            </ResponsiveContainer>
-                                        </Box>
+                                </Stack>
+                                <TableContainer sx={{ overflowX: "auto", flex: 1 }}>
+                                    <Table>
+                                        <TableHead>
+                                            <TableRow sx={{ "& th": { color: "text.secondary", fontWeight: 500, fontSize: "0.75rem", borderBottom: `1px solid ${isDark ? "#282346" : theme.palette.divider}`, py: 1.5 } }}>
+                                                <TableCell sx={{ pl: 2.5 }}>Asset</TableCell>
+                                                <TableCell>Type</TableCell>
+                                                <TableCell align="right">Current Value</TableCell>
+                                                <TableCell align="right">ROI</TableCell>
+                                                <TableCell align="left" sx={{ pl: 4 }}>Allocation</TableCell>
 
-                                        {/* Legend - scrollable so it doesn't bloat the card height */}
-                                        <Box sx={{
-                                            mt: 1, maxHeight: 220, overflowY: "auto", pr: 0.5,
-                                            "&::-webkit-scrollbar": { width: 4 },
-                                            "&::-webkit-scrollbar-track": { bgcolor: "transparent" },
-                                            "&::-webkit-scrollbar-thumb": { bgcolor: isDark ? alpha("#FFF", 0.15) : alpha("#000", 0.12), borderRadius: 2 },
-                                        }}>
-                                            {donutData.map((entry, i) => {
-                                                const pct = data.currentPortValue > 0
-                                                    ? ((entry.value / (data.currentPortValue * multiplier)) * 100).toFixed(1)
-                                                    : "0.0";
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {sortedInvestments.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((inv, idx) => {
+                                                const dotColor = DONUT_COLORS[(page * rowsPerPage + idx) % DONUT_COLORS.length];
+                                                const isPos = (inv.profit_loss || 0) >= 0;
+                                                const weight = data.currentPortValue > 0 ? ((inv.current_value / data.currentPortValue) * 100).toFixed(1) : "0.0";
+                                                const assetType = inv.assetType || (inv.ticker.includes(".PA") ? "Action Européenne" : inv.ticker.includes(".DE") ? "Action Allemande" : "Action US");
                                                 return (
-                                                    <Stack
-                                                        key={i}
-                                                        direction="row"
-                                                        alignItems="center"
-                                                        justifyContent="space-between"
-                                                        onClick={() => setActiveDonutIndex(i)}
-                                                        sx={{
-                                                            py: 0.9,
-                                                            px: 1,
-                                                            borderRadius: "8px",
-                                                            cursor: "pointer",
-                                                            bgcolor: activeDonutIndex === i
-                                                                ? isDark ? alpha(entry.color, 0.1) : alpha(entry.color, 0.06)
-                                                                : "transparent",
-                                                            transition: "background-color 0.15s",
-                                                            "&:hover": {
-                                                                bgcolor: isDark ? alpha(entry.color, 0.08) : alpha(entry.color, 0.05),
-                                                            },
-                                                        }}
-                                                    >
-                                                        <Stack direction="row" alignItems="center" spacing={1.2}>
-                                                            <Box
-                                                                sx={{
-                                                                    width: 10,
-                                                                    height: 10,
-                                                                    borderRadius: "3px",
-                                                                    bgcolor: entry.color,
-                                                                    flexShrink: 0,
-                                                                }}
-                                                            />
-                                                            <Typography
-                                                                sx={{
-                                                                    fontSize: "0.8rem",
-                                                                    fontWeight: activeDonutIndex === i ? 700 : 500,
-                                                                    color: activeDonutIndex === i ? "text.primary" : "text.secondary",
-                                                                    fontFamily: MONO_FONT,
-                                                                }}
-                                                            >
-                                                                {entry.ticker}
-                                                            </Typography>
-                                                        </Stack>
-                                                        <Stack direction="row" spacing={1.5} alignItems="center">
-                                                            <Typography
-                                                                sx={{
-                                                                    fontSize: "0.78rem",
-                                                                    fontWeight: 700,
-                                                                    color: entry.color,
-                                                                    fontFamily: MONO_FONT,
-                                                                }}
-                                                            >
-                                                                {pct}%
-                                                            </Typography>
-                                                            <Typography
-                                                                sx={{
-                                                                    fontSize: "0.75rem",
-                                                                    color: "text.secondary",
-                                                                    fontFamily: MONO_FONT,
-                                                                }}
-                                                            >
-                                                                {new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc, maximumFractionDigits: 0 }).format(entry.value)}
-                                                            </Typography>
-                                                        </Stack>
-                                                    </Stack>
+                                                    <React.Fragment key={inv.id}>
+                                                        <TableRow
+                                                            onClick={() => handleExpandRow(inv.id)}
+                                                            sx={{
+                                                                cursor: "pointer",
+                                                                "&:hover": { bgcolor: isDark ? alpha("#FFF", 0.02) : alpha("#000", 0.02) },
+                                                                "& td": { borderBottom: `1px solid ${isDark ? "#282346" : theme.palette.divider}`, py: 2, fontSize: "0.85rem", color: "text.primary", fontFamily: MONO_FONT }
+                                                            }}
+                                                        >
+                                                            <TableCell sx={{ pl: 2.5 }}>
+                                                                <Typography sx={{ fontWeight: 600, fontSize: "0.85rem", color: "text.primary" }}>{inv.longName && inv.longName.length > 15 ? inv.longName.slice(0, 15) + "…" : inv.ticker}</Typography>
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Box sx={{ display: "inline-block", px: 1.2, py: 0.4, borderRadius: "6px", bgcolor: isDark ? "#101018" : alpha("#000", 0.04), color: "text.secondary", fontSize: "0.7rem", fontWeight: 500 }}>{assetType}</Box>
+                                                            </TableCell>
+                                                            <TableCell align="right" sx={{ fontWeight: 600 }}>
+                                                                {new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc, maximumFractionDigits: 2 }).format((inv.current_value || 0) * multiplier)}
+                                                            </TableCell>
+                                                            <TableCell align="right">
+                                                                <Typography sx={{ fontFamily: MONO_FONT, fontWeight: 600, fontSize: "0.85rem", color: isPos ? "success.main" : "error.main" }}>
+                                                                    {isPos ? "↗ +" : "↘ "}{(inv.profit_loss_pct || 0).toFixed(1)}%
+                                                                </Typography>
+                                                            </TableCell>
+                                                            <TableCell align="left" sx={{ pl: 4 }}>
+                                                                <Box sx={{ display: "flex", gap: "2px", alignItems: "center", justifyContent: "space-between" }}>
+                                                                    <Box sx={{ display: "flex", gap: "2px", alignItems: "center" }}>
+                                                                        {[...Array(10)].map((_, i) => (
+                                                                            <Box key={i} sx={{ width: 4, height: 12, borderRadius: "1px", bgcolor: i < (weight / 10) ? dotColor : isDark ? alpha("#FFF", 0.05) : alpha("#000", 0.05) }} />
+                                                                        ))}
+                                                                    </Box>
+                                                                    <ChevronRightIcon sx={{ color: "text.secondary", transform: expandedRow === inv.id ? "rotate(90deg)" : "none", transition: "transform 0.2s" }} />
+                                                                </Box>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                        <TableRow>
+                                                            <TableCell style={{ paddingBottom: 0, paddingTop: 0, border: "none" }} colSpan={5}>
+                                                                <Collapse in={expandedRow === inv.id} timeout="auto" unmountOnExit>
+                                                                    <Box sx={{ p: 2, bgcolor: isDark ? alpha("#000", 0.2) : alpha("#000", 0.02), borderBottom: `1px solid ${isDark ? "#282346" : theme.palette.divider}` }}>
+                                                                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                                                                            <Typography sx={{ fontSize: "0.85rem", fontWeight: 600, color: "text.secondary", display: "flex", alignItems: "center", gap: 1 }}>
+                                                                                <HistoryRoundedIcon sx={{ fontSize: 16 }} /> Historique des transactions
+                                                                            </Typography>
+                                                                            <Button
+                                                                                variant="outlined"
+                                                                                size="small"
+                                                                                onClick={(e) => { e.stopPropagation(); handleOpenTxDialog(inv); }}
+                                                                                startIcon={<AddRoundedIcon />}
+                                                                                sx={{ borderColor: isDark ? "#282346" : "divider", color: "text.primary", borderRadius: "8px", textTransform: "none", fontSize: "0.75rem", py: 0.5 }}
+                                                                            >
+                                                                                Nouvelle Transaction
+                                                                            </Button>
+                                                                        </Stack>
+
+                                                                        {txMap[inv.id] && txMap[inv.id].length > 0 ? (
+                                                                            <Table size="small" sx={{ "& th, & td": { borderColor: isDark ? alpha("#FFF", 0.05) : alpha("#000", 0.05) } }}>
+                                                                                <TableHead>
+                                                                                    <TableRow>
+                                                                                        <TableCell sx={{ fontSize: "0.7rem", color: "text.secondary", fontWeight: 600 }}>Date</TableCell>
+                                                                                        <TableCell sx={{ fontSize: "0.7rem", color: "text.secondary", fontWeight: 600 }}>Type</TableCell>
+                                                                                        <TableCell sx={{ fontSize: "0.7rem", color: "text.secondary", fontWeight: 600 }}>Quantité</TableCell>
+                                                                                        <TableCell sx={{ fontSize: "0.7rem", color: "text.secondary", fontWeight: 600 }}>Prix</TableCell>
+                                                                                        <TableCell sx={{ fontSize: "0.7rem", color: "text.secondary", fontWeight: 600 }}>Total</TableCell>
+                                                                                        <TableCell align="right" sx={{ fontSize: "0.7rem", color: "text.secondary", fontWeight: 600 }}>Actions</TableCell>
+                                                                                    </TableRow>
+                                                                                </TableHead>
+                                                                                <TableBody>
+                                                                                    {txMap[inv.id].map(tx => (
+                                                                                        <TableRow key={tx.id}>
+                                                                                            <TableCell sx={{ fontSize: "0.75rem", fontFamily: MONO_FONT }}>{new Date(tx.tx_date).toLocaleDateString()}</TableCell>
+                                                                                            <TableCell>
+                                                                                                <Box sx={{ display: "inline-block", px: 1, py: 0.2, borderRadius: "4px", fontSize: "0.65rem", fontWeight: 700, bgcolor: tx.type === "buy" ? alpha("#00C9A7", 0.1) : alpha("#FF6B6B", 0.1), color: tx.type === "buy" ? "#00C9A7" : "#FF6B6B" }}>
+                                                                                                    {tx.type === "buy" ? "ACHAT" : "VENTE"}
+                                                                                                </Box>
+                                                                                            </TableCell>
+                                                                                            <TableCell sx={{ fontSize: "0.75rem", fontFamily: MONO_FONT }}>{tx.quantity}</TableCell>
+                                                                                            <TableCell sx={{ fontSize: "0.75rem", fontFamily: MONO_FONT }}>{new Intl.NumberFormat("fr-FR", { style: "currency", currency: tx.currency }).format(tx.price)}</TableCell>
+                                                                                            <TableCell sx={{ fontSize: "0.75rem", fontFamily: MONO_FONT }}>{new Intl.NumberFormat("fr-FR", { style: "currency", currency: tx.currency }).format(tx.quantity * tx.price)}</TableCell>
+                                                                                            <TableCell align="right">
+                                                                                                <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteTransaction(tx.id, inv.id); }} sx={{ color: "error.main", p: 0.5 }}>
+                                                                                                    <DeleteIcon sx={{ fontSize: 16 }} />
+                                                                                                </IconButton>
+                                                                                            </TableCell>
+                                                                                        </TableRow>
+                                                                                    ))}
+                                                                                </TableBody>
+                                                                            </Table>
+                                                                        ) : (
+                                                                            <Typography sx={{ fontSize: "0.75rem", color: "text.secondary", fontStyle: "italic", py: 1 }}>Aucune transaction trouvée.</Typography>
+                                                                        )}
+                                                                    </Box>
+                                                                </Collapse>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    </React.Fragment>
                                                 );
                                             })}
-                                        </Box>
-                                    </>
-                                )}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                                <TablePagination
+                                    rowsPerPageOptions={[5, 10, 15]}
+                                    component="div"
+                                    count={sortedInvestments.length}
+                                    rowsPerPage={rowsPerPage}
+                                    page={page}
+                                    onPageChange={(e, newPage) => setPage(newPage)}
+                                    onRowsPerPageChange={(e) => {
+                                        setRowsPerPage(parseInt(e.target.value, 10));
+                                        setPage(0);
+                                    }}
+                                    labelRowsPerPage="Lignes per page:"
+                                    sx={{ color: "text.secondary" }}
+                                />
                             </Box>
 
-                            {/* Area Chart */}
-                            <Box
-                                sx={{
-                                    p: 3,
-                                    borderRadius: "20px",
-                                    bgcolor: isDark ? alpha("#FFFFFF", 0.03) : "#FFFFFF",
-                                    border: `1px solid ${isDark ? alpha("#FFF", 0.07) : alpha("#000", 0.06)}`,
-                                    boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.25)" : "0 4px 24px rgba(15,23,42,0.06)",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                }}
-                            >
-                                <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "flex-start" }} gap={1.5} sx={{ mb: 3 }}>
-                                    <Box>
-                                        <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", color: "text.primary", mb: 0.5 }}>
-                                            Évolution du Portefeuille
-                                        </Typography>
-                                        <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
-                                            Valeur vs Capital Investi
+                            {/* Right: Portfolio Allocations Gauge */}
+                            <Box sx={{ borderRadius: "16px", bgcolor: isDark ? "#151226" : "#ffffff", border: `1px solid ${isDark ? "#282346" : theme.palette.divider}`, p: 2.5, display: "flex", flexDirection: "column" }}>
+                                <Typography sx={{ fontWeight: 600, fontSize: "1rem", color: "text.primary", mb: 3 }}>Portfolio Allocations</Typography>
+                                <Box sx={{ height: 180, position: "relative", mb: 2, "& :focus": { outline: "none" } }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart style={{ outline: "none" }}>
+                                            <Tooltip
+                                                cursor={{ fill: "transparent" }}
+                                                contentStyle={{
+                                                    backgroundColor: isDark ? "rgba(20, 20, 32, 0.95)" : "rgba(255, 255, 255, 0.95)",
+                                                    borderRadius: "12px",
+                                                    border: `1px solid ${isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)"}`,
+                                                    padding: "10px 14px",
+                                                    backdropFilter: "blur(10px)",
+                                                    boxShadow: "0 8px 32px rgba(0,0,0,0.15)"
+                                                }}
+                                                itemStyle={{ color: isDark ? "#fff" : "#000", fontSize: "0.9rem", fontWeight: 700, fontFamily: MONO_FONT, paddingBottom: 0 }}
+                                                formatter={(value, name, props) => {
+                                                    const pct = data.currentPortValue > 0 ? ((value / (data.currentPortValue * multiplier)) * 100).toFixed(1) : "0.0";
+                                                    const formattedVal = new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc, maximumFractionDigits: 0 }).format(value);
+                                                    return [`${pct}% (${formattedVal})`, props.payload.ticker || name];
+                                                }}
+                                            />
+                                            <Pie
+                                                data={donutData}
+                                                cx="50%"
+                                                cy="100%"
+                                                startAngle={180}
+                                                endAngle={0}
+                                                innerRadius={90}
+                                                outerRadius={120}
+                                                dataKey="value"
+                                                stroke="none"
+                                            >
+                                                {donutData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                                            </Pie>
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                    {/* Center Text inside gauge */}
+                                    <Box sx={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", textAlign: "center", pointerEvents: "none" }}>
+                                        <Typography sx={{ fontSize: "0.7rem", color: "text.secondary", mb: 0.5 }}>Total portfolio</Typography>
+                                        <Typography sx={{ fontSize: "1.4rem", fontWeight: 700, color: "text.primary", fontFamily: MONO_FONT }}>
+                                            {new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc, maximumFractionDigits: 2 }).format(data.currentPortValue * multiplier)}
                                         </Typography>
                                     </Box>
+                                </Box>
+                                {/* Legend */}
+                                <Stack spacing={1.5} sx={{ mt: 3, flex: 1, justifyContent: "center" }}>
+                                    {donutData.slice(0, 4).map((entry, i) => {
+                                        const pct = data.currentPortValue > 0 ? ((entry.value / (data.currentPortValue * multiplier)) * 100).toFixed(1) : "0.0";
+                                        return (
+                                            <Stack key={i} direction="row" justifyContent="space-between" alignItems="center">
+                                                <Stack direction="row" alignItems="center" spacing={1.5}>
+                                                    <Box sx={{ width: 12, height: 4, borderRadius: "2px", bgcolor: entry.color }} />
+                                                    <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>{entry.shortName}</Typography>
+                                                </Stack>
+                                                <Typography sx={{ fontSize: "0.75rem", color: "text.primary", fontFamily: MONO_FONT, fontWeight: 600 }}>{pct}%</Typography>
+                                            </Stack>
+                                        );
+                                    })}
+                                </Stack>
+                            </Box>
+                        </Box>
 
-                                    {/* Period selector */}
-                                    <Stack direction="row" flexWrap="wrap" gap={0.5} sx={{ bgcolor: isDark ? alpha("#FFF", 0.05) : alpha("#000", 0.03), p: 0.5, borderRadius: "10px" }}>
-                                        {periods.map((opt) => (
+                        {/* ROW 3 */}
+                        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1.6fr 1fr" }, gap: 2.5 }}>
+                            {/* Left: Income Summary */}
+                            <Box sx={{ borderRadius: "16px", bgcolor: isDark ? "#151226" : "#ffffff", border: `1px solid ${isDark ? "#282346" : theme.palette.divider}`, p: 2.5 }}>
+                                <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={2} sx={{ mb: 3 }}>
+                                    <Stack direction="row" spacing={2} alignItems="center">
+                                        <Typography sx={{ fontWeight: 600, fontSize: "1rem", color: "text.primary" }}>Income Summary</Typography>
+                                        <Stack direction="row" sx={{ borderRadius: "8px", overflow: "hidden", border: `1px solid ${isDark ? alpha("#FFF", 0.1) : alpha("#000", 0.12)}` }}>
+                                            <Button onClick={() => setChartMode('value')} sx={{ px: 1.5, py: 0.3, minWidth: 'auto', fontSize: "0.7rem", fontWeight: 700, borderRadius: 0, bgcolor: chartMode === 'value' ? accentColor : 'transparent', color: chartMode === 'value' ? (isDark ? '#000' : '#fff') : 'text.secondary', "&:hover": { bgcolor: chartMode === 'value' ? accentColor : isDark ? alpha("#FFF", 0.05) : alpha("#000", 0.04) } }}>Valeur</Button>
+                                            <Button onClick={() => setChartMode('profit')} sx={{ px: 1.5, py: 0.3, minWidth: 'auto', fontSize: "0.7rem", fontWeight: 700, borderRadius: 0, bgcolor: chartMode === 'profit' ? accentColor : 'transparent', color: chartMode === 'profit' ? (isDark ? '#000' : '#fff') : 'text.secondary', "&:hover": { bgcolor: chartMode === 'profit' ? accentColor : isDark ? alpha("#FFF", 0.05) : alpha("#000", 0.04) } }}>Profit</Button>
+                                        </Stack>
+                                    </Stack>
+                                    <Stack direction="row" spacing={0.5} sx={{ bgcolor: isDark ? "#101018" : alpha("#000", 0.04), p: 0.5, borderRadius: "8px", border: `1px solid ${isDark ? alpha("#FFF", 0.05) : alpha("#000", 0.05)}` }}>
+                                        {periods.map((p) => (
                                             <Button
-                                                key={opt.value}
-                                                onClick={() => setPeriod(opt.value)}
+                                                key={p.value}
+                                                onClick={() => setPeriod(p.value)}
                                                 sx={{
                                                     minWidth: "auto",
                                                     px: 1.5,
                                                     py: 0.5,
-                                                    fontSize: "0.72rem",
-                                                    fontWeight: period === opt.value ? 800 : 500,
-                                                    borderRadius: "7px",
-                                                    color: period === opt.value ? (isDark ? "#000" : "#FFF") : "text.secondary",
-                                                    bgcolor: period === opt.value ? accentColor : "transparent",
-                                                    boxShadow: period === opt.value && isDark ? `0 2px 12px ${alpha(accentColor, 0.5)}` : "none",
+                                                    fontSize: "0.7rem",
+                                                    fontWeight: period === p.value ? 700 : 500,
+                                                    color: period === p.value ? (isDark ? "#fff" : "#000") : "text.secondary",
+                                                    bgcolor: period === p.value ? (isDark ? alpha("#FFF", 0.1) : "#fff") : "transparent",
+                                                    borderRadius: "6px",
+                                                    boxShadow: period === p.value && !isDark ? "0 2px 8px rgba(0,0,0,0.05)" : "none",
                                                     "&:hover": {
-                                                        bgcolor: period === opt.value ? accentColor : isDark ? alpha("#FFF", 0.06) : alpha("#000", 0.04),
-                                                    },
-                                                    transition: "all 0.15s",
+                                                        bgcolor: period === p.value ? (isDark ? alpha("#FFF", 0.15) : "#fff") : isDark ? alpha("#FFF", 0.05) : "rgba(0,0,0,0.02)"
+                                                    }
                                                 }}
                                             >
-                                                {opt.label}
+                                                {p.label}
                                             </Button>
                                         ))}
                                     </Stack>
                                 </Stack>
-
-                                <Box sx={{ height: 300, width: "100%" }}>
+                                <Box sx={{ height: 260, width: "100%" }}>
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart
-                                            data={data.chart.map((c) => ({
-                                                ...c,
-                                                value: c.value * multiplier,
-                                                invested: c.invested * multiplier,
-                                            }))}
-                                            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                                        >
+                                        <AreaChart data={data.chart.map(c => ({ ...c, value: c.value * multiplier, invested: c.invested * multiplier, profit: (c.value - c.invested) * multiplier }))} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                             <defs>
-                                                <linearGradient id="gradValue" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor={accentColor} stopOpacity={0.35} />
-                                                    <stop offset="95%" stopColor={accentColor} stopOpacity={0} />
+                                                <linearGradient id="gradV" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#7C5CFC" stopOpacity={0.4} />
+                                                    <stop offset="95%" stopColor="#7C5CFC" stopOpacity={0} />
                                                 </linearGradient>
-                                                <linearGradient id="gradInvested" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#8884d8" stopOpacity={0.2} />
-                                                    <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
+                                                <linearGradient id="gradP" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#00C9A7" stopOpacity={0.4} />
+                                                    <stop offset="95%" stopColor="#00C9A7" stopOpacity={0} />
+                                                </linearGradient>
+                                                <linearGradient id="gradPLoss" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#FF6B6B" stopOpacity={0.4} />
+                                                    <stop offset="95%" stopColor="#FF6B6B" stopOpacity={0} />
                                                 </linearGradient>
                                             </defs>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={alpha(theme.palette.divider, 0.5)} />
-                                            <XAxis
-                                                dataKey="date"
-                                                tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
-                                                tickFormatter={(str) => {
-                                                    const d = new Date(str);
-                                                    if (period === "1d" || period === "1w")
-                                                        return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-                                                    return `${d.getDate()}/${d.getMonth() + 1}`;
-                                                }}
-                                                axisLine={false}
-                                                tickLine={false}
-                                            />
-                                            <YAxis
-                                                domain={["auto", "auto"]}
-                                                tick={{ fontSize: 11, fill: theme.palette.text.secondary }}
-                                                axisLine={false}
-                                                tickLine={false}
-                                                tickFormatter={(val) =>
-                                                    new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc, maximumFractionDigits: 0 }).format(val)
-                                                }
-                                            />
-                                            <Tooltip
-                                                contentStyle={{
-                                                    backgroundColor: isDark ? "#1A1A2E" : "#FFFFFF",
-                                                    borderRadius: "12px",
-                                                    border: `1px solid ${alpha(accentColor, 0.2)}`,
-                                                    boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
-                                                    padding: "10px 14px",
-                                                }}
-                                                labelStyle={{ color: theme.palette.text.secondary, fontSize: 11, marginBottom: 6 }}
-                                                formatter={(value, name) => [
-                                                    new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc }).format(value),
-                                                    name,
-                                                ]}
-                                                labelFormatter={(label) => {
-                                                    const d = new Date(label);
-                                                    return d.toLocaleDateString("fr-FR", {
-                                                        weekday: "long",
-                                                        day: "numeric",
-                                                        month: "long",
-                                                        year: "numeric",
-                                                        hour: period === "1d" || period === "1w" ? "2-digit" : undefined,
-                                                        minute: period === "1d" || period === "1w" ? "2-digit" : undefined,
-                                                    });
-                                                }}
-                                            />
-                                            <Area
-                                                type="monotone"
-                                                dataKey="invested"
-                                                name="Investi"
-                                                stroke="#8884d8"
-                                                strokeWidth={1.5}
-                                                strokeDasharray="5 3"
-                                                fillOpacity={1}
-                                                fill="url(#gradInvested)"
-                                            />
-                                            <Area
-                                                type="monotone"
-                                                dataKey="value"
-                                                name="Valeur"
-                                                stroke={accentColor}
-                                                strokeWidth={2.5}
-                                                fillOpacity={1}
-                                                fill="url(#gradValue)"
-                                            />
+                                            <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#666" }} tickFormatter={str => { const d = new Date(str); return `${d.getDate()}/${d.getMonth() + 1}`; }} axisLine={false} tickLine={false} />
+                                            <YAxis tick={{ fontSize: 10, fill: "#666" }} axisLine={false} tickLine={false} tickFormatter={val => chartMode === 'profit' ? new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(val) : (val / 1000).toFixed(0) + "k"} />
+                                            <Tooltip contentStyle={{ backgroundColor: isDark ? "rgba(27,28,40,0.9)" : "rgba(255,255,255,0.9)", borderRadius: "12px", border: "1px solid rgba(124, 92, 252, 0.5)", padding: "8px 12px", backdropFilter: "blur(10px)" }} labelStyle={{ color: "text.secondary", fontSize: "0.65rem", marginBottom: 2 }} itemStyle={{ color: "text.primary", fontSize: "0.9rem", fontWeight: 700 }} formatter={(value, name) => [new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc, maximumFractionDigits: 0 }).format(value), name]} />
+
+                                            {chartMode === 'value' ? (
+                                                <>
+                                                    <Area type="monotone" dataKey="invested" name="Investi" stroke="#8884d8" strokeWidth={1.5} strokeDasharray="5 3" fillOpacity={0} />
+                                                    <Area type="monotone" dataKey="value" name="Valeur" stroke="#7C5CFC" strokeWidth={2.5} fillOpacity={1} fill="url(#gradV)" activeDot={{ r: 6, fill: "#fff", stroke: "#7C5CFC", strokeWidth: 3 }} />
+                                                </>
+                                            ) : (
+                                                <Area type="monotone" dataKey="profit" name="Profit" stroke="#00C9A7" strokeWidth={2.5} fillOpacity={1} fill="url(#gradP)" activeDot={{ r: 6, fill: "#fff", stroke: "#00C9A7", strokeWidth: 3 }} />
+                                            )}
+
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </Box>
                             </Box>
-                        </Box>
 
-                        {/* ── HOLDINGS TABLE ────────────────────────── */}
-                        <Box
-                            sx={{
-                                borderRadius: "20px",
-                                bgcolor: isDark ? alpha("#FFFFFF", 0.03) : "#FFFFFF",
-                                border: `1px solid ${isDark ? alpha("#FFF", 0.07) : alpha("#000", 0.06)}`,
-                                boxShadow: isDark ? "0 8px 32px rgba(0,0,0,0.25)" : "0 4px 24px rgba(15,23,42,0.06)",
-                                overflow: "hidden",
-                            }}
-                        >
-                            {/* Table Header */}
-                            <Box sx={{ px: 3, pt: 3, pb: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
-                                {/* Title row */}
-                                <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
-                                    <Typography sx={{ fontWeight: 700, fontSize: "0.95rem", color: "text.primary" }}>
-                                        Actifs Détenus
-                                    </Typography>
-                                    {data.investments.length > 0 && (
-                                        <Chip
-                                            label={sortedInvestments.length}
-                                            size="small"
-                                            sx={{
-                                                bgcolor: isDark ? alpha(accentColor, 0.15) : alpha(accentColor, 0.1),
-                                                color: accentColor,
-                                                fontWeight: 800,
-                                                fontSize: "0.72rem",
-                                                height: 22,
-                                            }}
-                                        />
+                            {/* Right: Recent Activity */}
+                            <Box sx={{ borderRadius: "16px", bgcolor: isDark ? "#151226" : "#ffffff", border: `1px solid ${isDark ? "#282346" : theme.palette.divider}`, p: 2.5 }}>
+                                <Typography sx={{ fontWeight: 600, fontSize: "1rem", color: "text.primary", mb: 3 }}>Recent Activity</Typography>
+                                <Stack spacing={2}>
+                                    {data.recentActivity && data.recentActivity.length > 0 ? (
+                                        data.recentActivity.slice(0, 5).map((act, i) => (
+                                            <Stack key={i} direction="row" justifyContent="space-between" alignItems="center" sx={{ borderBottom: i < Math.min(data.recentActivity.length - 1, 4) ? `1px solid ${isDark ? alpha("#FFF", 0.05) : alpha("#000", 0.05)}` : "none", pb: i < Math.min(data.recentActivity.length - 1, 4) ? 2 : 0 }}>
+                                                <Stack direction="row" alignItems="center" spacing={2}>
+                                                    <Box sx={{ width: 36, height: 36, borderRadius: "10px", bgcolor: isDark ? alpha("#FFF", 0.05) : alpha("#000", 0.05), border: `1px solid ${isDark ? alpha("#FFF", 0.1) : alpha("#000", 0.1)}`, display: "flex", alignItems: "center", justifyContent: "center", color: "text.secondary" }}>
+                                                        {act.type === 'dividend' ? <MonetizationOnRoundedIcon sx={{ fontSize: 18, color: "success.main" }} /> : act.txType === 'buy' ? <TrendingUpRoundedIcon sx={{ fontSize: 18, color: "text.primary" }} /> : <TrendingDownRoundedIcon sx={{ fontSize: 18, color: "error.main" }} />}
+                                                    </Box>
+                                                    <Box>
+                                                        <Typography sx={{ fontSize: "0.8rem", color: "text.primary", fontWeight: 500 }}>{act.title}</Typography>
+                                                        <Typography sx={{ fontSize: "0.65rem", color: "text.secondary" }}>{new Date(act.timeMs).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</Typography>
+                                                    </Box>
+                                                </Stack>
+                                                <Box sx={{ textAlign: "right" }}>
+                                                    <Typography sx={{ fontSize: "0.85rem", color: ((act.txType === 'sell' && act.type === 'transaction') || act.amount < 0) ? "error.main" : "text.primary", fontWeight: 600, fontFamily: MONO_FONT }}>
+                                                        {((act.txType === 'sell' && act.type === 'transaction') || act.amount < 0) ? "-" : "+"}
+                                                        {new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc, maximumFractionDigits: 2 }).format(Math.abs(act.amount) * multiplier)}
+                                                    </Typography>
+                                                    <Stack direction="row" alignItems="center" spacing={0.5} justifyContent="flex-end">
+                                                        {(act.color === "success.main" || act.color === "error.main") && <Typography sx={{ color: act.color, fontSize: "0.6rem" }}>✓</Typography>}
+                                                        <Typography sx={{ fontSize: "0.65rem", color: act.color }}>{act.status}</Typography>
+                                                    </Stack>
+                                                </Box>
+                                            </Stack>
+                                        ))
+                                    ) : (
+                                        <Typography sx={{ fontSize: "0.85rem", color: "text.secondary", fontStyle: "italic", textAlign: "center", mt: 4, mb: 4 }}>
+                                            Aucune activité récente pour cette période.
+                                        </Typography>
                                     )}
                                 </Stack>
-
-                                {/* Sort pills — horizontal scroll on mobile */}
-                                <Box
-                                    sx={{
-                                        overflowX: "auto",
-                                        overflowY: "hidden",
-                                        /* hide scrollbar cross-browser */
-                                        scrollbarWidth: "none",
-                                        "&::-webkit-scrollbar": { display: "none" },
-                                        mx: -0.5,
-                                        px: 0.5,
-                                    }}
-                                >
-                                    <Box
-                                        sx={{
-                                            display: "inline-flex",
-                                            flexWrap: "nowrap",
-                                            gap: 0.5,
-                                            alignItems: "center",
-                                            bgcolor: isDark ? alpha("#FFF", 0.04) : alpha("#000", 0.03),
-                                            border: `1px solid ${isDark ? alpha("#FFF", 0.07) : alpha("#000", 0.07)}`,
-                                            borderRadius: "10px",
-                                            p: 0.5,
-                                            minWidth: "max-content",
-                                        }}
-                                    >
-                                        {HOLDINGS_SORTS.map((opt) => {
-                                            const isActive = holdingsSort === opt.id;
-                                            return (
-                                                <Box
-                                                    key={opt.id}
-                                                    onClick={() => setHoldingsSort(opt.id)}
-                                                    sx={{
-                                                        px: 1.4,
-                                                        py: 0.55,
-                                                        borderRadius: "7px",
-                                                        cursor: "pointer",
-                                                        fontSize: "0.72rem",
-                                                        fontWeight: isActive ? 700 : 500,
-                                                        letterSpacing: isActive ? "0.01em" : "0",
-                                                        transition: "all 0.15s",
-                                                        bgcolor: isActive ? accentColor : "transparent",
-                                                        color: isActive ? "#fff" : "text.secondary",
-                                                        boxShadow: isActive
-                                                            ? `0 2px 8px ${alpha(accentColor, isDark ? 0.45 : 0.3)}`
-                                                            : "none",
-                                                        "&:hover": {
-                                                            bgcolor: isActive
-                                                                ? accentColor
-                                                                : isDark ? alpha("#FFF", 0.08) : alpha("#000", 0.05),
-                                                            color: isActive ? "#fff" : "text.primary",
-                                                        },
-                                                        userSelect: "none",
-                                                        whiteSpace: "nowrap",
-                                                        flexShrink: 0,
-                                                    }}
-                                                >
-                                                    {opt.label}
-                                                </Box>
-                                            );
-                                        })}
-                                    </Box>
-                                </Box>
                             </Box>
-
-                            <TableContainer sx={{ overflowX: "auto" }}>
-                                <Table>
-                                    <TableHead>
-                                        <TableRow
-                                            sx={{
-                                                "& th": {
-                                                    color: "text.secondary",
-                                                    fontWeight: 600,
-                                                    fontSize: "0.72rem",
-                                                    letterSpacing: "0.06em",
-                                                    textTransform: "uppercase",
-                                                    borderBottom: `1px solid ${theme.palette.divider}`,
-                                                    py: 1.5,
-                                                    bgcolor: isDark ? alpha("#FFF", 0.015) : alpha("#000", 0.015),
-                                                },
-                                            }}
-                                        >
-                                            <TableCell sx={{ pl: 3 }}>Actif</TableCell>
-                                            <TableCell align="right" sx={{ display: { xs: "none", md: "table-cell" } }}>Quantité</TableCell>
-                                            <TableCell align="right" sx={{ display: { xs: "none", sm: "table-cell" } }}>PRU</TableCell>
-                                            <TableCell align="right">Prix Actuel</TableCell>
-                                            <TableCell align="right">Valeur</TableCell>
-                                            <TableCell align="right">+/- Value</TableCell>
-                                            <TableCell align="right" sx={{ display: { xs: "none", lg: "table-cell" } }}>Poids</TableCell>
-                                            <TableCell align="center" sx={{ pr: 3 }}>Actions</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {sortedInvestments.map((inv, idx) => {
-                                            const logoUrl = MANUAL_LOGOS[inv.ticker]
-                                                || (inv.website ? `https://logo.clearbit.com/${inv.website}` : null);
-                                            const isPos = (inv.profit_loss || 0) >= 0;
-                                            const weight = data.currentPortValue > 0
-                                                ? ((inv.current_value / data.currentPortValue) * 100).toFixed(1)
-                                                : "0.0";
-                                            const dotColor = DONUT_COLORS[idx % DONUT_COLORS.length];
-                                            const isExpanded = expandedRow === inv.id;
-                                            const txs = txMap[inv.id] || [];
-                                            const txCount = txs.length;
-
-                                            return (
-                                                <>
-                                                    {/* ── Main row ─────────────────────── */}
-                                                    <TableRow
-                                                        key={inv.id}
-                                                        sx={{
-                                                            "& td": {
-                                                                borderBottom: isExpanded ? "none" : `1px solid ${alpha(theme.palette.divider, 0.5)}`,
-                                                                py: 1.8,
-                                                                fontFamily: MONO_FONT,
-                                                                fontSize: "0.85rem",
-                                                            },
-                                                            "&:last-child td": { borderBottom: "none" },
-                                                            "&:hover": {
-                                                                bgcolor: isDark ? alpha("#FFFFFF", 0.025) : alpha("#000", 0.018),
-                                                            },
-                                                            bgcolor: isExpanded ? (isDark ? alpha(dotColor, 0.04) : alpha(dotColor, 0.025)) : "transparent",
-                                                            transition: "background-color 0.15s",
-                                                        }}
-                                                    >
-                                                        <TableCell sx={{ pl: 3, minWidth: 210, fontFamily: "inherit" }}>
-                                                            <Stack direction="row" alignItems="center" spacing={1.8}>
-                                                                {/* Expand arrow */}
-                                                                <IconButton
-                                                                    size="small"
-                                                                    onClick={() => handleExpandRow(inv.id)}
-                                                                    sx={{
-                                                                        p: 0.3,
-                                                                        color: isExpanded ? dotColor : "text.disabled",
-                                                                        transition: "transform 0.2s, color 0.2s",
-                                                                        transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
-                                                                    }}
-                                                                >
-                                                                    <ChevronRightIcon sx={{ fontSize: 18 }} />
-                                                                </IconButton>
-
-                                                                {/* Color dot */}
-                                                                <Box sx={{ width: 4, height: 36, borderRadius: "2px", bgcolor: dotColor, flexShrink: 0 }} />
-
-                                                                <Avatar
-                                                                    src={logoUrl}
-                                                                    sx={{
-                                                                        width: 38, height: 38,
-                                                                        bgcolor: isDark ? alpha(dotColor, 0.12) : alpha(dotColor, 0.08),
-                                                                        color: dotColor,
-                                                                        fontWeight: 800,
-                                                                        fontSize: "1rem",
-                                                                        border: `1px solid ${alpha(dotColor, 0.25)}`,
-                                                                    }}
-                                                                >
-                                                                    {inv.ticker.slice(0, 1)}
-                                                                </Avatar>
-
-                                                                <Box>
-                                                                    <Typography sx={{ fontWeight: 800, fontSize: "0.9rem", color: "text.primary", fontFamily: MONO_FONT }}>
-                                                                        {inv.ticker}
-                                                                    </Typography>
-                                                                    <Typography sx={{ fontSize: "0.72rem", color: "text.secondary", fontWeight: 400, mt: 0.2 }}>
-                                                                        {inv.longName && inv.longName !== inv.ticker
-                                                                            ? inv.longName.length > 22 ? inv.longName.slice(0, 22) + "…" : inv.longName
-                                                                            : "Action / ETF"}
-                                                                    </Typography>
-                                                                </Box>
-                                                            </Stack>
-                                                        </TableCell>
-
-                                                        <TableCell align="right" sx={{ display: { xs: "none", md: "table-cell" } }}>
-                                                            {inv.quantity.toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                                                        </TableCell>
-                                                        <TableCell align="right" sx={{ display: { xs: "none", sm: "table-cell" } }}>
-                                                            {new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc }).format(inv.average_price * multiplier)}
-                                                        </TableCell>
-                                                        <TableCell align="right">
-                                                            {new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc }).format((inv.current_price || 0) * multiplier)}
-                                                        </TableCell>
-                                                        <TableCell align="right" sx={{ fontWeight: 700, color: "text.primary" }}>
-                                                            {new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc }).format((inv.current_value || 0) * multiplier)}
-                                                        </TableCell>
-
-                                                        <TableCell align="right">
-                                                            <Box sx={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end" }}>
-                                                                <Typography sx={{ fontFamily: MONO_FONT, fontWeight: 700, fontSize: "0.85rem", color: isPos ? "success.main" : "error.main" }}>
-                                                                    {isPos ? "+" : ""}
-                                                                    {new Intl.NumberFormat("fr-FR", { style: "currency", currency: cc }).format((inv.profit_loss || 0) * multiplier)}
-                                                                </Typography>
-                                                                <Typography sx={{ fontFamily: MONO_FONT, fontWeight: 600, fontSize: "0.72rem", color: isPos ? alpha(theme.palette.success.main, 0.7) : alpha(theme.palette.error.main, 0.7) }}>
-                                                                    {isPos ? "+" : ""}{(inv.profit_loss_pct || 0).toFixed(2)}%
-                                                                </Typography>
-                                                            </Box>
-                                                        </TableCell>
-
-                                                        {/* Weight — hidden on mobile */}
-                                                        <TableCell align="right" sx={{ display: { xs: "none", lg: "table-cell" } }}>
-                                                            <Stack alignItems="flex-end" spacing={0.5}>
-                                                                <Typography sx={{ fontFamily: MONO_FONT, fontSize: "0.82rem", fontWeight: 700, color: dotColor }}>
-                                                                    {weight}%
-                                                                </Typography>
-                                                                <Box sx={{ width: 60, height: 4, borderRadius: "2px", bgcolor: isDark ? alpha("#FFF", 0.05) : alpha("#000", 0.05), overflow: "hidden" }}>
-                                                                    <Box sx={{ width: `${weight}%`, height: "100%", bgcolor: dotColor, borderRadius: "2px" }} />
-                                                                </Box>
-                                                            </Stack>
-                                                        </TableCell>
-
-                                                        {/* Actions */}
-                                                        <TableCell align="center" sx={{ pr: 3 }}>
-                                                            <Stack direction="row" spacing={0.5} justifyContent="center">
-                                                                {/* Add Transaction button */}
-                                                                <MuiTooltip title="Ajouter une transaction" placement="top">
-                                                                    <IconButton
-                                                                        size="small"
-                                                                        onClick={() => handleOpenTxDialog(inv)}
-                                                                        sx={{
-                                                                            borderRadius: "8px",
-                                                                            color: dotColor,
-                                                                            bgcolor: alpha(dotColor, 0.08),
-                                                                            "&:hover": { bgcolor: alpha(dotColor, 0.18) },
-                                                                        }}
-                                                                    >
-                                                                        <AddRoundedIcon fontSize="small" />
-                                                                    </IconButton>
-                                                                </MuiTooltip>
-
-                                                                {/* Expand history button with count badge */}
-                                                                <MuiTooltip title={`Historique (${txCount} tx)`} placement="top">
-                                                                    <IconButton
-                                                                        size="small"
-                                                                        onClick={() => handleExpandRow(inv.id)}
-                                                                        sx={{
-                                                                            borderRadius: "8px",
-                                                                            color: isExpanded ? dotColor : "text.secondary",
-                                                                            bgcolor: isExpanded ? alpha(dotColor, 0.1) : "transparent",
-                                                                            "&:hover": { bgcolor: alpha(dotColor, 0.1) },
-                                                                            position: "relative",
-                                                                        }}
-                                                                    >
-                                                                        <HistoryRoundedIcon fontSize="small" />
-                                                                        {txCount > 0 && (
-                                                                            <Box sx={{
-                                                                                position: "absolute", top: 1, right: 1,
-                                                                                width: 14, height: 14, borderRadius: "50%",
-                                                                                bgcolor: dotColor, color: "#FFF",
-                                                                                fontSize: 9, fontWeight: 800,
-                                                                                display: "flex", alignItems: "center", justifyContent: "center",
-                                                                            }}>
-                                                                                {txCount}
-                                                                            </Box>
-                                                                        )}
-                                                                    </IconButton>
-                                                                </MuiTooltip>
-
-                                                                <MuiTooltip title="Supprimer la position" placement="top">
-                                                                    <IconButton
-                                                                        size="small"
-                                                                        color="error"
-                                                                        onClick={() => handleDelete(inv.id)}
-                                                                        sx={{
-                                                                            opacity: 0.45,
-                                                                            borderRadius: "8px",
-                                                                            "&:hover": { opacity: 1, bgcolor: alpha(theme.palette.error.main, 0.1) },
-                                                                        }}
-                                                                    >
-                                                                        <DeleteIcon fontSize="small" />
-                                                                    </IconButton>
-                                                                </MuiTooltip>
-                                                            </Stack>
-                                                        </TableCell>
-                                                    </TableRow>
-
-                                                    {/* ── Expanded: Transaction History ── */}
-                                                    <TableRow key={`${inv.id}-detail`}>
-                                                        <TableCell colSpan={8} sx={{ p: 0, border: "none" }}>
-                                                            <Collapse in={isExpanded} timeout={250} unmountOnExit>
-                                                                <Box
-                                                                    sx={{
-                                                                        mx: 3, mb: 2, mt: 0.5,
-                                                                        borderRadius: "14px",
-                                                                        border: `1px solid ${alpha(dotColor, 0.2)}`,
-                                                                        bgcolor: isDark ? alpha(dotColor, 0.04) : alpha(dotColor, 0.02),
-                                                                        overflow: "hidden",
-                                                                    }}
-                                                                >
-                                                                    {/* Header */}
-                                                                    <Stack
-                                                                        direction="row"
-                                                                        alignItems="center"
-                                                                        justifyContent="space-between"
-                                                                        sx={{ px: 2.5, py: 1.5, borderBottom: `1px solid ${alpha(dotColor, 0.12)}` }}
-                                                                    >
-                                                                        <Stack direction="row" alignItems="center" spacing={1}>
-                                                                            <HistoryRoundedIcon sx={{ fontSize: 16, color: dotColor }} />
-                                                                            <Typography sx={{ fontSize: "0.8rem", fontWeight: 700, color: dotColor }}>
-                                                                                Historique des transactions — {inv.ticker}
-                                                                            </Typography>
-                                                                        </Stack>
-                                                                        <Button
-                                                                            size="small"
-                                                                            startIcon={<AddRoundedIcon />}
-                                                                            onClick={() => handleOpenTxDialog(inv)}
-                                                                            sx={{
-                                                                                fontSize: "0.72rem",
-                                                                                fontWeight: 700,
-                                                                                borderRadius: "8px",
-                                                                                color: dotColor,
-                                                                                bgcolor: alpha(dotColor, 0.1),
-                                                                                "&:hover": { bgcolor: alpha(dotColor, 0.18) },
-                                                                                px: 1.5, py: 0.4,
-                                                                            }}
-                                                                        >
-                                                                            Nouvelle transaction
-                                                                        </Button>
-                                                                    </Stack>
-
-                                                                    {/* Transaction list */}
-                                                                    {txs.length === 0 ? (
-                                                                        <Box sx={{ py: 3, textAlign: "center" }}>
-                                                                            <Typography sx={{ fontSize: "0.8rem", color: "text.secondary" }}>
-                                                                                Aucune transaction enregistrée.
-                                                                            </Typography>
-                                                                            <Typography sx={{ fontSize: "0.72rem", color: "text.secondary", opacity: 0.6, mt: 0.5 }}>
-                                                                                Cliquez sur "Nouvelle transaction" pour commencer l'historique.
-                                                                            </Typography>
-                                                                        </Box>
-                                                                    ) : (
-                                                                        <Table size="small">
-                                                                            <TableHead>
-                                                                                <TableRow>
-                                                                                    {["Type", "Date", "Quantité", "Prix", "Montant", "Gain / Perte", ""].map(h => (
-                                                                                        <TableCell
-                                                                                            key={h}
-                                                                                            sx={{
-                                                                                                fontSize: "0.68rem",
-                                                                                                fontWeight: 700,
-                                                                                                color: "text.secondary",
-                                                                                                textTransform: "uppercase",
-                                                                                                letterSpacing: "0.06em",
-                                                                                                py: 0.8,
-                                                                                                border: "none",
-                                                                                                bgcolor: "transparent",
-                                                                                                "&:first-of-type": { pl: 2.5 },
-                                                                                                "&:last-of-type": { pr: 1.5 },
-                                                                                            }}
-                                                                                        >
-                                                                                            {h}
-                                                                                        </TableCell>
-                                                                                    ))}
-                                                                                </TableRow>
-                                                                            </TableHead>
-                                                                            <TableBody>
-                                                                                {txs.map((tx) => {
-                                                                                    const isBuy = tx.type === "buy";
-                                                                                    const txColor = isBuy ? theme.palette.success.main : theme.palette.error.main;
-                                                                                    const txQty = parseFloat(tx.quantity);
-                                                                                    const txPrice = parseFloat(tx.price);
-                                                                                    const txCur = (tx.currency || "EUR").toUpperCase();
-                                                                                    const txAmount = txQty * txPrice;
-
-                                                                                    // Gain/Perte calculation
-                                                                                    let plValue = null;
-                                                                                    let plLabel = null;
-                                                                                    if (isBuy) {
-                                                                                        // Latent gain: (current price EUR - buy price EUR) × qty
-                                                                                        const txPriceEur = txCur === "EUR" ? txPrice
-                                                                                            : txPrice / (data.eurToUsdRate || 1.05);
-                                                                                        const currentPriceEur = parseFloat(inv.current_price) || 0;
-                                                                                        plValue = (currentPriceEur - txPriceEur) * txQty;
-                                                                                        plLabel = "Latent";
-                                                                                    } else {
-                                                                                        // Realized: extract from notes
-                                                                                        const notesStr = tx.notes || "";
-                                                                                        const match = notesStr.match(/([+-]?[\d.,]+)\s*(EUR|USD|€|\$)/i);
-                                                                                        if (match) {
-                                                                                            plValue = parseFloat(match[1].replace(",", "."));
-                                                                                            // If the notes say 'perte' or value is negative keep it negative
-                                                                                            if (/perte/i.test(notesStr) && plValue > 0) plValue = -plValue;
-                                                                                        }
-                                                                                        plLabel = "Réalisé";
-                                                                                    }
-                                                                                    const plPositive = plValue !== null && plValue >= 0;
-                                                                                    // % calculation: plValue / cost × 100
-                                                                                    const txPriceEurForPct = txCur === "EUR" ? txPrice : txPrice / (data.eurToUsdRate || 1.05);
-                                                                                    const plCost = txQty * txPriceEurForPct;
-                                                                                    const plPct = plCost !== 0 && plValue !== null ? (plValue / plCost) * 100 : null;
-                                                                                    return (
-                                                                                        <TableRow
-                                                                                            key={tx.id}
-                                                                                            sx={{
-                                                                                                "& td": { border: "none", py: 0.8, fontFamily: MONO_FONT, fontSize: "0.8rem" },
-                                                                                                "&:hover": { bgcolor: isDark ? alpha("#FFF", 0.02) : alpha("#000", 0.015) },
-                                                                                            }}
-                                                                                        >
-                                                                                            <TableCell sx={{ pl: 2.5 }}>
-                                                                                                <Stack direction="row" alignItems="center" spacing={0.8}>
-                                                                                                    <Box sx={{
-                                                                                                        display: "flex", alignItems: "center", justifyContent: "center",
-                                                                                                        width: 22, height: 22, borderRadius: "50%",
-                                                                                                        bgcolor: alpha(txColor, 0.12), color: txColor,
-                                                                                                    }}>
-                                                                                                        {isBuy ? <ArrowUpwardRoundedIcon sx={{ fontSize: 13 }} /> : <ArrowDownwardRoundedIcon sx={{ fontSize: 13 }} />}
-                                                                                                    </Box>
-                                                                                                    <Typography sx={{ fontWeight: 700, fontSize: "0.78rem", color: txColor, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                                                                                                        {isBuy ? "Achat" : "Vente"}
-                                                                                                    </Typography>
-                                                                                                </Stack>
-                                                                                            </TableCell>
-                                                                                            <TableCell sx={{ color: "text.secondary" }}>
-                                                                                                {tx.tx_date ? new Date(tx.tx_date).toLocaleDateString("fr-FR") : "—"}
-                                                                                            </TableCell>
-                                                                                            <TableCell>
-                                                                                                {txQty.toLocaleString(undefined, { maximumFractionDigits: 6 })}
-                                                                                            </TableCell>
-                                                                                            <TableCell>
-                                                                                                {new Intl.NumberFormat("fr-FR", { style: "currency", currency: txCur }).format(txPrice)}
-                                                                                            </TableCell>
-                                                                                            <TableCell sx={{ fontWeight: 700, color: isBuy ? "error.main" : "success.main" }}>
-                                                                                                {isBuy ? "-" : "+"}{new Intl.NumberFormat("fr-FR", { style: "currency", currency: txCur }).format(txAmount)}
-                                                                                            </TableCell>
-                                                                                            <TableCell>
-                                                                                                {plValue !== null ? (
-                                                                                                    <Box
-                                                                                                        onClick={() => setPlShowPct(v => !v)}
-                                                                                                        sx={{
-                                                                                                            display: "inline-flex", alignItems: "center", gap: 0.4,
-                                                                                                            px: 1, py: 0.25, borderRadius: "6px", cursor: "pointer",
-                                                                                                            bgcolor: alpha(plPositive ? theme.palette.success.main : theme.palette.error.main, 0.1),
-                                                                                                            transition: "all 0.15s",
-                                                                                                            "&:hover": { bgcolor: alpha(plPositive ? theme.palette.success.main : theme.palette.error.main, 0.18) },
-                                                                                                        }}
-                                                                                                    >
-                                                                                                        <Typography sx={{
-                                                                                                            fontSize: "0.72rem", fontWeight: 700, fontFamily: MONO_FONT,
-                                                                                                            color: plPositive ? theme.palette.success.main : theme.palette.error.main,
-                                                                                                            transition: "all 0.15s",
-                                                                                                        }}>
-                                                                                                            {plShowPct && plPct !== null
-                                                                                                                ? `${plPositive ? "+" : ""}${plPct.toFixed(1)}%`
-                                                                                                                : `${plPositive ? "+" : ""}${new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", signDisplay: "never" }).format(Math.abs(plValue))}`
-                                                                                                            }
-                                                                                                        </Typography>
-                                                                                                        <Typography sx={{ fontSize: "0.6rem", color: "text.disabled", fontWeight: 600 }}>
-                                                                                                            {plLabel}
-                                                                                                        </Typography>
-                                                                                                    </Box>
-                                                                                                ) : <Typography sx={{ fontSize: "0.75rem", color: "text.disabled" }}>—</Typography>}
-                                                                                            </TableCell>
-                                                                                            <TableCell sx={{ pr: 1.5 }}>
-                                                                                                <IconButton
-                                                                                                    size="small"
-                                                                                                    onClick={() => handleDeleteTransaction(tx.id, inv.id)}
-                                                                                                    sx={{ opacity: 0.35, "&:hover": { opacity: 1, color: "error.main" } }}
-                                                                                                >
-                                                                                                    <DeleteIcon sx={{ fontSize: 14 }} />
-                                                                                                </IconButton>
-                                                                                            </TableCell>
-                                                                                        </TableRow>
-                                                                                    );
-                                                                                })}
-                                                                            </TableBody>
-                                                                        </Table>
-                                                                    )}
-                                                                </Box>
-                                                            </Collapse>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                </>
-                                            );
-                                        })}
-
-                                        {data.investments.filter(i => i.quantity > 0).length === 0 && (
-                                            <TableRow>
-                                                <TableCell colSpan={8} align="center" sx={{ py: 7, color: "text.secondary" }}>
-                                                    <Stack alignItems="center" spacing={1}>
-                                                        <TrendingUpRoundedIcon sx={{ fontSize: 36, color: alpha(accentColor, 0.3) }} />
-                                                        <Typography sx={{ fontSize: "0.9rem", fontWeight: 600, color: "text.secondary" }}>
-                                                            Aucun actif dans le portefeuille
-                                                        </Typography>
-                                                        <Typography sx={{ fontSize: "0.78rem", color: "text.secondary" }}>
-                                                            Cliquez sur "Ajouter un actif" pour commencer
-                                                        </Typography>
-                                                    </Stack>
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
-
-                            {/* ── Closed positions section ── */}
-                            {data.investments.filter(i => i.quantity === 0).length > 0 && (
-                                <Box sx={{ px: 3, pb: 2 }}>
-                                    <Button
-                                        size="small"
-                                        onClick={() => setShowClosed(v => !v)}
-                                        endIcon={<ChevronRightIcon sx={{ transform: showClosed ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s", fontSize: 16 }} />}
-                                        sx={{
-                                            mt: 1, mb: showClosed ? 1.5 : 0,
-                                            fontSize: "0.75rem", fontWeight: 700,
-                                            color: "text.secondary",
-                                            borderRadius: "10px",
-                                            bgcolor: isDark ? alpha("#FFF", 0.04) : alpha("#000", 0.04),
-                                            px: 1.5, py: 0.6,
-                                            "&:hover": { bgcolor: isDark ? alpha("#FFF", 0.08) : alpha("#000", 0.07) },
-                                            transition: "all 0.2s",
-                                        }}
-                                    >
-                                        📦 {data.investments.filter(i => i.quantity === 0).length} position{data.investments.filter(i => i.quantity === 0).length > 1 ? "s" : ""} clôturée{data.investments.filter(i => i.quantity === 0).length > 1 ? "s" : ""}
-                                    </Button>
-
-                                    <Collapse in={showClosed} timeout={250}>
-                                        <Table size="small">
-                                            <TableBody>
-                                                {data.investments.filter(i => i.quantity === 0).map((inv, idx) => {
-                                                    // const dotColor = "#888";
-                                                    const isExpanded = expandedRow === inv.id;
-                                                    const txs = txMap[inv.id] || [];
-                                                    const txCount = txs.length;
-                                                    // Compute realized P&L from transactions
-                                                    let realizedStr = "";
-                                                    if (txs.length > 0) {
-                                                        const sellTx = txs.filter(t => t.type === "sell");
-                                                        if (sellTx.length > 0 && sellTx[0].notes) {
-                                                            realizedStr = sellTx[0].notes;
-                                                        }
-                                                    }
-                                                    return (
-                                                        <>
-                                                            <TableRow
-                                                                key={inv.id}
-                                                                sx={{
-                                                                    "& td": {
-                                                                        borderBottom: isExpanded ? "none" : `1px solid ${alpha(theme.palette.divider, 0.3)}`,
-                                                                        py: 1.2, fontFamily: MONO_FONT, fontSize: "0.82rem",
-                                                                        color: "text.secondary", opacity: 0.75,
-                                                                    },
-                                                                    "&:hover": { bgcolor: isDark ? alpha("#FFF", 0.02) : alpha("#000", 0.01), "& td": { opacity: 1 } },
-                                                                    bgcolor: isExpanded ? (isDark ? alpha("#FFF", 0.03) : alpha("#000", 0.02)) : "transparent",
-                                                                }}
-                                                            >
-                                                                <TableCell sx={{ pl: 3, minWidth: 210 }}>
-                                                                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                                                                        <IconButton
-                                                                            size="small"
-                                                                            onClick={() => handleExpandRow(inv.id)}
-                                                                            sx={{
-                                                                                p: 0.3, color: isExpanded ? accentColor : "text.disabled",
-                                                                                transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
-                                                                                transition: "transform 0.2s",
-                                                                            }}
-                                                                        >
-                                                                            <ChevronRightIcon sx={{ fontSize: 16 }} />
-                                                                        </IconButton>
-                                                                        <Avatar sx={{ width: 30, height: 30, bgcolor: alpha("#888", 0.1), color: "#888", fontSize: "0.75rem", fontWeight: 700 }}>
-                                                                            {inv.ticker.slice(0, 1)}
-                                                                        </Avatar>
-                                                                        <Box>
-                                                                            <Typography sx={{ fontWeight: 700, fontSize: "0.82rem", color: "text.secondary", fontFamily: MONO_FONT, textDecoration: "line-through" }}>
-                                                                                {inv.ticker}
-                                                                            </Typography>
-                                                                            <Typography sx={{ fontSize: "0.68rem", color: "text.disabled" }}>Position clôturée</Typography>
-                                                                        </Box>
-                                                                    </Stack>
-                                                                </TableCell>
-                                                                <TableCell align="right" colSpan={5}>
-                                                                    <Typography sx={{ fontSize: "0.72rem", color: "text.secondary", fontFamily: MONO_FONT }}>
-                                                                        {realizedStr || "Historique disponible"}
-                                                                    </Typography>
-                                                                </TableCell>
-                                                                <TableCell />
-                                                                <TableCell align="center" sx={{ pr: 3 }}>
-                                                                    <MuiTooltip title={`Historique (${txCount} tx)`} placement="top">
-                                                                        <IconButton
-                                                                            size="small"
-                                                                            onClick={() => handleExpandRow(inv.id)}
-                                                                            sx={{ color: isExpanded ? accentColor : "text.disabled", borderRadius: "8px" }}
-                                                                        >
-                                                                            <HistoryRoundedIcon sx={{ fontSize: 16 }} />
-                                                                            {txCount > 0 && (
-                                                                                <Box sx={{ position: "absolute", top: 1, right: 1, width: 12, height: 12, borderRadius: "50%", bgcolor: "text.disabled", color: "#FFF", fontSize: 8, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                                                                    {txCount}
-                                                                                </Box>
-                                                                            )}
-                                                                        </IconButton>
-                                                                    </MuiTooltip>
-                                                                    <MuiTooltip title="Supprimer" placement="top">
-                                                                        <IconButton size="small" color="error" onClick={() => handleDelete(inv.id)} sx={{ opacity: 0.3, borderRadius: "8px", "&:hover": { opacity: 1 } }}>
-                                                                            <DeleteIcon sx={{ fontSize: 14 }} />
-                                                                        </IconButton>
-                                                                    </MuiTooltip>
-                                                                </TableCell>
-                                                            </TableRow>
-
-                                                            {/* Expanded tx history */}
-                                                            <TableRow key={`${inv.id}-closed-detail`}>
-                                                                <TableCell colSpan={8} sx={{ p: 0, border: "none" }}>
-                                                                    <Collapse in={isExpanded} timeout={250} unmountOnExit>
-                                                                        <Box sx={{ mx: 3, mb: 2, mt: 0.5, borderRadius: "12px", border: `1px solid ${alpha("#888", 0.15)}`, bgcolor: isDark ? alpha("#FFF", 0.02) : alpha("#000", 0.015), overflow: "hidden" }}>
-                                                                            <Stack direction="row" alignItems="center" spacing={1} sx={{ px: 2, py: 1.2, borderBottom: `1px solid ${alpha("#888", 0.1)}` }}>
-                                                                                <HistoryRoundedIcon sx={{ fontSize: 14, color: "text.secondary" }} />
-                                                                                <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: "text.secondary" }}>
-                                                                                    Historique — {inv.ticker} (position clôturée)
-                                                                                </Typography>
-                                                                            </Stack>
-                                                                            {txs.length === 0 ? (
-                                                                                <Box sx={{ py: 2, textAlign: "center" }}>
-                                                                                    <Typography sx={{ fontSize: "0.75rem", color: "text.secondary" }}>Aucune transaction.</Typography>
-                                                                                </Box>
-                                                                            ) : (
-                                                                                <Table size="small">
-                                                                                    <TableHead>
-                                                                                        <TableRow>
-                                                                                            {["Type", "Date", "Quantité", "Prix", "Montant", "Gain / Perte", ""].map(h => (
-                                                                                                <TableCell key={h} sx={{ fontSize: "0.65rem", fontWeight: 700, color: "text.disabled", textTransform: "uppercase", letterSpacing: "0.06em", py: 0.6, border: "none", "&:first-of-type": { pl: 2 }, "&:last-of-type": { pr: 1 } }}>{h}</TableCell>
-                                                                                            ))}
-                                                                                        </TableRow>
-                                                                                    </TableHead>
-                                                                                    <TableBody>
-                                                                                        {txs.map((tx) => {
-                                                                                            const isBuy = tx.type === "buy";
-                                                                                            const txColor = isBuy ? theme.palette.success.main : theme.palette.error.main;
-                                                                                            const txQty = parseFloat(tx.quantity);
-                                                                                            const txPrice = parseFloat(tx.price);
-                                                                                            const txCur = (tx.currency || "EUR").toUpperCase();
-                                                                                            const txAmount = txQty * txPrice;
-
-                                                                                            // For closed positions: only realized P&L from notes
-                                                                                            let plValue = null;
-                                                                                            let plLabel = isBuy ? "Achat" : "Réalisé";
-                                                                                            if (!isBuy) {
-                                                                                                const notesStr = tx.notes || "";
-                                                                                                const match = notesStr.match(/([+-]?[\d.,]+)\s*(EUR|USD|€|\$)/i);
-                                                                                                if (match) {
-                                                                                                    plValue = parseFloat(match[1].replace(",", "."));
-                                                                                                    if (/perte/i.test(notesStr) && plValue > 0) plValue = -plValue;
-                                                                                                }
-                                                                                            }
-                                                                                            const plPositive = plValue !== null && plValue >= 0;
-                                                                                            // % for closed sells: plValue / sell proceeds × 100 (rough ROI)
-                                                                                            const txPriceEurForPct = txCur === "EUR" ? txPrice : txPrice / (data.eurToUsdRate || 1.05);
-                                                                                            const plCost = txQty * txPriceEurForPct;
-                                                                                            const plPct = plCost !== 0 && plValue !== null ? (plValue / plCost) * 100 : null;
-                                                                                            return (
-                                                                                                <TableRow key={tx.id} sx={{ "& td": { border: "none", py: 0.7, fontFamily: MONO_FONT, fontSize: "0.78rem" } }}>
-                                                                                                    <TableCell sx={{ pl: 2 }}>
-                                                                                                        <Stack direction="row" alignItems="center" spacing={0.6}>
-                                                                                                            <Box sx={{ width: 18, height: 18, borderRadius: "50%", bgcolor: alpha(txColor, 0.12), color: txColor, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                                                                                                {isBuy ? <ArrowUpwardRoundedIcon sx={{ fontSize: 11 }} /> : <ArrowDownwardRoundedIcon sx={{ fontSize: 11 }} />}
-                                                                                                            </Box>
-                                                                                                            <Typography sx={{ fontWeight: 700, fontSize: "0.72rem", color: txColor, textTransform: "uppercase" }}>
-                                                                                                                {isBuy ? "Achat" : "Vente"}
-                                                                                                            </Typography>
-                                                                                                        </Stack>
-                                                                                                    </TableCell>
-                                                                                                    <TableCell sx={{ color: "text.secondary" }}>{tx.tx_date ? new Date(tx.tx_date).toLocaleDateString("fr-FR") : "—"}</TableCell>
-                                                                                                    <TableCell>{txQty.toLocaleString(undefined, { maximumFractionDigits: 6 })}</TableCell>
-                                                                                                    <TableCell>{new Intl.NumberFormat("fr-FR", { style: "currency", currency: txCur }).format(txPrice)}</TableCell>
-                                                                                                    <TableCell sx={{ fontWeight: 700, color: isBuy ? "error.main" : "success.main" }}>
-                                                                                                        {isBuy ? "-" : "+"}{new Intl.NumberFormat("fr-FR", { style: "currency", currency: txCur }).format(txAmount)}
-                                                                                                    </TableCell>
-                                                                                                    <TableCell>
-                                                                                                        {plValue !== null ? (
-                                                                                                            <Box
-                                                                                                                onClick={() => setPlShowPct(v => !v)}
-                                                                                                                sx={{
-                                                                                                                    display: "inline-flex", alignItems: "center", gap: 0.4,
-                                                                                                                    px: 1, py: 0.25, borderRadius: "6px", cursor: "pointer",
-                                                                                                                    bgcolor: alpha(plPositive ? theme.palette.success.main : theme.palette.error.main, 0.1),
-                                                                                                                    transition: "all 0.15s",
-                                                                                                                    "&:hover": { bgcolor: alpha(plPositive ? theme.palette.success.main : theme.palette.error.main, 0.18) },
-                                                                                                                }}
-                                                                                                            >
-                                                                                                                <Typography sx={{
-                                                                                                                    fontSize: "0.72rem", fontWeight: 700, fontFamily: MONO_FONT,
-                                                                                                                    color: plPositive ? theme.palette.success.main : theme.palette.error.main,
-                                                                                                                    transition: "all 0.15s",
-                                                                                                                }}>
-                                                                                                                    {plShowPct && plPct !== null
-                                                                                                                        ? `${plPositive ? "+" : ""}${plPct.toFixed(1)}%`
-                                                                                                                        : `${plPositive ? "+" : ""}${new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", signDisplay: "never" }).format(Math.abs(plValue))}`
-                                                                                                                    }
-                                                                                                                </Typography>
-                                                                                                                <Typography sx={{ fontSize: "0.6rem", color: "text.disabled", fontWeight: 600 }}>
-                                                                                                                    {plLabel}
-                                                                                                                </Typography>
-                                                                                                            </Box>
-                                                                                                        ) : <Typography sx={{ fontSize: "0.75rem", color: "text.disabled" }}>—</Typography>}
-                                                                                                    </TableCell>
-                                                                                                    <TableCell sx={{ pr: 1 }}>
-                                                                                                        <IconButton size="small" onClick={() => handleDeleteTransaction(tx.id, inv.id)} sx={{ opacity: 0.3, "&:hover": { opacity: 1, color: "error.main" } }}>
-                                                                                                            <DeleteIcon sx={{ fontSize: 12 }} />
-                                                                                                        </IconButton>
-                                                                                                    </TableCell>
-                                                                                                </TableRow>
-                                                                                            );
-                                                                                        })}
-                                                                                    </TableBody>
-                                                                                </Table>
-                                                                            )}
-                                                                        </Box>
-                                                                    </Collapse>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        </>
-                                                    );
-                                                })}
-                                            </TableBody>
-                                        </Table>
-                                    </Collapse>
-                                </Box>
-                            )}
-
                         </Box>
-
                     </Box>
                 </Fade>
             )}
@@ -1988,6 +1318,89 @@ export default function Investment() {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* AI FAB */}
+            <Fab
+                variant="extended"
+                onClick={() => setAiDrawerOpen(true)}
+                sx={{
+                    position: "fixed",
+                    bottom: 24,
+                    right: 24,
+                    bgcolor: accentColor,
+                    color: "#000",
+                    fontWeight: 700,
+                    textTransform: "none",
+                    boxShadow: `0 8px 24px ${alpha(accentColor, 0.4)}`,
+                    "&:hover": {
+                        bgcolor: isDark ? "#fff" : "#000",
+                        color: isDark ? "#000" : "#fff",
+                    }
+                }}
+            >
+                <AutoAwesomeRoundedIcon sx={{ mr: 1, fontSize: 20 }} />
+                Demander à l'IA
+            </Fab>
+
+            {/* AI DRAWER */}
+            <Drawer
+                anchor="right"
+                open={aiDrawerOpen}
+                onClose={() => setAiDrawerOpen(false)}
+                PaperProps={{
+                    sx: { width: { xs: "100%", sm: 400 }, bgcolor: isDark ? "#12121c" : "#fafafa", backgroundImage: "none", display: "flex", flexDirection: "column" }
+                }}
+            >
+                <Box sx={{ p: 2, borderBottom: `1px solid ${isDark ? "#282346" : theme.palette.divider}`, display: "flex", alignItems: "center", bgcolor: isDark ? "#151226" : "#fff" }}>
+                    <AutoAwesomeRoundedIcon sx={{ color: accentColor, mr: 1.5 }} />
+                    <Typography sx={{ fontWeight: 700, flex: 1 }}>Invest AI</Typography>
+                    <IconButton onClick={handleClearAiChat} size="small" sx={{ mr: 1, color: "text.secondary" }} title="Effacer la conversation">
+                        <DeleteIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton onClick={() => setAiDrawerOpen(false)} size="small"><ChevronRightIcon /></IconButton>
+                </Box>
+                <Box sx={{ flex: 1, overflowY: "auto", p: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+                    {aiMessages.length === 0 && (
+                        <Box sx={{ p: 3, textAlign: "center", opacity: 0.6 }}>
+                            <Typography sx={{ fontSize: "0.85rem", mb: 2 }}>Posez-moi une question sur l'évolution de votre portefeuille, vos rendements ou transactions récentes.</Typography>
+                            <Typography sx={{ fontSize: "0.75rem", fontStyle: "italic" }}>"Pourquoi j'ai eu un pic de 5000€ le 27 Février ?"</Typography>
+                        </Box>
+                    )}
+                    {aiMessages.map(msg => (
+                        <Box key={msg.id} sx={{ alignSelf: msg.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%", bgcolor: msg.role === "user" ? accentColor : isDark ? "#1f1d36" : "#fff", color: msg.role === "user" ? "#000" : "text.primary", p: 1.5, borderRadius: "12px", borderBottomRightRadius: msg.role === "user" ? "0px" : "12px", borderBottomLeftRadius: msg.role === "model" ? "0px" : "12px", boxShadow: "0 2px 10px rgba(0,0,0,0.05)", border: msg.role === "model" ? `1px solid ${isDark ? "#2a264f" : "#eee"}` : "none" }}>
+                            <Typography component="div" sx={{ fontSize: "0.85rem", '& p': { m: 0 }, '& ul': { mt: 0, pl: 2 }, '& table': { borderCollapse: 'collapse', width: '100%', mt: 1 }, '& th, & td': { border: `1px solid ${isDark ? '#444' : '#ddd'}`, px: 1, py: 0.5, textAlign: 'left' } }}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text || (aiLoading ? "..." : "")}</ReactMarkdown>
+                            </Typography>
+                        </Box>
+                    ))}
+                    <div ref={messagesEndRef} />
+                </Box>
+                <Box sx={{ p: 2, bgcolor: isDark ? "#151226" : "#fff", borderTop: `1px solid ${isDark ? "#282346" : theme.palette.divider}` }}>
+                    <TextField
+                        fullWidth
+                        size="small"
+                        placeholder="Posez une question..."
+                        value={aiInput}
+                        onChange={e => setAiInput(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleAskAi();
+                            }
+                        }}
+                        InputProps={{
+                            endAdornment: (
+                                <InputAdornment position="end">
+                                    <IconButton onClick={handleAskAi} disabled={aiLoading || !aiInput.trim()} sx={{ color: accentColor }}>
+                                        <SendRoundedIcon fontSize="small" />
+                                    </IconButton>
+                                </InputAdornment>
+                            ),
+                            sx: { borderRadius: "10px", fontSize: "0.85rem", bgcolor: isDark ? "#12121c" : "#f5f5f5", "& fieldset": { border: "none" } }
+                        }}
+                    />
+                </Box>
+            </Drawer>
 
         </Box>
     );

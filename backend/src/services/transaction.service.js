@@ -1,4 +1,28 @@
 const db = require("../core/database");
+const YahooFinance = require("yahoo-finance2").default;
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
+
+// ── Fetch EUR/USD rate (live) ─────────────────────────────────────
+async function fetchEurToUsdRate() {
+    try {
+        const q = await yahooFinance.quote('EURUSD=X');
+        return (q && q.regularMarketPrice) ? q.regularMarketPrice : 1.09;
+    } catch {
+        return 1.09;
+    }
+}
+
+// ── Convert native-currency price to EUR ──────────────────────────
+function toEurNow(price, currency, eurToUsdRate) {
+    if (!price) return 0;
+    const cur = (currency || 'USD').toUpperCase();
+    if (cur === 'EUR') return price;
+    if (cur === 'USD') return price / eurToUsdRate;
+    // GBp (pence) → GBP → EUR via ~1.25 GBP/USD
+    if (cur === 'GBP') return (price * 1.25) / eurToUsdRate;
+    if (cur === 'GBP' || currency === 'GBp') return (price / 100 * 1.25) / eurToUsdRate;
+    return price / eurToUsdRate; // fallback
+}
 
 // ── Auto-create transactions table if not exists ──────────────────
 async function initTransactionsTable() {
@@ -74,37 +98,44 @@ async function addTransaction(investmentId, data) {
         args: [investmentId],
     });
 
+    // ── Fetch current EUR/USD rate to store PRU in EUR ────────────────
+    const eurToUsdRate = await fetchEurToUsdRate();
+
     let totalQty = 0;
-    let totalCost = 0; // sum of qty × price for buys
+    let totalCost = 0; // sum of qty × price in EUR
 
     for (const tx of allTx.rows) {
         const q = parseFloat(tx.quantity);
         const p = parseFloat(tx.price);
+        const txCurrency = tx.currency || inv.currency || 'USD';
+        const pEur = toEurNow(p, txCurrency, eurToUsdRate);
+
         if (tx.type === 'buy') {
-            totalCost += q * p;
+            totalCost += q * pEur;  // cost in EUR
             totalQty += q;
         } else if (tx.type === 'sell') {
             // PRU stays the same on sell, cost proportionally reduces
             if (totalQty > 0) {
-                const pru = totalCost / totalQty;
-                totalCost -= q * pru;
+                const pruEur = totalCost / totalQty;
+                totalCost -= q * pruEur;
             }
             totalQty -= q;
         }
     }
 
     const newQty = Math.max(0, parseFloat(totalQty.toFixed(8)));
-    const newAvgPrice = totalQty > 0 ? totalCost / totalQty : inv.average_price;
+    // PRU stocké en EUR, currency forcé à 'EUR' pour éviter double conversion à l'affichage
+    const newAvgPriceEur = totalQty > 0 ? totalCost / totalQty : toEurNow(parseFloat(inv.average_price), inv.currency || 'USD', eurToUsdRate);
 
-    // Update the investment record
+    // Update the investment record — PRU en EUR, currency = 'EUR'
     await db.execute({
         sql: `UPDATE investments
-              SET quantity = ?, average_price = ?, updated_at = CURRENT_TIMESTAMP
+              SET quantity = ?, average_price = ?, currency = 'EUR', updated_at = CURRENT_TIMESTAMP
               WHERE id = ?`,
-        args: [newQty, parseFloat(newAvgPrice.toFixed(6)), investmentId],
+        args: [newQty, parseFloat(newAvgPriceEur.toFixed(6)), investmentId],
     });
 
-    return { id: txResult.lastInsertRowid?.toString(), newQty, newAvgPrice };
+    return { id: txResult.lastInsertRowid?.toString(), newQty, newAvgPrice: newAvgPriceEur };
 }
 
 // ── Delete a transaction (and recompute investment) ───────────────
@@ -131,34 +162,46 @@ async function deleteTransaction(txId) {
         args: [tx.investment_id],
     });
 
+    // Fetch original investment to know native currency
+    const parentInvRes = await db.execute({
+        sql: `SELECT * FROM investments WHERE id = ?`,
+        args: [tx.investment_id],
+    });
+    const parentInv = parentInvRes.rows?.[0] || {};
+
+    const eurToUsdRate = await fetchEurToUsdRate();
+
     let totalQty = 0;
-    let totalCost = 0;
-    let firstPrice = null;
+    let totalCost = 0; // in EUR
+    let firstPriceEur = null;
 
     for (const t of allTx.rows) {
         const q = parseFloat(t.quantity);
         const p = parseFloat(t.price);
-        if (firstPrice === null) firstPrice = p;
+        const txCurrency = t.currency || parentInv.currency || 'USD';
+        const pEur = toEurNow(p, txCurrency, eurToUsdRate);
+        if (firstPriceEur === null) firstPriceEur = pEur;
+
         if (t.type === 'buy') {
-            totalCost += q * p;
+            totalCost += q * pEur;
             totalQty += q;
         } else if (t.type === 'sell') {
             if (totalQty > 0) {
-                const pru = totalCost / totalQty;
-                totalCost -= q * pru;
+                const pruEur = totalCost / totalQty;
+                totalCost -= q * pruEur;
             }
             totalQty -= q;
         }
     }
 
     const newQty = Math.max(0, parseFloat(totalQty.toFixed(8)));
-    const newAvgPrice = totalQty > 0 ? totalCost / totalQty : (firstPrice || 0);
+    const newAvgPriceEur = totalQty > 0 ? totalCost / totalQty : (firstPriceEur || 0);
 
     await db.execute({
         sql: `UPDATE investments
-              SET quantity = ?, average_price = ?, updated_at = CURRENT_TIMESTAMP
+              SET quantity = ?, average_price = ?, currency = 'EUR', updated_at = CURRENT_TIMESTAMP
               WHERE id = ?`,
-        args: [newQty, parseFloat(newAvgPrice.toFixed(6)), tx.investment_id],
+        args: [newQty, parseFloat(newAvgPriceEur.toFixed(6)), tx.investment_id],
     });
 
     return { success: true };

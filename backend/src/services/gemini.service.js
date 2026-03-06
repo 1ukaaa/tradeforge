@@ -313,6 +313,32 @@ ${tradesStr}
 Réponds avec une analyse claire, chiffrée (si pertinent) et concise. Base-toi UNIQUEMENT sur les données du journal fournies ci-dessus. N'invente jamais de données absentes. Sois précis et aide Luka à s'améliorer. Structure ta réponse avec du Markdown (gras, puces, tableaux si utile, images).`;
 };
 
+const buildInvestmentSystemPrompt = (recentActivity, investments) => {
+  const recentStr = recentActivity && Array.isArray(recentActivity)
+    ? JSON.stringify(recentActivity.slice(0, 50))
+    : "[]";
+
+  const invStr = investments && Array.isArray(investments)
+    ? JSON.stringify(investments)
+    : "[]";
+
+  return `Tu es TradeForge AI, l'assistant expert en analyse quantitative de trading et d'INVESTISSEMENT de Luka.
+Ton objectif est de répondre aux questions de l'utilisateur sur son portefeuille d'investissement, l'évolution de son capital, et ses récents dividendes / transactions.
+Garde le contexte de la conversation : réfère-toi aux messages précédents si nécessaire.
+
+### DONNÉES DU PORTEFEUILLE ACTUEL :
+${invStr}
+
+### ACTIVITÉ RÉCENTE (Achats, Ventes, Dividendes) :
+${recentStr}
+
+IMPORTANT:
+1. L'utilisateur peut te demander des choses comme "Pourquoi j'ai un pic de 5000€ le 27 février 2025 ?". 
+2. Tu devras chercher dans l'ACTIVITÉ RÉCENTE tout mouvement important autour de cette date (ex: dépôt, gros achat, ou gros versement de dividende).
+3. N'invente pas de données, utilise le contexte fourni. S'il y a de vraies actualités dans l'économie réelle autour des actifs du portefeuille (ex: earnings Apple, taux FED...), tu peux les mentionner et les corréler aux variations si tu disposes de cette connaissance du monde réel.
+4. Réponds toujours de manière claire, chiffrée, et dans un format aéré (Markdown).`;
+};
+
 /**
  * Analyse en mode chat multi-tours.
  * @param {string} rawText - La nouvelle question de l'utilisateur.
@@ -438,10 +464,76 @@ const streamChatAnalysis = async ({ rawText, plan, recentTrades, history = [], o
   return fullText;
 };
 
+const streamInvestmentAnalysis = async ({ rawText, recentActivity, investments, history = [], onChunk, model }) => {
+  if (!rawText || typeof rawText !== "string") {
+    throw new Error("Texte manquant.");
+  }
+
+  const systemPrompt = buildInvestmentSystemPrompt(recentActivity, investments);
+
+  const systemTurn = [
+    { role: "user", parts: [{ text: systemPrompt }] },
+    { role: "model", parts: [{ text: "Compris. Je suis prêt à analyser ton portefeuille d'investissement." }] },
+  ];
+
+  const historyTurns = (Array.isArray(history) ? history.slice(-8) : []).flatMap(msg => {
+    if (msg.role === "user") return [{ role: "user", parts: [{ text: msg.text }] }];
+    if (msg.role === "ai") return [{ role: "model", parts: [{ text: msg.text }] }];
+    return [];
+  });
+
+  const contents = [...systemTurn, ...historyTurns, { role: "user", parts: [{ text: rawText }] }];
+  const targetModel = model === "gemini-2.5-flash" ? "gemini-2.5-flash" : "gemini-3-flash-preview";
+  const url = `${GEMINI_BASE_URL}/${targetModel}:streamGenerateContent?key=${process.env.GEMINI_API_KEY}&alt=sse`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contents }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini stream error ${response.status}: ${err}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullText = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop(); // garde la ligne incomplète
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const data = line.slice(6).trim();
+      if (data === "[DONE]" || !data) continue;
+
+      try {
+        const parsed = JSON.parse(data);
+        const chunk = parsed.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "";
+        if (chunk) {
+          fullText += chunk;
+          if (typeof onChunk === "function") onChunk(fullText);
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  return fullText;
+};
+
 module.exports = {
   generateAnalysis,
   generateStructuredAnalysis,
   generateImage,
   generateChatAnalysis,
   streamChatAnalysis,
+  streamInvestmentAnalysis,
 };
