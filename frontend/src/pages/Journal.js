@@ -39,8 +39,10 @@ import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditIcon from "@mui/icons-material/Edit";
+import IosShareIcon from "@mui/icons-material/IosShare";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import SearchIcon from "@mui/icons-material/Search";
+import ShareDialog from "../components/ShareDialog";
 const RESULT_COLORS = {
   Win: "success",
   Loss: "error",
@@ -397,6 +399,7 @@ const Journal = () => {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [currentEntry, setCurrentEntry] = useState(null);
   const [formPrefill, setFormPrefill] = useState(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   // Broker data for selects
   const [brokerAccounts, setBrokerAccounts] = useState([]);
@@ -548,9 +551,30 @@ const Journal = () => {
                 Historique visuel et analyse de vos performances.
               </Typography>
             </Box>
-            <Button variant="contained" disableElevation size="large" onClick={openFormForNew} startIcon={<AddIcon />} sx={{ borderRadius: 2, px: 3, py: 1.5, fontWeight: 600, textTransform: 'none', fontSize: '1rem', bgcolor: 'text.primary', color: 'background.paper', '&:hover': { bgcolor: 'text.secondary' } }}>
-              Nouveau Trade
-            </Button>
+            <Stack direction="row" spacing={1.5}>
+              <Button
+                variant="outlined"
+                size="large"
+                onClick={() => setShareDialogOpen(true)}
+                startIcon={<IosShareIcon />}
+                sx={{
+                  borderRadius: 2,
+                  px: 3,
+                  py: 1.5,
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  fontSize: '1rem',
+                  borderColor: 'divider',
+                  color: 'text.secondary',
+                  '&:hover': { borderColor: 'text.primary', color: 'text.primary' },
+                }}
+              >
+                Partager
+              </Button>
+              <Button variant="contained" disableElevation size="large" onClick={openFormForNew} startIcon={<AddIcon />} sx={{ borderRadius: 2, px: 3, py: 1.5, fontWeight: 600, textTransform: 'none', fontSize: '1rem', bgcolor: 'text.primary', color: 'background.paper', '&:hover': { bgcolor: 'text.secondary' } }}>
+                Nouveau Trade
+              </Button>
+            </Stack>
           </Stack>
 
           {/* STATS INLINE MINIMAL */}
@@ -751,6 +775,10 @@ const Journal = () => {
         entry={currentEntry}
         onEdit={openFormForEdit}
         onDelete={handleDelete}
+      />
+      <ShareDialog
+        open={shareDialogOpen}
+        onClose={() => setShareDialogOpen(false)}
       />
 
     </Box>

@@ -16,8 +16,13 @@ const discordRoutes = require('./discord.routes');
 const aiMemoryRoutes = require('./aiMemory.routes');
 const investmentRoutes = require('./investment.routes');
 const transactionRoutes = require('./transaction.routes');
+const { shareRouter, publicRouter: sharedPublicRouter } = require('./share.routes');
+const authRoutes = require('./auth.routes');
 
 const router = Router();
+
+// Authentification globale
+router.use('/auth', authRoutes);
 
 router.use('/journal', journalRoutes);
 router.use('/plan', planRoutes);
@@ -34,5 +39,9 @@ router.use('/discord', discordRoutes);
 router.use('/ai-memory', aiMemoryRoutes);
 router.use('/investments', investmentRoutes);
 router.use('/transactions', transactionRoutes);
+
+// Partage du journal
+router.use('/share', shareRouter);       // Routes propriétaire (CRUD liens)
+router.use('/shared', sharedPublicRouter); // Routes publiques (accès lecture seule)
 
 module.exports = router;
