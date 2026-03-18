@@ -10,6 +10,7 @@ import Journal from "./pages/Journal";
 import Settings from "./pages/Settings";
 import SharedJournal from "./pages/SharedJournal";
 import TradeForgeAI from "./pages/TradeForgeAI";
+import MacroLens from "./pages/MacroLens";
 import TwitterStudio from "./pages/TwitterStudio";
 
 const App = () => {
@@ -34,6 +35,7 @@ const App = () => {
           <Route path="journal" element={<Journal />} />
           <Route path="investissements" element={<Investment />} />
           <Route path="calendar" element={<Calendar />} />
+          <Route path="macrolens" element={<MacroLens />} />
           <Route path="settings" element={<Settings />} />
           <Route path="twitter" element={<TwitterStudio />} />
           <Route path="discord" element={<DiscordStudio />} />

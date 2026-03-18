@@ -25,6 +25,7 @@ import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import TaskAltRoundedIcon from "@mui/icons-material/TaskAltRounded";
 import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
 import TwitterIcon from "@mui/icons-material/Twitter";
+import TravelExploreRoundedIcon from "@mui/icons-material/TravelExploreRounded";
 
 // ─── Nav Definitions ─────────────────────────────────────────────
 const MAIN_NAV = [
@@ -38,6 +39,7 @@ const WORKSPACE_NAV = [
   { to: "/twitter", label: "Twitter Studio", icon: <TwitterIcon /> },
   { to: "/discord", label: "Discord Studio", icon: <ForumRoundedIcon /> },
   { to: "/calendar", label: "Calendrier", icon: <CalendarMonthRoundedIcon /> },
+  { to: "/macrolens", label: "MacroLens", icon: <TravelExploreRoundedIcon /> },
   { to: "/calculator", label: "Calculateur", icon: <CalculateRoundedIcon /> },
 ];
 

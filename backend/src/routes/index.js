@@ -18,6 +18,7 @@ const investmentRoutes = require('./investment.routes');
 const transactionRoutes = require('./transaction.routes');
 const { shareRouter, publicRouter: sharedPublicRouter } = require('./share.routes');
 const authRoutes = require('./auth.routes');
+const macroRoutes = require('./macro.routes');
 
 const router = Router();
 
@@ -39,6 +40,7 @@ router.use('/discord', discordRoutes);
 router.use('/ai-memory', aiMemoryRoutes);
 router.use('/investments', investmentRoutes);
 router.use('/transactions', transactionRoutes);
+router.use('/macro', macroRoutes);
 
 // Partage du journal
 router.use('/share', shareRouter);       // Routes propriétaire (CRUD liens)
