@@ -8,6 +8,11 @@ export const getInvestments = async () => {
     return await ensureSuccess(response, "Impossible de charger les investissements.");
 };
 
+export const searchAssets = async (query) => {
+    const response = await fetch(`${BASE_URL}/search?q=${encodeURIComponent(query)}`);
+    return await ensureSuccess(response, "Impossible de rechercher l'actif.");
+};
+
 export const addInvestment = async (data) => {
     const response = await fetch(BASE_URL, {
         method: "POST",

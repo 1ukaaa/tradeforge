@@ -306,17 +306,45 @@ const formatTweetDate = (isoStr) => {
 
 const TweetCard = ({ tweet, user, theme }) => {
   const isBreaking = /^\*/.test(tweet.text.trim());
-  const cleanText = tweet.text.replace(/^\*\s*/, '').trim();
+  const cleanText  = tweet.text.replace(/^\*\s*/, '').trim();
+
+  const [translated, setTranslated] = useState(null);   // null | string
+  const [translating, setTranslating] = useState(false);
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [translateError, setTranslateError] = useState(null);
+
+  const handleTranslate = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Toggle off if already translated
+    if (translated) { setShowTranslation(prev => !prev); return; }
+
+    setTranslating(true);
+    setTranslateError(null);
+    try {
+      const res = await fetch(buildApiUrl('macro/translate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: cleanText }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Erreur traduction');
+      setTranslated(data.translation);
+      setShowTranslation(true);
+    } catch (err) {
+      setTranslateError('Traduction indisponible');
+    } finally {
+      setTranslating(false);
+    }
+  };
+
+  const displayText = showTranslation && translated ? translated : cleanText;
 
   return (
     <Paper
-      component="a"
-      href={tweet.url}
-      target="_blank"
-      rel="noopener noreferrer"
       elevation={0}
       sx={{
-        display: 'block',
         p: 2,
         borderRadius: 2.5,
         border: `1px solid ${isBreaking ? alpha('#ef4444', 0.35) : theme.palette.divider}`,
@@ -327,27 +355,22 @@ const TweetCard = ({ tweet, user, theme }) => {
         '&:hover': {
           borderColor: isBreaking ? alpha('#ef4444', 0.6) : alpha('#1D9BF0', 0.4),
           bgcolor: isBreaking ? alpha('#ef4444', 0.06) : alpha('#1D9BF0', 0.04),
-          transform: 'translateX(3px)',
-          boxShadow: theme.shadows[3],
+          boxShadow: theme.shadows[2],
         },
         position: 'relative',
       }}
     >
       {isBreaking && (
-        <Chip
-          label="BREAKING"
-          size="small"
-          sx={{
-            position: 'absolute', top: 10, right: 10,
-            bgcolor: '#ef4444', color: 'white',
-            fontWeight: 900, fontSize: '0.58rem', height: 18,
-            letterSpacing: '0.06em',
+        <Chip label="BREAKING" size="small"
+          sx={{ position: 'absolute', top: 10, right: 10, bgcolor: '#ef4444', color: 'white',
+            fontWeight: 900, fontSize: '0.58rem', height: 18, letterSpacing: '0.06em',
             animation: 'blink-breaking 1.5s infinite',
-            '@keyframes blink-breaking': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.6 } },
-          }}
+            '@keyframes blink-breaking': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0.6 } } }}
         />
       )}
+
       <Stack direction="row" spacing={1.5} alignItems="flex-start">
+        {/* Avatar */}
         {user?.profile_image_url ? (
           <Box component="img" src={user.profile_image_url} alt={user.name}
             sx={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, objectFit: 'cover', border: `2px solid ${alpha('#1D9BF0', 0.3)}` }} />
@@ -356,40 +379,89 @@ const TweetCard = ({ tweet, user, theme }) => {
             <TwitterIcon sx={{ fontSize: 18, color: '#1D9BF0' }} />
           </Box>
         )}
+
         <Box sx={{ flex: 1, minWidth: 0 }}>
+          {/* Meta */}
           <Stack direction="row" alignItems="center" spacing={0.75} mb={0.5} flexWrap="wrap">
             <Typography variant="caption" fontWeight={800} noWrap>{user?.name || tweet.handle}</Typography>
             <Typography variant="caption" color="text.disabled" noWrap>@{user?.username || tweet.handle}</Typography>
             <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.6rem' }}>·</Typography>
             <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.68rem' }}>{formatTweetDate(tweet.created_at)}</Typography>
+            {/* Open on X */}
+            <Box component="a" href={tweet.url} target="_blank" rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              sx={{ ml: 'auto', color: 'text.disabled', fontSize: '0.62rem', textDecoration: 'none',
+                '&:hover': { color: '#1D9BF0' }, display: 'flex', alignItems: 'center', gap: 0.3, fontWeight: 600 }}>
+              ↗ X
+            </Box>
           </Stack>
-          <Typography
-            variant="body2"
-            sx={{
-              fontWeight: isBreaking ? 700 : 400,
-              lineHeight: 1.55,
-              fontSize: '0.85rem',
-              color: isBreaking ? 'text.primary' : 'text.secondary',
-              whiteSpace: 'pre-wrap',
-            }}
-          >
-            {cleanText}
+
+          {/* Tweet text */}
+          <Typography variant="body2"
+            sx={{ fontWeight: isBreaking ? 700 : 400, lineHeight: 1.58, fontSize: '0.85rem',
+              color: showTranslation && translated ? 'text.primary' : (isBreaking ? 'text.primary' : 'text.secondary'),
+              whiteSpace: 'pre-wrap', mb: 1 }}>
+            {displayText}
           </Typography>
-          {(tweet.metrics?.like_count > 0 || tweet.metrics?.retweet_count > 0) && (
-            <Stack direction="row" spacing={2} mt={1}>
-              <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>
-                🔁 {tweet.metrics.retweet_count}
-              </Typography>
-              <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>
-                ♥ {tweet.metrics.like_count}
+
+          {/* Translation badge */}
+          {showTranslation && translated && (
+            <Stack direction="row" alignItems="center" spacing={0.75} mb={1}>
+              <Box sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: '#6366f1' }} />
+              <Typography variant="caption" sx={{ fontSize: '0.62rem', color: '#6366f1', fontWeight: 600, fontStyle: 'italic' }}>
+                Traduit par Gemini AI · <Box component="span" sx={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={handleTranslate}>Voir l'original</Box>
               </Typography>
             </Stack>
           )}
+
+          {translateError && (
+            <Typography variant="caption" color="error" sx={{ fontSize: '0.65rem', display: 'block', mb: 0.5 }}>
+              {translateError}
+            </Typography>
+          )}
+
+          {/* Bottom actions */}
+          <Stack direction="row" alignItems="center" spacing={1.5}>
+            {/* Translate button */}
+            <Tooltip title={showTranslation ? 'Voir en anglais' : 'Traduire en français'} placement="bottom">
+              <Box component="button" onClick={handleTranslate}
+                disabled={translating}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 0.5,
+                  border: 'none', background: 'none', cursor: 'pointer', p: 0,
+                  color: showTranslation ? '#6366f1' : 'text.disabled',
+                  fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit',
+                  transition: 'color 0.15s',
+                  '&:hover': { color: '#6366f1' },
+                  '&:disabled': { opacity: 0.6, cursor: 'wait' },
+                }}>
+                {translating ? (
+                  <CircularProgress size={10} thickness={4} sx={{ color: '#6366f1' }} />
+                ) : (
+                  <Box sx={{ fontSize: '0.75rem' }}>🌐</Box>
+                )}
+                {translating ? 'Traduction...' : showTranslation ? 'EN' : 'FR'}
+              </Box>
+            </Tooltip>
+
+            {/* Metrics */}
+            {tweet.metrics?.retweet_count > 0 && (
+              <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>
+                🔁 {tweet.metrics.retweet_count}
+              </Typography>
+            )}
+            {tweet.metrics?.like_count > 0 && (
+              <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>
+                ♥ {tweet.metrics.like_count}
+              </Typography>
+            )}
+          </Stack>
         </Box>
       </Stack>
     </Paper>
   );
 };
+
 
 // ─── Note Card ────────────────────────────────────────────────────────────────
 

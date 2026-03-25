@@ -10,6 +10,20 @@ async function getInvestments(req, res) {
     }
 }
 
+async function searchAssets(req, res) {
+    try {
+        const query = req.query.q;
+        if (!query) {
+            return res.json([]);
+        }
+        const data = await investmentService.searchAssets(query);
+        res.json(data);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Erreur lors de la recherche" });
+    }
+}
+
 async function addInvestment(req, res) {
     try {
         const data = await investmentService.addInvestment(req.body);
@@ -53,6 +67,7 @@ async function getPortfolioChartData(req, res) {
 
 module.exports = {
     getInvestments,
+    searchAssets,
     addInvestment,
     updateInvestment,
     deleteInvestment,

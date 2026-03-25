@@ -20,7 +20,7 @@ import {
     TextField,
     Typography,
     alpha,
-    useTheme, InputAdornment, Drawer, Fab
+    useTheme, InputAdornment, Drawer, Fab, Autocomplete
 } from "@mui/material";
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import ReactMarkdown from 'react-markdown';
@@ -52,6 +52,7 @@ import {
     addInvestment,
     deleteInvestment,
     getPortfolioChartData,
+    searchAssets
 } from "../services/investmentClient";
 import {
     addTransaction,
@@ -246,6 +247,29 @@ export default function Investment() {
         buy_date: "",
         currency: "USD",
     });
+
+    const [searchOptions, setSearchOptions] = useState([]);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const searchTimeout = useRef(null);
+
+    const handleSearchChange = async (event, value) => {
+        if (searchTimeout.current) clearTimeout(searchTimeout.current);
+        if (!value) {
+            setSearchOptions([]);
+            return;
+        }
+        searchTimeout.current = setTimeout(async () => {
+            setSearchLoading(true);
+            try {
+                const results = await searchAssets(value);
+                setSearchOptions(results);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setSearchLoading(false);
+            }
+        }, 300);
+    };
 
     // Transaction state
     const [expandedRow, setExpandedRow] = useState(null);      // investment id of expanded row
@@ -1006,13 +1030,55 @@ export default function Investment() {
                 </DialogTitle>
                 <DialogContent>
                     <Stack spacing={2.5} sx={{ mt: 1 }}>
-                        <TextField
-                            label="Ticker (ex: AAPL, TSLA, MC.PA)"
-                            variant="outlined"
-                            fullWidth
-                            value={form.ticker}
-                            onChange={(e) => setForm({ ...form, ticker: e.target.value.toUpperCase() })}
-                            sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px" } }}
+                        <Autocomplete
+                            freeSolo
+                            options={searchOptions}
+                            getOptionLabel={(option) => typeof option === "string" ? option : `${option.symbol} - ${option.shortname || option.longname || ""}`}
+                            filterOptions={(x) => x}
+                            onInputChange={(event, newInputValue) => {
+                                handleSearchChange(event, newInputValue);
+                                setForm(prev => ({ ...prev, ticker: (newInputValue || "").toUpperCase() }));
+                            }}
+                            onChange={(event, newValue) => {
+                                if (newValue && newValue.symbol) {
+                                    setForm(prev => ({ ...prev, ticker: newValue.symbol }));
+                                } else if (newValue) {
+                                    setForm(prev => ({ ...prev, ticker: (newValue || "").toUpperCase() }));
+                                }
+                            }}
+                            loading={searchLoading}
+                            renderInput={(params) => (
+                                <TextField
+                                    {...params}
+                                    label="Rechercher un actif (ex: Hermes, AAPL...)"
+                                    variant="outlined"
+                                    fullWidth
+                                    InputProps={{
+                                        ...params.InputProps,
+                                        endAdornment: (
+                                            <React.Fragment>
+                                                {searchLoading ? <CircularProgress color="inherit" size={20} /> : null}
+                                                {params.InputProps.endAdornment}
+                                            </React.Fragment>
+                                        ),
+                                    }}
+                                    sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px" } }}
+                                />
+                            )}
+                            renderOption={(props, option) => {
+                                const { key, ...otherProps } = props;
+                                return (
+                                    <li key={key} {...otherProps}>
+                                        <Box>
+                                            <Stack direction="row" spacing={1} alignItems="center">
+                                                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{option.symbol}</Typography>
+                                                {option.typeDisp && <Typography variant="caption" sx={{ px: 0.8, py: 0.2, bgcolor: alpha("#888", 0.1), borderRadius: "4px" }}>{option.exchDisp || option.typeDisp}</Typography>}
+                                            </Stack>
+                                            <Typography variant="caption" color="text.secondary">{option.shortname || option.longname}</Typography>
+                                        </Box>
+                                    </li>
+                                );
+                            }}
                         />
                         <TextField
                             label="Quantité"

@@ -7,6 +7,23 @@ async function getAllInvestments() {
     return result.rows || [];
 }
 
+async function searchAssets(query) {
+    if (!query) return [];
+    try {
+        const result = await yahooFinance.search(query, {
+            newsCount: 0,
+            quotesCount: 7,
+        });
+        return result.quotes || [];
+    } catch (err) {
+        if (err.result && err.result.quotes) {
+            return err.result.quotes;
+        }
+        console.error("Erreur searchAssets:", err);
+        return [];
+    }
+}
+
 async function addInvestment(data) {
     const { ticker, quantity, average_price, buy_date, currency } = data;
     const result = await db.execute({
@@ -14,7 +31,22 @@ async function addInvestment(data) {
           VALUES (?, ?, ?, ?, ?)`,
         args: [ticker, quantity, average_price, buy_date || null, currency || 'USD']
     });
-    return { id: result.lastInsertRowid.toString() };
+    
+    const newId = result.lastInsertRowid;
+
+    if (quantity > 0) {
+        await db.execute({
+            sql: `INSERT INTO investment_transactions
+                  (investment_id, ticker, type, quantity, price, currency, tx_date, notes)
+                  VALUES (?, ?, 'buy', ?, ?, ?, ?, ?)`,
+            args: [
+                newId, ticker, quantity, average_price,
+                currency || 'USD', buy_date || new Date().toISOString().split('T')[0], 'Achat initial'
+            ]
+        });
+    }
+
+    return { id: newId.toString() };
 }
 
 async function updateInvestment(id, data) {
@@ -191,7 +223,7 @@ async function getPortfolioChartData(rawPeriod = '1y') {
          const txDate = new Date(tx.tx_date);
          const amount = tx.quantity * tx.price;
          const amountEur = toEur(amount, tx.currency || 'USD', eurToUsdRate);
-         const inv = investments.find(i => String(i.id) === String(tx.investment_id));
+         const inv = allInvestments.find(i => String(i.id) === String(tx.investment_id));
          const ticker = inv ? inv.ticker : 'Unknown';
          const longName = inv ? inv.longName || inv.ticker : 'Unknown';
 
@@ -214,7 +246,7 @@ async function getPortfolioChartData(rawPeriod = '1y') {
     // compute totalInvestedStatic AFTER the rate is known.
 
     // ── STEP 2: Fetch quotes & chart data; normalize everything to EUR ───
-    await Promise.all(investments.map(async (inv) => {
+    await Promise.all(allInvestments.map(async (inv) => {
         assetHistories[inv.ticker] = {};
         try {
             const queryOptions = { period1, period2, interval, events: 'div' };
@@ -230,7 +262,15 @@ async function getPortfolioChartData(rawPeriod = '1y') {
                 chartPromise = yahooFinance.chart(inv.ticker, queryOptions).then(res => {
                     global.chartCache[chartKey] = { time: nowTime, data: res };
                     return res;
-                }).catch(() => ({ quotes: [] }));
+                }).catch(err => {
+                    if (err.result && err.result.quotes) {
+                        return err.result;
+                    }
+                    if (err.result) {
+                        return { quotes: [] };
+                    }
+                    return { quotes: [] };
+                });
             }
 
             let quotePromise;
@@ -240,7 +280,12 @@ async function getPortfolioChartData(rawPeriod = '1y') {
                 quotePromise = yahooFinance.quote(inv.ticker).then(res => {
                     global.quoteCache[quoteKey] = { time: nowTime, data: res };
                     return res;
-                }).catch(() => ({}));
+                }).catch(err => {
+                    if (err.result && (!err.result.quotes || err.result.quote)) {
+                        return err.result;
+                    }
+                    return {};
+                });
             }
 
             const [chartRes, quote] = await Promise.all([chartPromise, quotePromise]);
@@ -463,6 +508,7 @@ async function getPortfolioChartData(rawPeriod = '1y') {
 
 module.exports = {
     getAllInvestments,
+    searchAssets,
     addInvestment,
     updateInvestment,
     deleteInvestment,
